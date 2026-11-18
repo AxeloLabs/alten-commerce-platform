@@ -1,0 +1,9 @@
+{
+  "name": "spec-bpmn-render",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Renders the generated BPMN 2.0 files to images with bpmn-js, in a local headless browser.",
+  "dependencies": {
+    "bpmn-to-image": "0.10.0"
+  }
+}

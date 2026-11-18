@@ -1,0 +1,212 @@
+# PDF theme of the Alten Commerce Platform specification (asciidoctor-pdf 2.3).
+# Role tags, priority and status badges are inline roles: [.sre]#SRE#, or the {role-sre} attribute.
+extends: default-sans
+brand:
+  primary: '0B3C5D'
+  accent: '1565C0'
+  muted: '607D8B'
+  line: 'CFD8DC'
+  soft: 'F4F7F9'
+page:
+  size: A4
+  margin: [24mm, 18mm, 22mm, 18mm]
+base:
+  font-size: 10
+  font-color: '263238'
+  line-height-length: 14.5
+heading:
+  font-color: $brand-primary
+  font-style: bold
+  h2-font-size: 17
+  h3-font-size: 13.5
+  h4-font-size: 11.5
+  h5-font-size: 10.5
+  margin-top: 14
+  margin-bottom: 6
+  # Keeps a heading together with the strategy box that follows it.
+  min-height-after: 96
+title-page:
+  text-align: left
+  title:
+    top: 36%
+    font-size: 30
+    font-color: $brand-primary
+    font-style: bold
+    line-height: 1.1
+  subtitle:
+    font-size: 14
+    font-color: $brand-muted
+    margin-top: 8
+  authors:
+    font-size: 0
+  revision:
+    font-size: 10.5
+    font-color: $brand-muted
+    margin-top: 28
+    delimiter: ' · '
+link:
+  font-color: $brand-accent
+codespan:
+  font-color: '6A1B9A'
+  font-size: 0.92em
+code:
+  font-size: 8.8
+  background-color: $brand-soft
+  border-color: $brand-line
+  border-radius: 3
+  padding: [7, 8, 7, 8]
+table:
+  font-size: 9
+  border-color: $brand-line
+  grid-color: $brand-line
+  head:
+    background-color: $brand-primary
+    font-color: 'FFFFFF'
+    font-style: bold
+  body:
+    stripe-background-color: $brand-soft
+  cell:
+    padding: [4, 5, 4, 5]
+  caption:
+    font-color: $brand-muted
+    font-style: italic
+caption:
+  font-color: $brand-muted
+toc:
+  font-size: 10
+  indent: 14
+  dot-leader:
+    font-color: $brand-line
+# Sidebar blocks carry the "Strategy question" that opens every section.
+sidebar:
+  background-color: 'FFF8E1'
+  border-color: 'F9A825'
+  border-width: 0.75
+  border-radius: 3
+  padding: [8, 11, 8, 11]
+  font-size: 10
+  title:
+    font-color: 'E65100'
+    font-style: bold
+    font-size: 9
+    text-align: left
+    text-transform: uppercase
+example:
+  background-color: 'FFFFFF'
+  border-color: $brand-line
+  border-radius: 3
+  padding: [8, 10, 8, 10]
+admonition:
+  column-rule-color: $brand-line
+  label:
+    font-style: bold
+header:
+  height: 15mm
+  font-size: 8
+  font-color: $brand-muted
+  border-color: $brand-line
+  border-width: 0.5
+  vertical-align: bottom
+  padding: [0, 0, 3, 0]
+  recto: &header-content
+    left:
+      content: '{project-name}'
+    right:
+      content: '{document-title}'
+  verso: *header-content
+footer:
+  height: 13mm
+  font-size: 8
+  font-color: $brand-muted
+  border-color: $brand-line
+  border-width: 0.5
+  vertical-align: top
+  padding: [4, 0, 0, 0]
+  recto: &footer-content
+    left:
+      content: '{doc-id} · v{revnumber} · {revremark} · {revdate}'
+    right:
+      content: 'Page {page-number} of {page-count}'
+  verso: *footer-content
+role:
+  # --- Engineering roles: who owns a section or a decision
+  swe: &tag
+    background-color: '1565C0'
+    font-color: 'FFFFFF'
+    font-style: bold
+    font-size: 0.82em
+    border-radius: 3
+    border-offset: 2
+  arch:
+    <<: *tag
+    background-color: '6A1B9A'
+  sol:
+    <<: *tag
+    background-color: '283593'
+  cloud:
+    <<: *tag
+    background-color: '00838F'
+  devops:
+    <<: *tag
+    background-color: 'F9A825'
+    font-color: '212121'
+  platform:
+    <<: *tag
+    background-color: '00695C'
+  sre:
+    <<: *tag
+    background-color: 'C62828'
+  sec:
+    <<: *tag
+    background-color: '212121'
+  net:
+    <<: *tag
+    background-color: '5D4037'
+  data:
+    <<: *tag
+    background-color: '2E7D32'
+  qa:
+    <<: *tag
+    background-color: 'D81B60'
+  # --- MoSCoW priorities
+  must:
+    <<: *tag
+    background-color: 'B71C1C'
+  should:
+    <<: *tag
+    background-color: 'EF6C00'
+  could:
+    <<: *tag
+    background-color: '1976D2'
+  wont:
+    <<: *tag
+    background-color: '9E9E9E'
+  # --- Authorization and criticality
+  allowed:
+    <<: *tag
+    background-color: '2E7D32'
+  denied:
+    <<: *tag
+    background-color: 'C62828'
+  critical:
+    <<: *tag
+    background-color: 'FF6F00'
+  # --- Lifecycle status
+  stproposed:
+    <<: *tag
+    background-color: '78909C'
+  stdraft:
+    <<: *tag
+    background-color: 'FBC02D'
+    font-color: '212121'
+  stapproved:
+    <<: *tag
+    background-color: '388E3C'
+  strejected:
+    <<: *tag
+    background-color: '6D4C41'
+  # --- Plain text helpers
+  muted:
+    font-color: $brand-muted
+  small:
+    font-size: 0.85em

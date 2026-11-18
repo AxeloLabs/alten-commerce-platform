@@ -1,0 +1,477 @@
+= Documentation Guide: Structure, Identifiers, Conventions and Toolchain
+:doc-id: 00-01
+:revnumber: 0.1
+:revdate: 2026-11-18
+:revremark: Draft
+:description: How the specification is organized, identified, written, drawn and built.
+include::../_shared/attributes.adoc[]
+
+== Purpose and audience
+
+.Strategy question
+****
+What strategy keeps forty-seven documents consistent with each other today, and with the code tomorrow?
+****
+
+The specification of the {project-name} is written as *documentation as code*.
+Every document is a plain-text source stored in the same Git repository as the future code, reviewed like code, and turned into a numbered PDF by a build.
+Three rules make the set hold together:
+
+. *Every specification item has an identifier.* A use case, a business rule, an event, a test: each one is defined once and referenced everywhere else by its identifier. The build fails when a reference points to nothing.
+. *Every version number is declared once.* The technology stack is described in a single attribute file; documents quote it and never write a version by hand.
+. *Every document answers a strategy question.* Each section opens with the question it settles, so that a reader always knows which concern is being addressed.
+
+This guide is the entry point of the specification. Read it first; it explains how to find, read, write and build everything else.
+
+.Who reads what
+[cols="5,8", options="header"]
+|===
+| Reader | Suggested path
+| Product owner | 01 Business needs, then 00-02 Architecture Big Picture
+| {role-arch} {role-sol} | 02 Domain design, 03 Event-driven architecture, 04 Architecture, 05 Cross-cutting concerns
+| {role-swe} | 04-03 Code Architecture, 03-06 Reliable Messaging, 07 Quality and testing, 08 Engineering workflow
+| {role-cloud} {role-platform} {role-devops} {role-net} | 06 Platform and operations, 05-03 Observability Strategy
+| {role-sre} | 05-02 Resilience Strategy, 05-03 Observability Strategy, 06-07 Runbooks
+| {role-sec} | 05-04 Security Architecture, 06-05 CI/CD and DevSecOps Pipeline, 08-02 AI Agent Harness
+| {role-qa} | 01-08 BDD Acceptance Scenarios, 07 Quality and testing
+| {role-data} | 02-02 Domain Model, 04-04 Persistence Strategy, 03-02 Command and Event Catalog
+|===
+
+== Structure of the specification
+
+.Strategy question
+****
+What strategy orders the documents so that a reader goes from the business need to the smallest technical detail without jumping back and forth?
+****
+
+Folders are numbered in reading order, from the most upstream concern to the most detailed one.
+Inside a folder, documents are numbered the same way.
+A document is named `NN-MM-title`, where `NN` is its folder and `MM` its rank; that code appears in the footer of every page.
+
+plantuml::diagrams/documentation-map.puml[format=svg, align=center]
+
+.Folders
+[cols="4,9", options="header"]
+|===
+| Folder | Question it answers
+| `00-overview` | How do I read this specification, and what does the whole system look like on one page?
+| `01-business-needs` | Who uses the system, to do what, under which rules, and how do we know it is done?
+| `02-domain-design` | Which bounded contexts exist, what do they own, and through which states does an order go?
+| `03-event-driven-architecture` | Which commands and events flow between services, and how does an order survive a failure?
+| `04-architecture` | Which technologies, which structure, which patterns, and why?
+| `05-cross-cutting` | How are errors, resilience, observability and security handled the same way everywhere?
+| `06-platform-operations` | Where does it run, how is it deployed, what does it cost, and how is it operated?
+| `07-quality-testing` | How is each requirement verified, at which level, with which tool?
+| `08-engineering-workflow` | How is the software built, by whom, with which tools and AI agents, under which safeguards?
+|===
+
+.Document index
+[cols="2,8,5", options="header"]
+|===
+| Code | Document | Identifiers defined
+
+3+h| 00 Overview
+| 00-01 | Documentation Guide | –
+| 00-02 | Architecture Big Picture | –
+| 00-03 | Traceability Matrix | generated
+
+3+h| 01 Business needs
+| 01-01 | Vision, Scope and Actors | –
+| 01-02 | Business Journeys and Critical Paths | `JRN`, `CP`
+| 01-03 | Business Processes | `BPMN`
+| 01-04 | Epics and User Stories | `EPIC`, `US`
+| 01-05 | Use Cases and Authorization Matrix | `UC`
+| 01-06 | Functional Requirements and Business Rules | `FR`
+| 01-07 | Non-Functional Requirements | `NFR`
+| 01-08 | BDD Acceptance Scenarios | `BDD`
+
+3+h| 02 Domain design
+| 02-01 | Bounded Contexts and Context Map | –
+| 02-02 | Domain Model | –
+| 02-03 | State Machines | –
+
+3+h| 03 Event-driven architecture
+| 03-01 | Business Workflows to Commands and Events | –
+| 03-02 | Command and Event Catalog | `CMD`, `EVT`
+| 03-03 | Order Saga Specification | `SC`
+| 03-04 | Messaging Contracts | –
+| 03-05 | Pub/Sub Topology | –
+| 03-06 | Reliable Messaging in Spring Boot | –
+
+3+h| 04 Architecture
+| 04-01 | Technology Stack and Versions | –
+| 04-02 | C4 Model | –
+| 04-03 | Code Architecture and ArchUnit Rules | `AR`
+| 04-04 | Persistence Strategy | –
+| 04-05 | API Guidelines and Catalog | –
+| 04-06 | Design Patterns Catalog | –
+| 04-07 | Architecture Decision Records | `ADR`
+
+3+h| 05 Cross-cutting concerns
+| 05-01 | Error Handling Strategy | `ERR`
+| 05-02 | Resilience Strategy | –
+| 05-03 | Observability Strategy | –
+| 05-04 | Security Architecture | –
+
+3+h| 06 Platform and operations
+| 06-01 | Environment Strategy | –
+| 06-02 | GCP and GKE Architecture | –
+| 06-03 | Containers and Kubernetes Deployment | –
+| 06-04 | Infrastructure as Code | –
+| 06-05 | CI/CD and DevSecOps Pipeline | –
+| 06-06 | Cost Guardrails and Forbidden Commands | –
+| 06-07 | Runbooks | –
+
+3+h| 07 Quality and testing
+| 07-01 | Test Strategy | –
+| 07-02 | Test Catalog and Matrices | `TU`, `TC`, `TI`, `TE2E`
+| 07-03 | Saga and Resilience Test Scenarios | –
+| 07-04 | Security and Performance Test Plans | –
+
+3+h| 08 Engineering workflow
+| 08-01 | Developer Workstation | –
+| 08-02 | AI Agent Harness and Security Policy | –
+| 08-03 | Software Factory: Creation and Verification Prompts | –
+| 08-04 | Project Management | –
+| 08-05 | Proposed CLAUDE.md | –
+|===
+
+== Identifiers
+
+.Strategy question
+****
+What strategy lets anyone follow a business need down to the test that proves it, and back?
+****
+
+=== Format
+
+An identifier has three parts: `<TYPE>-<CONTEXT>-<NNN>`.
+
+* `TYPE` says what the item is (a use case, an event, a test).
+* `CONTEXT` says which bounded context or concern owns it.
+* `NNN` is a three-digit sequence number, unique for that type and context.
+
+An identifier is *never reused and never renumbered*.
+An item that is abandoned keeps its identifier and is marked {st-rejected}; its number is not given to another item.
+
+.Identifier types
+[%unbreakable, cols="2,5,3,6", options="header"]
+|===
+| Type | Item | Defined in | Notes
+| `JRN` | Business journey | 01-02 | An end-to-end goal of an actor, from intent to outcome
+| `CP` | Critical path | 01-02 | A journey, or a branch of one, whose failure stops the business
+| `BPMN` | Business process | 01-03 | One BPMN 2.0 diagram
+| `EPIC` | Epic | 01-04 | A group of user stories delivering one capability
+| `US` | User story | 01-04 | One increment of value for one actor
+| `UC` | Use case | 01-05 | One interaction between an actor and the system, with every flow
+| `FR` | Functional requirement or business rule | 01-06 | One verifiable statement of behavior
+| `NFR` | Non-functional requirement | 01-07 | One measurable quality attribute
+| `BDD` | Acceptance scenario | 01-08 | One Gherkin scenario
+| `CMD` | Command | 03-02 | A request to change state, addressed to one service
+| `EVT` | Event | 03-02 | A fact that happened, published to whoever listens
+| `SC` | Saga scenario | 03-03 | One execution path of the order saga, failures included
+| `ERR` | Error code | 05-01 | One entry of the error catalog
+| `ADR` | Architecture decision record | 04-07 | One decision, its context and its consequences
+| `AR` | Architecture rule | 04-03 | One rule enforced by ArchUnit
+| `TU` | Unit test | 07-02 | Domain logic, no framework, no I/O
+| `TC` | Component test | 07-02 | One service in isolation, real adapters, neighbors simulated
+| `TI` | Integration test | 07-02 | One adapter against the real technology, or several services together
+| `TE2E` | End-to-end test | 07-02 | A critical path through the deployed system
+|===
+
+.Context codes
+[%unbreakable, cols="2,5,8", options="header"]
+|===
+| Code | Context | Scope
+| `IAM` | Identity and access | Registration, sign-in, roles, authorization
+| `CAT` | Catalog | Products, prices, displayed availability
+| `INV` | Inventory | Stock levels, reservations
+| `CART` | Cart | Shopping cart, favorites
+| `ORD` | Order | Orders, order saga, order history
+| `PAY` | Payment | Payments, refunds
+| `NOT` | Notification | E-mail notifications
+| `PLT` | Platform | Cross-cutting concerns: errors, resilience, observability, security, delivery
+|===
+
+Non-functional requirements use the quality attribute as their context: `PERF`, `AVAIL`, `SEC`, `OBS`, `MAINT`, `USAB`, `COST`.
+
+=== Defining and referencing
+
+An identifier is defined by an anchor placed immediately before the item, and referenced by writing it between braces.
+The reference becomes a link: inside the same PDF it jumps to the definition, across PDFs it opens the other document at the definition.
+
+// ids:off
+.Definition, in the document that owns the item
+----
+[[UC-ORD-001]]
+=== UC-ORD-001 — Place an order
+----
+
+.Reference, from any other place
+----
+The checkout story is realized by {UC-ORD-001}.
+----
+// ids:on
+
+=== Traceability
+
+Identifiers are linked in a chain that goes from the business need to the tests.
+A link is recorded whenever an item mentions another one in its own description.
+
+plantuml::diagrams/traceability-chain.puml[format=svg, align=center]
+
+The build enforces the chain: a user story with no use case, a use case with no acceptance scenario or a critical path with no end-to-end test makes the build fail.
+The complete registry and the links are published in the generated document 00-03 Traceability Matrix.
+
+When the code is written, the same identifiers travel with it:
+
+* a Gherkin scenario carries its identifiers as tags, for example `@BDD-ORD-nnn @UC-ORD-nnn @critical-path`;
+* a JUnit test carries its identifier as a tag and in its display name;
+* an ArchUnit rule is named after its `AR` identifier;
+* an error response carries its `ERR` code in the problem detail body.
+
+== Role tags
+
+.Strategy question
+****
+What strategy shows, at a glance, who is accountable for a section or a technical decision?
+****
+
+A colored tag names the engineering role that owns a section, a decision or a table row.
+On a real project one person often holds several roles; the tag names the hat, not the person.
+
+.Role tags
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Tag | Accountable for
+| {role-swe} | Domain logic, application services, adapters, unit and component tests
+| {role-arch} | Code structure, patterns, architecture rules, decisions inside a service
+| {role-sol} | Service decomposition, contracts between services, end-to-end consistency
+| {role-cloud} | Google Cloud landing zone, managed services, cost model
+| {role-devops} | Build, delivery pipeline, release and promotion between environments
+| {role-platform} | Kubernetes platform, deployment templates, developer tooling
+| {role-sre} | Service level objectives, alerting, incident response, capacity
+| {role-sec} | Identity, secrets, threat model, supply chain, security testing
+| {role-net} | VPC, addressing plan, load balancing, network policies
+| {role-data} | Data model, schema migration, retention, event schemas
+| {role-qa} | Test strategy, acceptance scenarios, test catalog, quality gates
+|===
+
+.Other badges
+[cols="4,11", options="header"]
+|===
+| Badge | Meaning
+| {must} {should} {could} {wont} | MoSCoW priority of a story or a requirement
+| {allowed} {denied} | What the system authorizes or refuses for a given actor
+| {critical} | The item belongs to a critical path and gets end-to-end coverage
+| {st-proposed} {st-draft} {st-approved} {st-rejected} | Lifecycle status of an item
+|===
+
+== Writing conventions
+
+.Strategy question
+****
+What strategy makes documents written at different times read as if they had one author?
+****
+
+Language:: Everything is written in American English: documents, diagrams, identifiers, code and commit history of the product.
+Strategy question:: Every first-level section opens with a box stating the question it answers, phrased as "What strategy…?".
+Requirement wording:: A functional requirement is one sentence with "shall", verifiable by a test: "The system shall reject an order line whose quantity exceeds the available stock."
+Priority:: MoSCoW, shown with a badge. {must} is required for the first release, {should} is expected, {could} is optional, {wont} is explicitly out of scope.
+Authorization:: Every use case states what is {allowed} and what is {denied}, per actor.
+Tables before prose:: Catalogs (events, errors, tests, tools) are tables. Prose explains decisions, not inventories.
+Diagrams:: Every document that describes behavior contains at least one diagram. Critical paths always have a sequence diagram.
+Versions:: A version is never typed in a document. It is quoted from the shared attribute file, for example Spring Boot {v-spring-boot} on Java {v-java}.
+Decisions:: A choice between alternatives is recorded as an `ADR` and referenced from the text; the text does not re-argue it.
+
+== Templates
+
+.Strategy question
+****
+What strategy guarantees that two use cases, or two user stories, written weeks apart carry the same information?
+****
+
+=== Use case
+
+Use cases follow the fully dressed form.
+Each one is a section whose title is the identifier and the name, followed by this table and by the numbered flows.
+
+.Use case template
+[%unbreakable, cols="3,10", options="header"]
+|===
+| Field | Content
+| Overview | Two or three sentences: what happens and why it matters
+| ID and name | The `UC` identifier and a verb phrase from the actor's point of view
+| Primary actor | The actor whose goal the use case serves
+| Supporting actors | Other people or systems involved
+| Goal | The outcome the primary actor wants
+| Status | {st-proposed}, {st-draft}, {st-approved} or {st-rejected}
+| Priority | MoSCoW badge, and {critical} when the use case is on a critical path
+| Trigger | The event that starts the use case
+| Preconditions | What must be true before the first step
+| Main success scenario | Numbered steps, alternating actor and system
+| Alternative flows | Variations that still reach the goal, numbered from the step they leave
+| Exception flows | Failures, numbered from the step they leave, each with the error code returned
+| Postconditions | Success guarantees, and minimal guarantees that hold even on failure
+| Authorization | What is {allowed} and what is {denied}, per actor
+| Business rules | The `FR` identifiers applied
+| Quality attributes | The `NFR` identifiers that constrain it
+| Acceptance | The `BDD` identifiers that prove it
+|===
+
+=== User story
+
+A user story is a framed card.
+It is small enough to be delivered in one iteration and satisfies the INVEST criteria: independent, negotiable, valuable, estimable, small, testable.
+
+.Sample user story card
+[cols="3,10", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CART-nnn — Add a product to the cart
+| Epic | EPIC-CART-nnn Shopping cart
+| Story | *As a* customer, *I want* to add a product to my cart *so that* I can buy several products in a single order.
+| Priority | {must}
+| Estimate | 3 story points
+| Acceptance criteria a|
+. The product is added with the chosen quantity and the cart counter is updated.
+. Adding a product that is already in the cart increases its quantity.
+. A quantity larger than the displayed availability is refused with an explanatory message.
+| Realized by | UC-CART-nnn
+| Owner | {role-swe} {role-qa}
+|===
+
+=== Acceptance scenario
+
+Acceptance scenarios are written in Gherkin and grouped by business rule with the `Rule` keyword.
+One scenario checks one behavior and belongs to one of four families: nominal, error, edge case, invariant.
+
+.Sample scenario
+[source,gherkin]
+----
+@BDD-CART-nnn @UC-CART-nnn @nominal
+Scenario: Adding an available product to an empty cart
+  Given a customer with an empty cart
+  And a product "Mechanical keyboard" with 5 units available
+  When the customer adds 2 units of "Mechanical keyboard" to the cart
+  Then the cart contains 1 line with quantity 2
+  And the cart counter shows 2
+----
+
+=== Test case
+
+.Test catalog entry
+[cols="3,10", options="header"]
+|===
+| Field | Content
+| ID | `TU`, `TC`, `TI` or `TE2E` identifier
+| Family | Nominal, error, edge case or invariant
+| Target | The class, service, contract or path under test
+| Given / When / Then | The situation, the action and the expected outcome
+| Verifies | The `FR`, `BDD`, `SC` or `NFR` identifiers proven by the test
+|===
+
+=== Architecture decision record
+
+.ADR template
+[cols="3,10", options="header"]
+|===
+| Field | Content
+| ID and title | The `ADR` identifier and the decision in a few words
+| Status | {st-proposed}, {st-approved} or {st-rejected}, with the date
+| Context | The forces at play and the constraint that makes a decision necessary
+| Decision | What is decided, stated in the present tense
+| Alternatives | What was considered and why it was not retained
+| Consequences | What becomes easier, what becomes harder, what must be watched
+| Owner | Role tag
+|===
+
+== Diagrams
+
+.Strategy question
+****
+What strategy keeps diagrams reviewable, versioned and always in sync with the text?
+****
+
+Every diagram is text.
+It is stored next to the document that uses it, reviewed as a diff and rendered by the build; no diagram is drawn by hand or exported from a graphical tool.
+Rendering is local: no source ever leaves the workstation for a public rendering service.
+
+.Diagram types and tools
+[%unbreakable, cols="5,4,8", options="header"]
+|===
+| Diagram | Tool | Used for
+| Use case, class, entity-relationship | PlantUML | Actors and goals, domain model, persisted data
+| Sequence | PlantUML | Critical paths, saga scenarios, interactions between services
+| State | PlantUML | Order, payment, reservation and saga lifecycles
+| C4 context, container, component, deployment | PlantUML with the C4 standard library | Technical architecture at four zoom levels
+| Network | PlantUML `nwdiag` | VPC, subnets, address ranges, load balancers
+| Business process | BPMN 2.0, rendered by bpmn-js | Business workflows across actors and services
+|===
+
+Business processes are described in a small text file that lists lanes, steps and flows.
+The build turns it into a standard BPMN 2.0 file, laid out on a grid, which also opens in Camunda Modeler.
+The process below, the lifecycle of one lot of this specification, is produced that way.
+
+Wide diagrams are placed on a landscape page.
+
+[page-layout=landscape]
+<<<
+
+[[BPMN-PLT-001]]
+.BPMN-PLT-001 — Specification lot lifecycle
+image::bpmn/BPMN-PLT-001.png[pdfwidth=100%, align=center]
+
+[page-layout=portrait]
+<<<
+
+== Building the PDFs
+
+.Strategy question
+****
+What strategy makes the PDFs reproducible by anyone, on any workstation, with the same result?
+****
+
+The sources live in `doc/2-spec`; the PDFs are derived files written to `doc/9-generated/pdf`, with the same folder and document numbers.
+Derived files are never edited and can be deleted at any time: the build recreates them.
+
+.Commands
+[source,shell]
+----
+doc/2-spec/build.sh            # check identifiers, render diagrams, build every PDF
+doc/2-spec/build.sh 01-        # build only the documents of folder 01
+doc/2-spec/build.sh --check    # run the identifier checks only
+----
+
+.What the build does
+[%unbreakable, cols="1,5,9", options="header"]
+|===
+| # | Step | Fails when
+| 1 | Collect identifiers and generate link attributes | an identifier is defined twice, referenced but not defined, or breaks the traceability chain
+| 2 | Generate and render the BPMN processes | a process description is invalid
+| 3 | Convert every document to PDF with Asciidoctor PDF {v-asciidoctor-pdf} | a diagram does not render, an attribute or a version is missing, a link is broken
+|===
+
+The build needs a container engine (Podman or Docker), Python 3.11 or later, pnpm and a local Chrome or Chromium.
+The Asciidoctor toolchain itself runs in the pinned image `asciidoctor/docker-asciidoctor:{v-asciidoctor-image}`.
+
+== Document lifecycle
+
+.Strategy question
+****
+What strategy prevents detailed design from being written on top of requirements nobody validated?
+****
+
+The specification is produced in lots.
+A lot ends with a gate: the product owner validates it before any document that depends on it is written.
+Each document carries a revision number and a status on its title page and in its footer.
+
+.Document status
+[cols="3,10", options="header"]
+|===
+| Status | Meaning
+| Draft | Being written or awaiting validation. Content may change without notice.
+| Approved | Validated at a gate. A change now requires a new revision and, for an architectural choice, an ADR.
+| Superseded | Replaced by a later revision. Kept in Git history only.
+|===
+
+The process followed by each lot is {BPMN-PLT-001}.

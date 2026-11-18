@@ -1,0 +1,65 @@
+// Single source of truth for every version quoted in the specification.
+// Verified against primary sources on 2026-11-18. Re-verify before the stack document (04-01) is approved.
+// NO BLANK LINE in this file: it is included in document headers.
+:versions-verified-on: 2026-11-18
+// --- Language and runtime
+:v-java: 25 LTS
+:v-java-patch: 25.0.5
+:v-container-base: eclipse-temurin:25-jre
+// --- Spring platform
+:v-spring-boot: 4.1.2
+:v-spring-framework: 7.0
+:v-spring-security: 7.1
+:v-spring-cloud: 2025.1.4
+:v-spring-cloud-gcp: 8.3.1
+:v-spring-modulith: 2.1.2
+:v-hibernate: 7.4
+:v-jackson: 3.1
+:v-resilience4j: 2.4.0
+:v-springdoc: 3.2.0
+:v-bootui: 2.5.0
+// --- Data
+:v-postgresql: 18
+:v-flyway: 13
+:v-h2: 2.5
+// --- Contracts
+:v-openapi: 3.2
+:v-openapi-generator: 7.27
+:v-asyncapi: 3.1
+:v-asyncapi-pubsub-binding: 0.2.0
+:v-cloudevents: 1.0.2
+:v-cloudevents-sdk: 5.1.0
+:v-protobuf: 4.36
+:v-buf: 1.75
+:v-microcks: 1.16
+// --- Tests
+:v-junit: 6
+:v-testcontainers: 2.0
+:v-archunit: 1.5
+:v-jacoco: 0.8.16
+:v-pitest: 1.30
+:v-cucumber: 8.1
+:v-wiremock: 3
+:v-playwright: 1.65
+:v-gatling: 3.16
+:v-zap: 2.17
+// --- Build and code style
+:v-maven: 3.9.16
+:v-google-java-format: 2.0.0
+:v-spotless: 3.11
+:v-checkstyle: 14
+:v-mapstruct: 1.6.3
+:v-lombok: 1.18.48
+// --- Front end
+:v-angular: 22.3
+:v-node: 26 LTS
+:v-typescript: 6.0
+// --- Platform
+:v-kubernetes: 1.36
+:v-helm: 4.3
+:v-terraform: 1.17
+:v-terraform-google: 8
+:v-keycloak: 26.8
+// --- Documentation toolchain
+:v-asciidoctor-pdf: 2.3.27
+:v-asciidoctor-image: 1.108.1

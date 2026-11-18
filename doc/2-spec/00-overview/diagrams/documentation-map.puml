@@ -1,0 +1,30 @@
+@startuml
+title Reading order of the specification
+
+package "Why and what" as NEED {
+  rectangle "00 Overview" as F00
+  rectangle "01 Business needs" as F01
+  F00 -[hidden]down-> F01
+}
+
+package "How it is designed" as DESIGN {
+  rectangle "02 Domain design" as F02
+  rectangle "03 Event-driven architecture" as F03
+  rectangle "04 Architecture" as F04
+  rectangle "05 Cross-cutting concerns" as F05
+  F02 -[hidden]down-> F03
+  F03 -[hidden]down-> F04
+  F04 -[hidden]down-> F05
+}
+
+package "How it is run, verified and built" as DELIVERY {
+  rectangle "06 Platform and operations" as F06
+  rectangle "07 Quality and testing" as F07
+  rectangle "08 Engineering workflow" as F08
+  F06 -[hidden]down-> F07
+  F07 -[hidden]down-> F08
+}
+
+F00 -right-> F02 : refined into
+F02 -right-> F06 : delivered by
+@enduml

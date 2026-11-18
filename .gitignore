@@ -1,0 +1,9 @@
+# Derived artefacts: safe to delete, rebuilt by doc/2-spec/build.sh
+9-generated/
+node_modules/
+
+# IDE and OS
+.idea/
+*.iml
+.vscode/
+.DS_Store

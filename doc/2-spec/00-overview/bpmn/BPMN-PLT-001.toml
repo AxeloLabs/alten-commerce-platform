@@ -1,0 +1,34 @@
+# BPMN-PLT-001: how one lot of the specification goes from draft to approved.
+id = "BPMN-PLT-001"
+name = "Specification lot lifecycle"
+pool = "Specification workflow"
+
+lanes = [
+  { id = "author", name = "Author" },
+  { id = "build", name = "Build" },
+  { id = "reviewer", name = "Independent reviewer" },
+  { id = "owner", name = "Product owner" },
+]
+
+nodes = [
+  { id = "start", type = "startEvent", lane = "author", col = 0, name = "Lot started" },
+  { id = "write", type = "task", lane = "author", col = 1, name = "Write or update the sources" },
+  { id = "build", type = "serviceTask", lane = "build", col = 2, name = "Check identifiers, build PDFs" },
+  { id = "checks", type = "exclusiveGateway", lane = "build", col = 3, name = "Build clean?" },
+  { id = "review", type = "userTask", lane = "reviewer", col = 4, name = "Review against the brief" },
+  { id = "gate", type = "userTask", lane = "owner", col = 5, name = "Validate the lot" },
+  { id = "decision", type = "exclusiveGateway", lane = "owner", col = 6, name = "Approved?" },
+  { id = "end", type = "endEvent", lane = "owner", col = 7, name = "Lot approved" },
+]
+
+flows = [
+  { from = "start", to = "write" },
+  { from = "write", to = "build" },
+  { from = "build", to = "checks" },
+  { from = "checks", to = "review", name = "yes" },
+  { from = "checks", to = "write", name = "no" },
+  { from = "review", to = "gate" },
+  { from = "gate", to = "decision" },
+  { from = "decision", to = "end", name = "yes" },
+  { from = "decision", to = "write", name = "changes" },
+]

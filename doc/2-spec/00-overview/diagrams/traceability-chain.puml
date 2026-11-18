@@ -1,0 +1,28 @@
+@startuml
+title Traceability chain
+
+left to right direction
+
+rectangle "JRN\nBusiness journey" as JRN
+rectangle "CP\nCritical path" as CP
+rectangle "EPIC\nEpic" as EPIC
+rectangle "US\nUser story" as US
+rectangle "UC\nUse case" as UC
+rectangle "FR\nFunctional\nrequirement" as FR
+rectangle "NFR\nNon-functional\nrequirement" as NFR
+rectangle "BDD\nAcceptance\nscenario" as BDD
+rectangle "TU  TC  TI\nUnit, component,\nintegration tests" as T
+rectangle "TE2E\nEnd-to-end test" as E2E
+
+JRN --> EPIC
+JRN --> CP
+EPIC --> US
+US --> UC
+UC --> FR
+UC --> BDD
+FR --> T
+BDD --> T
+CP --> E2E
+BDD --> E2E
+NFR --> T
+@enduml

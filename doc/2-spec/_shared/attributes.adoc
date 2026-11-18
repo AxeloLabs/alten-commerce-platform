@@ -1,0 +1,24 @@
+// Shared header attributes, included in the HEADER of every specification document.
+// NO BLANK LINE in this file: a blank line would end the document header.
+:project-name: Alten Commerce Platform
+:project-repo: alten-commerce-platform
+:doctype: article
+:title-page:
+:toc:
+:toclevels: 3
+:sectnums:
+:sectnumlevels: 3
+:icons: font
+:source-highlighter: rouge
+:xrefstyle: short
+:experimental:
+:attribute-missing: warn
+:pdf-themesdir: {docdir}/../_shared/theme
+:pdf-theme: spec
+:imagesdir: ../../9-generated/diagrams
+:imagesoutdir: {docdir}/../../9-generated/diagrams
+:diagram-cachedir: {docdir}/../../9-generated/diagram-cache
+:plantumlconfig: {docdir}/../_shared/plantuml/style.puml
+include::versions.adoc[]
+include::roles.adoc[]
+include::../../9-generated/spec/ids/{docname}.adoc[opts=optional]

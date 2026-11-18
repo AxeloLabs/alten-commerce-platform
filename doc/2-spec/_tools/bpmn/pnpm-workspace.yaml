@@ -1,0 +1,3 @@
+# puppeteer must not download a browser: the build uses the one installed on the workstation.
+allowBuilds:
+  puppeteer: false

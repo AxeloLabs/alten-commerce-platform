@@ -1,0 +1,28 @@
+// Role tags, status badges and priority badges. Use them as attributes: {role-sre}, {must}, {allowed}…
+// Colors are defined in theme/spec-theme.yml (role section).
+// NO BLANK LINE in this file: it is included in document headers.
+:role-swe: pass:q[[.swe]#Software Engineer#]
+:role-arch: pass:q[[.arch]#Software Architect#]
+:role-sol: pass:q[[.sol]#Solution Architect#]
+:role-cloud: pass:q[[.cloud]#Cloud Architect#]
+:role-devops: pass:q[[.devops]#DevOps Engineer#]
+:role-platform: pass:q[[.platform]#Platform Engineer#]
+:role-sre: pass:q[[.sre]#SRE#]
+:role-sec: pass:q[[.sec]#Security Engineer#]
+:role-net: pass:q[[.net]#Network Engineer#]
+:role-data: pass:q[[.data]#Data Engineer#]
+:role-qa: pass:q[[.qa]#QA Engineer#]
+// --- MoSCoW priorities
+:must: pass:q[[.must]#MUST#]
+:should: pass:q[[.should]#SHOULD#]
+:could: pass:q[[.could]#COULD#]
+:wont: pass:q[[.wont]#WON'T#]
+// --- Authorization and criticality
+:allowed: pass:q[[.allowed]#ALLOWED#]
+:denied: pass:q[[.denied]#DENIED#]
+:critical: pass:q[[.critical]#CRITICAL PATH#]
+// --- Lifecycle status of a specification item
+:st-proposed: pass:q[[.stproposed]#PROPOSED#]
+:st-draft: pass:q[[.stdraft]#DRAFT#]
+:st-approved: pass:q[[.stapproved]#APPROVED#]
+:st-rejected: pass:q[[.strejected]#REJECTED#]
