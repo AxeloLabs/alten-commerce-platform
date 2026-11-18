@@ -1,0 +1,49 @@
+@startuml
+title Payment context: domain model
+hide empty members
+
+class Payment <<aggregate root>> {
+  paymentId : PaymentId
+  orderId : OrderId
+  sagaId : SagaId
+  amount : Money
+  status : PaymentStatus
+  providerReference : String [0..1]
+  refusalReason : String [0..1]
+  version : long
+  --
+  recordCapture(reference)
+  recordRefusal(reason)
+  recordUnknown()
+  recordCancellation()
+  recordRefund()
+  canBeRefunded() : boolean
+}
+enum PaymentStatus {
+  PENDING
+  CAPTURED
+  REFUSED
+  UNKNOWN
+  CANCELED
+  REFUNDED
+}
+class ProviderAttempt <<entity>> {
+  kind : CHARGE, CANCEL or REFUND
+  outcome : String
+  at : Instant
+}
+interface PaymentProvider <<port>> {
+  charge(reference, amount, token) : ProviderAnswer
+  cancel(reference) : ProviderAnswer
+  refund(reference, amount) : ProviderAnswer
+}
+class Money <<value object>> {
+  amount : BigDecimal
+  currency : EUR
+}
+
+Payment "1" *-- "0..*" ProviderAttempt
+Payment --> PaymentStatus
+Payment --> Money
+Payment ..> PaymentProvider : through the application service
+@enduml

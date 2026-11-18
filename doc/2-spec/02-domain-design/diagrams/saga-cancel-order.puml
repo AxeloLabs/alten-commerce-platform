@@ -1,0 +1,26 @@
+@startuml
+title CancelOrderSaga: technical states of a cancellation
+
+hide empty description
+
+state RETURNING_STOCK
+state REFUNDING_PAYMENT
+state SUSPENDED #FFF8E1
+state COMPLETED #C8E6C9
+
+[*] --> RETURNING_STOCK : cancellation accepted\nsend ReturnStock
+RETURNING_STOCK --> REFUNDING_PAYMENT : StockReturned\nsend RefundPayment
+REFUNDING_PAYMENT --> COMPLETED : PaymentRefunded
+REFUNDING_PAYMENT --> SUSPENDED : PaymentRefundFailed
+RETURNING_STOCK --> SUSPENDED : review deadline
+REFUNDING_PAYMENT --> SUSPENDED : review deadline
+SUSPENDED --> REFUNDING_PAYMENT : administrator retries\nsend RefundPayment
+SUSPENDED --> RETURNING_STOCK : administrator retries\nsend ReturnStock
+COMPLETED --> [*]
+
+legend right
+  Green: order CANCELED
+  Yellow: order UNDER_REVIEW
+  Elsewhere: order CANCELING
+endlegend
+@enduml

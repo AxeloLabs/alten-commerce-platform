@@ -1,0 +1,36 @@
+@startuml
+title PlaceOrderSaga: automatic flow
+
+hide empty description
+
+state RESERVING_STOCK
+state CHARGING_PAYMENT
+state CANCELING_PAYMENT
+state CONFIRMING_STOCK
+state REFUNDING_PAYMENT
+state SUSPENDED #FFF8E1
+state COMPLETED #C8E6C9
+state COMPENSATED #FFCDD2
+
+[*] --> RESERVING_STOCK : order created
+RESERVING_STOCK --> CHARGING_PAYMENT : StockReserved
+CHARGING_PAYMENT --> CONFIRMING_STOCK : PaymentCaptured
+CONFIRMING_STOCK --> COMPLETED : ReservationConfirmed
+
+RESERVING_STOCK -right-> COMPENSATED : rejected,\nor order deadline
+CHARGING_PAYMENT -right-> COMPENSATED : PaymentRefused
+CHARGING_PAYMENT -left-> CANCELING_PAYMENT : order deadline
+CANCELING_PAYMENT --> CONFIRMING_STOCK : PaymentCaptured
+CANCELING_PAYMENT --> COMPENSATED : PaymentCanceled
+CONFIRMING_STOCK -left-> REFUNDING_PAYMENT : confirmation\nfailed
+REFUNDING_PAYMENT --> COMPENSATED : PaymentRefunded
+REFUNDING_PAYMENT --> SUSPENDED : PaymentRefundFailed
+
+COMPLETED --> [*]
+COMPENSATED --> [*]
+
+note bottom of SUSPENDED
+  Any state still working when the
+  review deadline expires also goes here.
+end note
+@enduml

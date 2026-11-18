@@ -1,0 +1,184 @@
+= Domain Model: Aggregates, Value Objects and the Data They Persist
+:doc-id: 02-02
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: Class diagrams of the domain of each bounded context and entity-relationship diagrams of each service database.
+include::../_shared/attributes.adoc[]
+
+== Modeling rules
+
+.Strategy question
+****
+What strategy keeps every business rule in one place where a unit test can reach it?
+****
+
+The domain of each service is plain Java: no framework, no database, no messaging.
+A business rule of document 01-06 is a method, or a refusal, of exactly one domain object, and that is where its unit tests live.
+These rules apply to every context.
+
+Aggregate:: A cluster of objects that is loaded, changed and saved as a whole, through its root. An aggregate protects its own invariants: no code outside it can put it in an invalid state.
+One aggregate per transaction:: A use case changes one aggregate and saves it. The two exceptions are stated where they occur, with their reason.
+Reference by identity:: An aggregate refers to another by its identifier, never by an object reference, and never across services by anything else.
+Value objects:: `Money`, `Sku`, `Quantity`, `OrderNumber` and the like are immutable, validated when created and compared by value. A price is never a bare number, a SKU never a bare string.
+Decisions, not side effects:: A domain object never sends a message or calls a service. It returns what it decided — a new state, the commands to send, the events to publish — and the application layer acts on it.
+Versions:: Every aggregate carries a version. Saving an aggregate that changed in the meantime fails; the use case is retried on the fresh state.
+Amounts:: Decimal numbers with two decimals in EUR. Never floating-point.
+Time:: The current time is given to the domain, never read by it, so that deadlines and expiries are testable.
+
+Two views are given for each context: the *class diagram* of the domain objects, and the *entity-relationship diagram* of the tables that the PostgreSQL adapter uses.
+They are deliberately not the same thing: tables serve the adapter and may change without touching the domain.
+
+Owner: {role-arch} {role-swe} {role-data}
+
+== Order
+
+.Strategy question
+****
+What strategy keeps the business state of an order apart from the mechanics that drive it?
+****
+
+The context has two kinds of aggregate.
+`Order` is the business object: what was bought, for how much, and where it stands.
+A saga — `PlaceOrderSaga`, `CancelOrderSaga` — is the process: which step is in progress, which deadlines run, what failed.
+The saga decides; the order records.
+
+plantuml::diagrams/class-order.puml[format=svg, align=center]
+
+.Invariants of the order context
+[cols="5,4,6", options="header"]
+|===
+| Invariant | Guarded by | Rules
+| An order has at least one line, an address and a total equal to the sum of its lines | `Order.place` | {FR-ORD-001} {FR-ORD-004}
+| Lines, prices and address never change after placement | `Order` has no method to change them | {FR-ORD-002} {FR-ORD-011}
+| Status changes follow the allowed transitions; a final status never changes | Every method of `Order` checks the current status | {FR-ORD-010}
+| A rejection carries exactly one reason | `Order.reject` | {FR-ORD-008}
+| Confirmation needs a captured payment and a confirmed reservation | `PlaceOrderSaga` reaches that decision only through those two events | {FR-ORD-007}
+| An order is rejected only once it holds no payment | `PlaceOrderSaga` rejects only from states where the payment is refused, canceled, refunded or never requested | {FR-ORD-008} {FR-PAY-005}
+| Deadlines lead to a decision | `PlaceOrderSaga.onOrderDeadline`, `onReviewDeadline` | {FR-ORD-015} {FR-ORD-016}
+|===
+
+A saga and its order are saved in the same transaction, together with the messages the decision produces.
+This is the first exception to "one aggregate per transaction", and a safe one: both live in the same service and the same database, and the saga exists only to move that one order.
+
+plantuml::diagrams/er-order.puml[format=svg, align=center]
+
+Three constraints of the database back the domain:
+
+* `checkout_id` is unique: submitting the same checkout twice cannot create two orders ({FR-ORD-009});
+* at most one row per customer has the status `PENDING` ({FR-ORD-017});
+* `outbox` and `inbox` are written in the same transaction as the order, which is what makes messaging reliable (document 03-06).
+
+== Inventory
+
+.Strategy question
+****
+What strategy guarantees "never oversell" when several orders reserve the same product at the same instant?
+****
+
+`StockItem` holds the two numbers that matter for one SKU, on hand and reserved, and refuses any operation that would break their relation.
+`Reservation` records what is held for one order and until when.
+
+plantuml::diagrams/class-inventory.puml[format=svg, align=center]
+
+.Invariants of the inventory context
+[cols="5,4,6", options="header"]
+|===
+| Invariant | Guarded by | Rules
+| On hand and reserved are never negative, and reserved never exceeds on hand | Every method of `StockItem` | {FR-INV-001} {FR-INV-002}
+| A reservation covers all lines or none | `ReservationPolicy.reserveAllOrNothing` | {FR-INV-003}
+| A reservation is settled once: confirmed, released or expired | `Reservation` refuses a second settlement and answers the first outcome | {FR-INV-005}
+| A reservation past its lifetime expires and frees its quantities | `Reservation.expire`, called by a scheduled task | {FR-INV-004}
+| An adjustment never brings on hand below reserved | `StockItem.adjust` | {FR-INV-006}
+| Every change of stock on hand leaves a movement | `StockItem` returns the movement with each change | {FR-INV-008}
+|===
+
+Reserving an order touches one `StockItem` per line and creates one `Reservation`, in one transaction.
+This is the second exception to "one aggregate per transaction": all-or-nothing across lines is the business rule itself.
+Stock rows are locked in SKU order so that two orders reserving the same products can never block each other.
+
+plantuml::diagrams/er-inventory.puml[format=svg, align=center]
+
+The three `check` constraints repeat the invariants of `StockItem` in the database: even a defect in the code cannot store an oversold stock.
+`order_id` is unique in `reservation`: a second request to reserve for the same order finds the first reservation and answers its outcome.
+
+== Payment
+
+.Strategy question
+****
+What strategy makes "charged at most once" a property of the model rather than a hope?
+****
+
+There is one `Payment` per order, found by the order identifier.
+Every request about an order's payment — charge, cancel, refund — starts by loading that one object, which answers from its recorded state before anything is asked of the provider.
+
+plantuml::diagrams/class-payment.puml[format=svg, align=center]
+
+.Invariants of the payment context
+[cols="5,4,6", options="header"]
+|===
+| Invariant | Guarded by | Rules
+| One payment per order | Unique order identifier; a second charge request returns the recorded outcome | {FR-PAY-001}
+| The amount is the order total, in EUR | `Payment` is created with the amount and never changes it | {FR-PAY-002}
+| A payment is refunded only if captured, and only once | `Payment.canBeRefunded`, `recordRefund` | {FR-PAY-006}
+| A canceled payment can no longer be captured | `Payment.recordCancellation`; the provider is called with the same reference | {FR-PAY-005}
+| No card data is held | `Payment` has no field for it; the token is used once and not stored | {FR-PAY-003}
+|===
+
+The payment provider is reached through the `PaymentProvider` port.
+The simulated provider of this release and a real one later are two adapters of the same port; the domain cannot tell them apart.
+
+plantuml::diagrams/er-payment.puml[format=svg, align=center]
+
+== Catalog, cart and notification
+
+.Strategy question
+****
+What strategy keeps the simple contexts simple?
+****
+
+These three contexts hold little logic, and their models say so.
+They are also the ones whose persistence is interchangeable (catalog and cart), which only works because nothing in their domain depends on how data is stored.
+
+plantuml::diagrams/class-catalog.puml[format=svg, align=center]
+
+`Product` guards the rules of the catalog: a unique and permanent SKU, a price within range, publication only when complete, retirement for good ({FR-CAT-001} to {FR-CAT-005}, {FR-CAT-009}).
+`Availability` is not part of the product: it is a read model, fed by inventory events, that keeps the last quantity announced for each SKU.
+Each announcement carries a sequence number; an announcement older than the one already applied is ignored, so that events arriving out of order cannot bring an old quantity back ({FR-CAT-008}, {FR-INV-007}).
+
+plantuml::diagrams/class-cart.puml[format=svg, align=center]
+
+`Cart` stores only what the customer chose: a SKU, a quantity, and the price seen when the line was added.
+Totals, the counter and the flags are computed each time the cart is read, from the current catalog data, into a `CartView` ({FR-CART-005}, {FR-CART-006}, {FR-CART-010}).
+That is why a price change needs no update of any cart.
+
+The notification context has no domain model worth a diagram: one record per event received, with the outcome of the sending, whose identifier makes a second sending impossible ({FR-NOT-002}).
+
+plantuml::diagrams/er-catalog-cart-notification.puml[format=svg, align=center]
+
+The tables above are those of the PostgreSQL adapter.
+For the catalog and the cart, the document-database and file adapters store the same aggregates as documents — one document per product, per cart, per list of favorites — as specified in document 04-04.
+
+== Shared vocabulary of types
+
+.Strategy question
+****
+What strategy lets services exchange data without sharing code?
+****
+
+Services share no domain class.
+What they share is the *meaning* of a few types, fixed here and carried by the message and API contracts.
+
+[%unbreakable, cols="3,5,7", options="header"]
+|===
+| Type | Form | Rule
+| `Sku` | Text, 3 to 32 characters, upper-case letters, digits and hyphens | Assigned by the administrator, permanent, never reused
+| `Money` | Decimal amount with two decimals, and a currency | The currency is always EUR in this release
+| `Quantity` | Whole number, 1 or more | Zero is not a quantity: a line with nothing is removed
+| `OrderId`, `SagaId`, `PaymentId`, `ReservationId` | Universally unique identifier | Generated by the service that creates the object; time-ordered
+| `OrderNumber` | Text shown to the customer | Unique, readable, gives no hint of the number of orders
+| `CustomerId` | The subject of the identity token | Never an e-mail address
+| `CheckoutId` | Universally unique identifier | Generated by the storefront when the checkout review is shown
+|===
+
+Owner: {role-arch} {role-data}

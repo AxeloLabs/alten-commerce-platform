@@ -1,0 +1,11 @@
+@startuml
+title Product status
+
+hide empty description
+
+[*] --> DRAFT : created with a SKU and a name
+DRAFT --> PUBLISHED : published\n[name, description, category, price]
+DRAFT --> RETIRED : retired
+PUBLISHED --> RETIRED : retired
+RETIRED --> [*]
+@enduml

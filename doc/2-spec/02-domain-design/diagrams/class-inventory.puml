@@ -1,0 +1,64 @@
+@startuml
+title Inventory context: domain model
+hide empty members
+
+class StockItem <<aggregate root>> {
+  sku : Sku
+  onHand : Quantity
+  reserved : Quantity
+  version : long
+  --
+  available() : Quantity
+  hold(quantity)
+  confirm(quantity)
+  release(quantity)
+  giveBack(quantity)
+  adjust(delta, reason, administrator)
+}
+class Reservation <<aggregate root>> {
+  reservationId : ReservationId
+  orderId : OrderId
+  status : ReservationStatus
+  expiresAt : Instant
+  version : long
+  --
+  confirm()
+  release()
+  expire(now)
+}
+class ReservationLine <<value object>> {
+  sku : Sku
+  quantity : Quantity
+}
+enum ReservationStatus {
+  HELD
+  CONFIRMED
+  RELEASED
+  EXPIRED
+}
+class StockMovement <<entity>> {
+  movementId
+  sku : Sku
+  quantity : int
+  cause : MovementCause
+  orderId [0..1]
+  administrator [0..1]
+  reason [0..1]
+  at : Instant
+}
+enum MovementCause {
+  ADJUSTMENT
+  ORDER_CONFIRMED
+  ORDER_CANCELED
+}
+class ReservationPolicy <<domain service>> {
+  reserveAllOrNothing(orderId, lines, stock) : Reservation or Rejection
+}
+
+Reservation "1" *-- "1..50" ReservationLine
+Reservation --> ReservationStatus
+StockMovement --> MovementCause
+ReservationPolicy ..> StockItem : holds on every line,\nor on none
+ReservationPolicy ..> Reservation : creates
+StockItem ..> StockMovement : records
+@enduml

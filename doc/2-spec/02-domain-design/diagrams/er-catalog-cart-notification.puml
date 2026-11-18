@@ -1,0 +1,77 @@
+@startuml
+title Catalog, cart and notification services: tables (PostgreSQL adapter)
+hide circle
+skinparam linetype ortho
+
+package "catalog" {
+  entity category {
+    * code : text <<PK>>
+    --
+    * label : text
+  }
+  entity product {
+    * sku : text <<PK>>
+    --
+    * name : text
+    description : text
+    category_code : text <<FK>>
+    price_amount : numeric(12,2)
+    * status : text
+    * version : bigint
+  }
+  entity price_change {
+    * change_id : uuid <<PK>>
+    --
+    * sku : text <<FK>>
+    old_price : numeric(12,2)
+    * new_price : numeric(12,2)
+    * changed_by : text
+    * changed_at : timestamptz
+  }
+  entity availability {
+    * sku : text <<PK>>
+    --
+    * available_quantity : int
+    * source_sequence : bigint
+    * updated_at : timestamptz
+  }
+  category ||--o{ product
+  product ||--o{ price_change
+  product ||--o| availability
+}
+
+package "cart" {
+  entity cart {
+    * customer_id : text <<PK>>
+    --
+    * version : bigint
+  }
+  entity cart_line {
+    * customer_id : text <<PK, FK>>
+    * sku : text <<PK>>
+    --
+    * quantity : int
+    * price_when_added : numeric(12,2)
+  }
+  entity favorite {
+    * customer_id : text <<PK>>
+    * sku : text <<PK>>
+    --
+    * marked_at : timestamptz
+  }
+  cart ||--o{ cart_line
+}
+
+package "notification" {
+  entity notification {
+    * event_id : uuid <<PK>>
+    --
+    * order_number : text
+    * recipient : text
+    * template : text
+    * status : text
+    * attempts : int
+    sent_at : timestamptz
+  }
+}
+@enduml

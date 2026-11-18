@@ -1,0 +1,54 @@
+@startuml
+title Catalog context: domain model
+hide empty members
+
+class Product <<aggregate root>> {
+  sku : Sku
+  name : String
+  description : String [0..1]
+  category : CategoryCode [0..1]
+  price : Money [0..1]
+  status : ProductStatus
+  version : long
+  --
+  update(name, description, category)
+  changePrice(newPrice, administrator) : PriceChange
+  publish()
+  retire()
+  isComplete() : boolean
+}
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+class PriceChange <<entity>> {
+  oldPrice : Money [0..1]
+  newPrice : Money
+  changedBy : Administrator
+  changedAt : Instant
+}
+class Availability <<read model>> {
+  sku : Sku
+  availableQuantity : int
+  sourceSequence : long
+  --
+  level(lowStockThreshold) : AvailabilityLevel
+  apply(quantity, sequence)
+}
+enum AvailabilityLevel {
+  IN_STOCK
+  LOW_STOCK
+  OUT_OF_STOCK
+}
+class Category <<reference data>> {
+  code : CategoryCode
+  label : String
+}
+
+Product --> ProductStatus
+Product "1" *-- "0..*" PriceChange
+Product "0..*" --> "0..1" Category
+Availability --> AvailabilityLevel
+Availability "0..1" .. "1" Product : same SKU,\nfed by inventory events
+@enduml

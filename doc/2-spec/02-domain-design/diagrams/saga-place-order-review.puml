@@ -1,0 +1,16 @@
+@startuml
+title PlaceOrderSaga: what an administrator can do with a suspended saga
+
+hide empty description
+
+state SUSPENDED #FFF8E1
+state "the remembered step" as STEP
+state CONFIRMING_STOCK
+state REFUNDING_PAYMENT
+state CANCELING_PAYMENT
+
+SUSPENDED --> STEP : retry
+SUSPENDED --> CONFIRMING_STOCK : confirm\n[payment captured]
+SUSPENDED --> REFUNDING_PAYMENT : reject\n[payment captured]
+SUSPENDED --> CANCELING_PAYMENT : reject\n[payment unknown]
+@enduml

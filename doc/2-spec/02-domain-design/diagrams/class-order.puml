@@ -1,0 +1,93 @@
+@startuml
+title Order context: domain model
+hide empty members
+
+class Order <<aggregate root>> {
+  orderId : OrderId
+  orderNumber : OrderNumber
+  customerId : CustomerId
+  checkoutId : CheckoutId
+  status : OrderStatus
+  rejectionReason : RejectionReason [0..1]
+  total : Money
+  shippingAddress : ShippingAddress
+  version : long
+  --
+  place(cartLines, prices, address)
+  confirm()
+  reject(reason)
+  putUnderReview(cause)
+  startCancellation()
+  completeCancellation()
+  ship(administrator)
+  deliver(administrator)
+}
+class OrderLine <<value object>> {
+  sku : Sku
+  productName : String
+  unitPrice : Money
+  quantity : Quantity
+  lineTotal() : Money
+}
+class StatusChange <<value object>> {
+  status : OrderStatus
+  at : Instant
+  by : Actor
+  comment : String [0..1]
+}
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  UNDER_REVIEW
+  CANCELING
+  CANCELED
+  SHIPPED
+  DELIVERED
+}
+enum RejectionReason {
+  OUT_OF_STOCK
+  PAYMENT_REFUSED
+  TIMED_OUT
+  ADMIN_DECISION
+}
+class PlaceOrderSaga <<aggregate root>> {
+  sagaId : SagaId
+  orderId : OrderId
+  state : PlaceOrderState
+  orderDeadline : Instant
+  reviewDeadline : Instant
+  lastFailure : String [0..1]
+  version : long
+  --
+  start() : Command
+  on(event) : Decision
+  onOrderDeadline() : Decision
+  onReviewDeadline() : Decision
+  resume(administratorChoice) : Decision
+}
+class CancelOrderSaga <<aggregate root>> {
+  sagaId : SagaId
+  orderId : OrderId
+  state : CancelOrderState
+  version : long
+  --
+  start() : Command
+  on(event) : Decision
+  resume(administratorChoice) : Decision
+}
+class Decision <<value object>> {
+  orderTransition [0..1]
+  commands : List<Command>
+  events : List<Event>
+}
+
+Order "1" *-- "1..50" OrderLine
+Order "1" *-- "1..*" StatusChange
+Order --> OrderStatus
+Order --> RejectionReason
+PlaceOrderSaga "1" ..> "1" Order : decides for
+CancelOrderSaga "0..1" ..> "1" Order : decides for
+PlaceOrderSaga ..> Decision : returns
+CancelOrderSaga ..> Decision : returns
+@enduml

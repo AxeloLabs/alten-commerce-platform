@@ -1,0 +1,46 @@
+@startuml
+title Payment service: tables
+hide circle
+skinparam linetype ortho
+
+entity payment {
+  * payment_id : uuid <<PK>>
+  --
+  * order_id : uuid <<unique>>
+  * saga_id : uuid
+  * amount : numeric(12,2)
+  * currency : char(3)
+  * status : text
+  provider_reference : text
+  refusal_reason : text
+  * version : bigint
+  * requested_at : timestamptz
+}
+entity provider_attempt {
+  * attempt_id : uuid <<PK>>
+  --
+  * payment_id : uuid <<FK>>
+  * kind : text
+  * outcome : text
+  * attempted_at : timestamptz
+}
+entity outbox {
+  * message_id : uuid <<PK>>
+  --
+  destination, ordering_key, type,
+  attributes, payload,
+  created_at, published_at
+}
+entity inbox {
+  * message_id : uuid <<PK>>
+  --
+  * received_at : timestamptz
+}
+
+payment ||--o{ provider_attempt
+
+note bottom of payment
+  unique (order_id): one payment per order.
+  No card data, no payment token is stored.
+end note
+@enduml

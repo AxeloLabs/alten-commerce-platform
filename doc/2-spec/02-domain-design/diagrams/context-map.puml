@@ -1,0 +1,34 @@
+@startuml
+title Context map
+
+skinparam componentStyle rectangle
+
+component "Identity\n(identity provider)" as IAM #ECEFF1
+component "Catalog\ncatalog-service" as CAT
+component "Inventory\ninventory-service" as INV #FFE0B2
+component "Cart\ncart-service" as CART
+component "Order\norder-service" as ORD #FFE0B2
+component "Payment\npayment-service" as PAY
+component "Notification\nnotification-service" as NOT
+component "Payment provider" as PSP #ECEFF1
+component "E-mail provider" as MAIL #ECEFF1
+
+CART --> CAT : reads prices and status\n<<synchronous>>
+ORD --> CAT : reads prices at checkout\n<<synchronous>>
+ORD --> CART : reads the cart at checkout\n<<synchronous>>
+CAT ..> INV : listens to availability\n<<events>>
+ORD <..> INV : reserve, confirm, release, return\n<<commands and events>>
+ORD <..> PAY : charge, cancel, refund\n<<commands and events>>
+CART ..> ORD : listens to confirmed orders\n<<events>>
+NOT ..> ORD : listens to order changes\n<<events>>
+PAY --> PSP : anti-corruption layer
+NOT --> MAIL : anti-corruption layer
+ORD -[hidden]up-> IAM
+
+legend right
+  Orange: core subdomain
+  Gray: not built by us
+  Solid arrow: synchronous read
+  Dotted arrow: messages
+endlegend
+@enduml

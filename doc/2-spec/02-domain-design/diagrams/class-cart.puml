@@ -1,0 +1,52 @@
+@startuml
+title Cart context: domain model
+hide empty members
+
+class Cart <<aggregate root>> {
+  customerId : CustomerId
+  version : long
+  --
+  add(sku, quantity, knownAvailable, priceNow)
+  setQuantity(sku, quantity, knownAvailable)
+  remove(sku)
+  removeOrdered(orderLines)
+  view(catalogSnapshot) : CartView
+}
+class CartLine <<value object>> {
+  sku : Sku
+  quantity : Quantity
+  priceWhenAdded : Money
+}
+class CartView <<value object>> {
+  lines : List<PricedLine>
+  total : Money
+  counter : int
+  checkoutAllowed : boolean
+}
+class PricedLine <<value object>> {
+  sku : Sku
+  quantity : Quantity
+  unitPrice : Money
+  lineTotal : Money
+  priceChanged : boolean
+  flagged : boolean
+}
+class Favorites <<aggregate root>> {
+  customerId : CustomerId
+  --
+  mark(sku)
+  unmark(sku)
+}
+class CartLimits <<value object>> {
+  maxQuantityPerLine = 10
+  maxLines = 50
+  maxFavorites = 100
+}
+
+Cart "1" *-- "0..50" CartLine
+Cart ..> CartView : computed at each read
+CartView "1" *-- "0..50" PricedLine
+Favorites "1" o-- "0..100" "Sku"
+Cart ..> CartLimits
+Favorites ..> CartLimits
+@enduml

@@ -1,0 +1,74 @@
+@startuml
+title Order service: tables
+hide circle
+skinparam linetype ortho
+
+entity orders {
+  * order_id : uuid <<PK>>
+  --
+  * order_number : text <<unique>>
+  * customer_id : text
+  * checkout_id : uuid <<unique>>
+  * status : text
+  rejection_reason : text
+  * total_amount : numeric(12,2)
+  * currency : char(3)
+  * shipping_address : jsonb
+  * version : bigint
+  * placed_at : timestamptz
+}
+entity order_line {
+  * order_id : uuid <<PK, FK>>
+  * line_no : int <<PK>>
+  --
+  * sku : text
+  * product_name : text
+  * unit_price : numeric(12,2)
+  * quantity : int
+}
+entity order_status_change {
+  * order_id : uuid <<PK, FK>>
+  * seq : int <<PK>>
+  --
+  * status : text
+  * changed_at : timestamptz
+  * changed_by : text
+  comment : text
+}
+entity order_saga {
+  * saga_id : uuid <<PK>>
+  --
+  * order_id : uuid <<FK>>
+  * kind : text
+  * state : text
+  order_deadline_at : timestamptz
+  review_deadline_at : timestamptz
+  last_failure : text
+  * version : bigint
+}
+entity outbox {
+  * message_id : uuid <<PK>>
+  --
+  * destination : text
+  * ordering_key : text
+  * type : text
+  * attributes : jsonb
+  * payload : bytea
+  * created_at : timestamptz
+  published_at : timestamptz
+}
+entity inbox {
+  * message_id : uuid <<PK>>
+  --
+  * received_at : timestamptz
+}
+
+orders ||--|{ order_line
+orders ||--|{ order_status_change
+orders ||--o{ order_saga
+
+note bottom of orders
+  unique (customer_id) where status = 'PENDING'
+  one pending order per customer
+end note
+@enduml

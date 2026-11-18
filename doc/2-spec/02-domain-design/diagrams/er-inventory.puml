@@ -1,0 +1,60 @@
+@startuml
+title Inventory service: tables
+hide circle
+skinparam linetype ortho
+
+entity stock_item {
+  * sku : text <<PK>>
+  --
+  * on_hand : int
+  * reserved : int
+  * version : bigint
+}
+entity reservation {
+  * reservation_id : uuid <<PK>>
+  --
+  * order_id : uuid <<unique>>
+  * status : text
+  * expires_at : timestamptz
+  * version : bigint
+}
+entity reservation_line {
+  * reservation_id : uuid <<PK, FK>>
+  * sku : text <<PK, FK>>
+  --
+  * quantity : int
+}
+entity stock_movement {
+  * movement_id : uuid <<PK>>
+  --
+  * sku : text <<FK>>
+  * quantity : int
+  * cause : text
+  order_id : uuid
+  administrator : text
+  reason : text
+  * moved_at : timestamptz
+}
+entity outbox {
+  * message_id : uuid <<PK>>
+  --
+  destination, ordering_key, type,
+  attributes, payload,
+  created_at, published_at
+}
+entity inbox {
+  * message_id : uuid <<PK>>
+  --
+  * received_at : timestamptz
+}
+
+reservation ||--|{ reservation_line
+stock_item ||--o{ reservation_line
+stock_item ||--o{ stock_movement
+
+note bottom of stock_item
+  check (on_hand >= 0)
+  check (reserved >= 0)
+  check (reserved <= on_hand)
+end note
+@enduml

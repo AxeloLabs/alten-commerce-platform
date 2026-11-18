@@ -1,0 +1,242 @@
+= State Machines: Every State, Every Transition, Every Guard
+:doc-id: 02-03
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The state machines of the order, of the two order sagas, of a payment, of a reservation and of a product, as diagrams and transition tables.
+include::../_shared/attributes.adoc[]
+
+== Why two machines for one order
+
+.Strategy question
+****
+What strategy shows the customer four simple statuses while the system juggles a dozen technical steps?
+****
+
+An order has two lives.
+Its *business status* is what the customer, the administrator and every other document talk about: pending, confirmed, rejected, under review, and so on.
+Its *saga state* is where the processing stands: which request was sent, which answer is awaited, which deadline is running.
+
+Mixing them would force a choice between a status list nobody outside the team understands, and a processing model too coarse to recover from a crash.
+They are therefore two machines: the saga decides, and a transition of the saga may — or may not — move the order.
+While a saga is working, the order simply stays `PENDING` or `CANCELING`.
+
+No state machine engine is used.
+Each machine is a plain domain class holding its state and a method per event; an unexpected event in a given state is refused or ignored by that method, and every pair of state and event is covered by a unit test.
+
+Owner: {role-arch} {role-swe}
+
+== Order status
+
+.Strategy question
+****
+What strategy guarantees that an order can never jump to a status the business did not allow?
+****
+
+plantuml::../01-business-needs/diagrams/order-status.puml[format=svg, align=center]
+
+.Transitions of the order status ({FR-ORD-010})
+[cols="3,3,7,5", options="header"]
+|===
+| From | To | When | Guard
+| – | `PENDING` | A customer's checkout is accepted | Cart unchanged since the review; no flagged line; no other pending order of that customer
+| `PENDING` | `CONFIRMED` | The place-order saga completes | Payment captured and reservation confirmed
+| `PENDING` | `REJECTED` | The place-order saga is compensated | The order holds no payment; exactly one reason is given
+| `PENDING` | `UNDER_REVIEW` | The review delay expires, or a refund keeps failing | –
+| `UNDER_REVIEW` | `CONFIRMED` | A retried step succeeds, or an administrator confirms | Payment captured and reservation confirmed
+| `UNDER_REVIEW` | `REJECTED` | A retried step ends in a rejection, or an administrator rejects | The order holds no payment
+| `CONFIRMED` | `SHIPPED` | An administrator marks it shipped | –
+| `SHIPPED` | `DELIVERED` | An administrator marks it delivered | –
+| `CONFIRMED` | `CANCELING` | The customer cancels | –
+| `CANCELING` | `CANCELED` | The cancel-order saga completes | Stock returned and payment refunded
+| `CANCELING` | `UNDER_REVIEW` | The refund keeps failing, or the review delay expires | –
+| `UNDER_REVIEW` | `CANCELED` | A retried refund succeeds | The order was being canceled; payment refunded
+|===
+
+Any other pair is refused.
+In particular nothing leaves `REJECTED`, `DELIVERED` or `CANCELED`, whatever message or request arrives.
+
+== Place-order saga
+
+.Strategy question
+****
+What strategy lets an order placement stop at any instant and resume exactly where it was?
+****
+
+The saga state is saved, in the same transaction as the request it sends, each time it changes.
+After a crash the service reads the state and knows what was last asked and what is awaited; nothing has to be remembered in memory.
+
+plantuml::diagrams/saga-place-order.puml[format=svg, align=center]
+
+plantuml::diagrams/saga-place-order-review.puml[format=svg, align=center]
+
+.States of the place-order saga
+[%unbreakable, cols="4,8,3", options="header"]
+|===
+| State | Meaning | Order status
+| `RESERVING_STOCK` | The reservation was requested; the answer is awaited | `PENDING`
+| `CHARGING_PAYMENT` | The stock is held; the charge was requested | `PENDING`
+| `CANCELING_PAYMENT` | No payment answer at the order deadline; the cancellation was requested | `PENDING`
+| `CONFIRMING_STOCK` | The payment is captured; the confirmation of the reservation was requested | `PENDING`
+| `REFUNDING_PAYMENT` | The order cannot be honored although paid; the refund was requested | `UNDER_REVIEW`
+| `SUSPENDED` | Automatic processing has stopped; an administrator decides | `UNDER_REVIEW`
+| `COMPLETED` | Final. The order is paid and its stock secured | `CONFIRMED`
+| `COMPENSATED` | Final. Everything done was undone, or there was nothing to undo | `REJECTED`
+|===
+
+.Transitions of the place-order saga
+[cols="4,5,6,4", options="header"]
+|===
+| In state | On | The saga does | Next state
+
+| (start)
+| The order is created
+| Sets the order deadline and the review deadline. Sends `ReserveStock`.
+| `RESERVING_STOCK`
+
+.3+| `RESERVING_STOCK`
+| `StockReserved`
+| Sends `ChargePayment`.
+| `CHARGING_PAYMENT`
+
+| `StockReservationRejected`
+| Rejects the order: `OUT_OF_STOCK`.
+| `COMPENSATED`
+
+| Order deadline
+| Sends `ReleaseReservation`. Rejects the order: `TIMED_OUT`.
+| `COMPENSATED`
+
+.3+| `CHARGING_PAYMENT`
+| `PaymentCaptured`
+| Sends `ConfirmReservation`.
+| `CONFIRMING_STOCK`
+
+| `PaymentRefused`
+| Sends `ReleaseReservation`. Rejects the order: `PAYMENT_REFUSED`.
+| `COMPENSATED`
+
+| Order deadline
+| Sends `CancelPayment`.
+| `CANCELING_PAYMENT`
+
+.2+| `CANCELING_PAYMENT`
+| `PaymentCanceled`
+| Sends `ReleaseReservation`. Rejects the order: `TIMED_OUT`.
+| `COMPENSATED`
+
+| `PaymentCaptured`
+| Sends `ConfirmReservation`.
+| `CONFIRMING_STOCK`
+
+.2+| `CONFIRMING_STOCK`
+| `ReservationConfirmed`
+| Confirms the order. Publishes `OrderConfirmed`.
+| `COMPLETED`
+
+| `ReservationConfirmationFailed`
+| Sends `RefundPayment`.
+| `REFUNDING_PAYMENT`
+
+.2+| `REFUNDING_PAYMENT`
+| `PaymentRefunded`
+| Rejects the order: `OUT_OF_STOCK`, or `ADMIN_DECISION` when an administrator asked for it.
+| `COMPENSATED`
+
+| `PaymentRefundFailed`
+| Puts the order under review, or leaves it there. Raises an alert.
+| `SUSPENDED`
+
+| `CHARGING_PAYMENT`, `CANCELING_PAYMENT`, `CONFIRMING_STOCK`
+| Review deadline
+| Remembers the step in progress. Puts the order under review. Raises an alert.
+| `SUSPENDED`
+
+.3+| `SUSPENDED`
+| The administrator retries
+| Sends again the request of the remembered step.
+| The remembered state
+
+| The administrator confirms
+| Refused unless the payment is captured. Sends `ConfirmReservation`.
+| `CONFIRMING_STOCK`
+
+| The administrator rejects
+| Payment captured: sends `RefundPayment`. Payment unknown: sends `CancelPayment`. Sends `ReleaseReservation`.
+| `REFUNDING_PAYMENT` or `CANCELING_PAYMENT`
+|===
+
+.Events that arrive when they are no longer expected
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Situation | Rule
+| A duplicate of an event already handled | Ignored: the message was already recorded, or the saga is no longer in the state that expects it.
+| `StockReserved` after the saga was compensated at the order deadline | The saga sends `ReleaseReservation` once more. Releasing is harmless when repeated.
+| `ReservationReleased`, `ReservationExpired` | Recorded for information. The saga never waits for them.
+| `PaymentCaptured` after the saga was compensated | Cannot happen: a payment is canceled before its order is rejected. Should it happen all the same, the saga sends `RefundPayment` and raises an alert.
+| Any event in `COMPLETED` or `COMPENSATED` | Ignored.
+|===
+
+== Cancel-order saga
+
+.Strategy question
+****
+What strategy undoes a confirmed order with the same guarantees as placing it?
+****
+
+plantuml::diagrams/saga-cancel-order.puml[format=svg, align=center]
+
+.Transitions of the cancel-order saga
+[%unbreakable, cols="4,5,6,4", options="header"]
+|===
+| In state | On | The saga does | Next state
+| (start) | The cancellation is accepted | Sets the order to `CANCELING` and the review deadline. Sends `ReturnStock`. | `RETURNING_STOCK`
+| `RETURNING_STOCK` | `StockReturned` | Sends `RefundPayment`. | `REFUNDING_PAYMENT`
+| `REFUNDING_PAYMENT` | `PaymentRefunded` | Sets the order to `CANCELED`. Publishes `OrderCanceled`. | `COMPLETED`
+| `REFUNDING_PAYMENT` | `PaymentRefundFailed` | Puts the order under review. Raises an alert. | `SUSPENDED`
+| Any working state | Review deadline | Remembers the step. Puts the order under review. | `SUSPENDED`
+| `SUSPENDED` | The administrator retries | Sends again the request of the remembered step. | The remembered state
+|===
+
+The stock is returned before the refund is asked, so that a refund in difficulty never keeps units out of sale.
+
+== Payment
+
+.Strategy question
+****
+What strategy makes sure a payment is never in two states at once, such as refunded and capturable?
+****
+
+plantuml::diagrams/payment-status.puml[format=svg, align=center]
+
+.Transitions of the payment status
+[%unbreakable, cols="3,3,9", options="header"]
+|===
+| From | To | When
+| – | `PENDING` | A charge is requested for an order that has no payment yet
+| `PENDING` | `CAPTURED` | The provider accepts
+| `PENDING` | `REFUSED` | The provider declines
+| `PENDING` | `UNKNOWN` | The provider does not answer after the retries, or keeps failing
+| `UNKNOWN` | `CANCELED` | A cancellation is requested and the provider accepts it
+| `UNKNOWN` | `CAPTURED` | The provider reports the capture, or answers "already captured" to a cancellation
+| `CAPTURED` | `REFUNDED` | A refund is requested and the provider accepts it
+|===
+
+A refund that fails leaves the payment `CAPTURED`: the status always says where the money is.
+A request that does not fit the current status is not an error but an answer: asking to charge a captured payment answers "captured", asking to refund a refunded payment answers "refunded" ({FR-PAY-001}, {FR-PAY-006}).
+
+== Reservation and product
+
+.Strategy question
+****
+What strategy keeps the small lifecycles as explicit as the large ones?
+****
+
+plantuml::../01-business-needs/diagrams/reservation-lifecycle.puml[format=svg, align=center]
+
+A reservation that is confirmed, released or expired stays so.
+Settling it again answers the first outcome, with one exception stated by {FR-INV-005}: confirming an expired reservation tries to reserve again, and fails if the stock is gone.
+
+plantuml::diagrams/product-status.puml[format=svg, align=center]
+
+Retirement is final: there is no way back to `PUBLISHED` or `DRAFT` ({FR-CAT-005}).

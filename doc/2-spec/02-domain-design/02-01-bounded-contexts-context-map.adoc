@@ -1,0 +1,157 @@
+= Bounded Contexts and Context Map: How the Business Is Split into Services
+:doc-id: 02-01
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: Subdomains, bounded contexts, what each one owns, how they relate, and why the boundaries are where they are.
+include::../_shared/attributes.adoc[]
+
+== Method
+
+.Strategy question
+****
+What strategy decides where one microservice ends and the next begins?
+****
+
+A service boundary is a business boundary before it is a technical one.
+The split follows three tests, applied to the rules of document 01-06 and to the failure analysis of document 01-02.
+
+. *Which rules must be true at the same instant?* Rules that must hold together belong to one context, because only one database transaction can guarantee them. "Available quantity is never negative" ties stock and reservations together; nothing ties stock to a product description.
+. *Which data changes at the same rhythm and for the same people?* A product description changes when the administrator edits it. A stock level changes with every order. They are read and written by different flows at different rates.
+. *What must keep working when something else is down?* Customers must be able to browse while orders are failing; an e-mail outage must not block a payment.
+
+A boundary is drawn where the three tests agree.
+A boundary that only one test supports is a module inside a service, not a service.
+
+Owner: {role-sol} {role-arch}
+
+== Subdomains
+
+.Strategy question
+****
+What strategy tells us where to spend design effort, and where to buy or keep things simple?
+****
+
+[cols="3,2,10", options="header"]
+|===
+| Subdomain | Kind | What it means for the design
+| Order placement | Core | This is where the store keeps or breaks its promise. It gets the richest domain model, the saga, every failure scenario and the end-to-end tests.
+| Inventory | Core | The rule "never oversell" is enforced here under concurrency. Small model, strict invariants.
+| Payment | Supporting | The logic is the provider's; ours is to charge once, know the outcome, and give back. A thin model around a port.
+| Catalog | Supporting | Mostly data entry and reading. Deliberately simple.
+| Cart and favorites | Supporting | Lists of intentions with limits. Deliberately simple.
+| Notification | Generic | Sending an e-mail on an event. No business rule beyond "once".
+| Identity | Generic | Bought, not built: an identity provider.
+|===
+
+== Bounded contexts
+
+.Strategy question
+****
+What strategy gives each piece of data exactly one owner?
+****
+
+Each bounded context is one service with its own database.
+No service reads another service's database; whatever it needs, it asks for through an interface or keeps a copy fed by events.
+
+.Bounded contexts and what they own
+[cols="3,6,6,5", options="header"]
+|===
+| Context and service | Responsibility | Owns | Does not own
+| Catalog `catalog-service`
+| What is sold, at what price, and what availability to show
+| Products, categories, prices and their history; a copy of the available quantity of each product
+| Stock. The copy is fed by inventory events and is never corrected by hand.
+
+| Inventory `inventory-service`
+| What can really be sold
+| Stock on hand, reservations, stock movements
+| Product descriptions and prices. It knows a product only by its SKU.
+
+| Cart `cart-service`
+| What a customer intends to buy, and what they like
+| Carts, cart lines, favorites
+| Prices and availability, which it reads from the catalog each time a cart is shown.
+
+| Order `order-service`
+| Turning a cart into a confirmed order, and following it to delivery
+| Orders with their frozen lines and prices, order status history, the order sagas
+| Stock and payments. It asks the inventory and the payment services, and records what they answer.
+
+| Payment `payment-service`
+| Charging once, knowing the outcome, refunding once
+| Payments, attempts, refunds, the link with the payment provider
+| Orders. It knows an order only by its identifier and its amount.
+
+| Notification `notification-service`
+| Telling the customer what happened
+| The record of e-mails sent
+| Anything else. It acts on what order events tell it.
+
+| Identity (identity provider)
+| Who someone is and which role they hold
+| Accounts, credentials, roles
+| Everything else. Services see a signed token, never a password.
+|===
+
+.Decisions on the boundaries
+[cols="5,10", options="header"]
+|===
+| Question | Decision and reason
+| A user service? | *No.* The identity provider owns accounts and roles. A service of our own would only duplicate it. The customer's name and e-mail come from the token; the shipping address is typed at checkout and kept with the order.
+| Product service and catalog service? | *One context.* "Product" and "catalog" are the same thing seen by the same person.
+| Catalog and inventory together? | *Two contexts.* They fail all three tests together: different invariants, different rhythms, and the catalog must stay readable when the inventory is busy or down.
+| Where does the cart live? | *Its own context*, with favorites. A cart is not a draft order: it has no price, reserves nothing and changes constantly. Keeping it apart keeps that churn away from the order database.
+| Where does the saga live? | *Inside the order service*, as a module next to the order model. The saga is the life of an order; a separate orchestration service would have to share the order's database or duplicate its state.
+| Notification inside the order service? | *Separate.* An e-mail outage must never slow down or fail an order, and the next notification channel should not touch order code.
+|===
+
+== Context map
+
+.Strategy question
+****
+What strategy keeps one context from being shaped by the internals of another?
+****
+
+The map shows who depends on whom and through what.
+An arrow points from the one that depends to the one it depends on.
+
+plantuml::diagrams/context-map.puml[format=svg, align=center]
+
+.Relationships
+[cols="4,3,5,7", options="header"]
+|===
+| From → to | Style | Pattern | What crosses the boundary
+| Cart → Catalog | Synchronous | Open host service | Current price, status and known available quantity of the products in a cart
+| Order → Catalog | Synchronous | Open host service | The same, once, when a checkout is submitted: these prices become the prices of the order
+| Order → Cart | Synchronous | Open host service | The lines of the customer's cart, when a checkout is submitted
+| Catalog ← Inventory | Events | Published language | The available quantity of a product, each time it changes
+| Order ⇄ Inventory | Commands and events | Customer and supplier | Reserve, confirm, release and return stock; what happened to each request
+| Order ⇄ Payment | Commands and events | Customer and supplier | Charge, cancel and refund a payment; what happened to each request
+| Cart ← Order | Events | Published language | An order was confirmed: its quantities leave the cart
+| Notification ← Order | Events | Published language | An order changed status: tell the customer
+| Payment → payment provider | Synchronous | Anti-corruption layer | Charge, cancel, refund, in the provider's own terms, translated at the edge of the service
+| Notification → e-mail provider | Synchronous | Anti-corruption layer | An e-mail to deliver
+| Every service → identity provider | Token validation | Conformist | The signed token of the actor, following the standard
+|===
+
+Three rules follow from the map and are enforced by architecture tests and by contract tests.
+
+. *A synchronous call never changes state in another context.* The three synchronous calls between our services are reads. Every change that crosses a boundary travels as a message, so that it survives the receiver being down.
+. *Nobody depends on the order service synchronously.* The core is never on the critical path of another service's request.
+. *A context publishes an event only when another context needs it.* The catalog and the cart publish none in this release: nothing consumes what they would say.
+
+.What keeps working when a service is down
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Service down | Effect on the store
+| Catalog | The storefront cannot browse; carts show last known prices; checkout is refused. The store is effectively closed: the catalog runs with the most replicas.
+| Inventory | Browsing and carts work, with the availability last known. Orders wait, then are rejected or handed to an administrator.
+| Cart | Browsing works. No cart, no checkout.
+| Order | Browsing, carts and favorites work. No checkout, no order history.
+| Payment | Browsing, carts, order history work. New orders are rejected at the order deadline, uncharged.
+| Notification | Everything works. E-mails are sent when it comes back.
+| Identity provider | Browsing works. Nobody can sign in; sessions already open keep working until their token expires.
+|===
+
+Owner: {role-sol} {role-sre}
