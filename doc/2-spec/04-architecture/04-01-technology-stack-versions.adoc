@@ -1,0 +1,461 @@
+= Technology Stack and Versions: Every Tool, Its Job and Its Version
+:doc-id: 04-01
+:revnumber: 0.1
+:revdate: 2026-11-18
+:revremark: Draft
+:description: The complete technology stack by category, with the version of each tool, its purpose, the reason it was chosen and what was rejected.
+include::../_shared/attributes.adoc[]
+
+== How the stack is chosen
+
+.Strategy question
+****
+What strategy produces a stack that is current, coherent as a whole, and still supported when the project ends?
+****
+
+A stack is not a list of fashionable tools; it is a set of versions that are known to work together.
+Each choice below passed five tests, in this order.
+
+. *Is it imposed?* Spring Boot, Angular, Docker, Kubernetes on GKE Autopilot, Google Cloud Pub/Sub, CloudEvents, Protocol Buffers, Terraform and Secret Manager are constraints of the project. They are not discussed, only versioned.
+. *Is it the latest stable release?* Only generally available releases are retained: no milestone, no release candidate, no preview service on a critical path.
+. *Is it supported long enough?* A version whose open-source support ends during the project is rejected, even if it is the one everybody knows.
+. *Does it fit the others?* The Spring Boot dependency management decides the version of everything it manages. A library is never forced to a version Spring Boot does not manage without a recorded reason.
+. *Does it earn its place?* One tool per job. A tool that duplicates what the platform already gives is rejected, and the rejection is written down in <<rejected>>.
+
+Every version in this document was read on the publisher's own release page on {versions-verified-on}.
+Versions are declared once, in a single file of the specification, and quoted from there in every document; the same file will feed the build of the code.
+
+Owner: {role-arch} {role-sol}
+
+== The stack on one page
+
+.Strategy question
+****
+What strategy lets a newcomer name the whole stack in one minute?
+****
+
+plantuml::diagrams/stack-layers.puml[format=svg, align=center]
+
+.Compatibility baseline
+[cols="4,3,8", options="header"]
+|===
+| Component | Version | Compatibility and support
+| Java | {v-java} | Long-term support release, maintained until {eol-java}. The version Spring Boot {v-spring-boot} is tested with; Spring Boot accepts Java 17 to 27.
+| Spring Boot | {v-spring-boot} | Open-source support until {eol-spring-boot}. Brings Spring Framework {v-spring-framework}, Spring Security {v-spring-security}, Hibernate {v-hibernate}, Jackson {v-jackson}, JUnit {v-junit}, Jakarta EE 11.
+| Spring Cloud | {v-spring-cloud} | The release train for Spring Boot 4.0 and 4.1.
+| Spring Cloud GCP | {v-spring-cloud-gcp} | The 8.x line is the one generally available for Spring Boot 4.0 and 4.1.
+| Spring Modulith | {v-spring-modulith} | Aligned with Spring Boot 4.1.
+| Angular | {v-angular} | Requires Node.js 22, 24 or 26 and TypeScript {v-typescript}. Major releases are now yearly; the next one is expected mid-2027.
+| Node.js | {v-node} | Active long-term support line.
+| Kubernetes | {v-kubernetes} | Default of the GKE {v-gke-channel} release channel; upgrades are managed by GKE Autopilot.
+| PostgreSQL | {v-postgresql} | Current major release and the default of Cloud SQL.
+|===
+
+.Why not another Spring Boot line
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Line | Verdict
+| 3.5 | Open-source support ended in June 2026. Rejected.
+| 4.0 | Open-source support ends on {eol-spring-boot-40}, before the project does. Rejected.
+| 4.1 | Current stable line, supported until {eol-spring-boot}. *Retained.*
+| 4.2 | Release candidate only on {versions-verified-on}. To be adopted after it is released *and* Spring Cloud GCP supports it.
+|===
+
+== Language and runtime
+
+.Strategy question
+****
+What strategy keeps the code on a runtime that will still receive security fixes in five years?
+****
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| Java | {v-java} | The language and virtual machine of every service. Records for value objects and events, sealed types for closed sets of outcomes, pattern matching, virtual threads for blocking I/O. | The current long-term support release. Later releases (26, 27) are short-lived.
+| Eclipse Temurin | {v-java-patch} | The build of OpenJDK used on workstations, in the pipeline and in containers. | "OpenJDK" is the open-source project; one installs a *build* of it. Temurin is vendor-neutral, certified against the Java compatibility kit and published as a container image.
+| Container base image | `{v-container-base}` | The runtime layer of every service image: a Java runtime without compiler or tools. | Rebuilt weekly with security fixes. A distroless image is the hardening option examined in document 06-03.
+|===
+
+Owner: {role-arch}
+
+== Application framework
+
+.Strategy question
+****
+What strategy takes everything Spring offers for a service without letting the framework into the business code?
+****
+
+Spring is used in the outer layers of each service — web, persistence, messaging, configuration — and is absent from the domain, which is plain Java.
+That separation is specified in document 04-03 and enforced by architecture tests.
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| Spring Boot | {v-spring-boot} | Assembles each service: embedded server, configuration, dependency management, health endpoints, container-friendly startup and shutdown. | Imposed. Version chosen for its support window.
+| Spring Framework | {v-spring-framework} | Web layer, dependency injection, HTTP service clients, built-in retry and concurrency limits, null-safety annotations. | Brought by Spring Boot.
+| HTTP service clients | Spring Framework | Synchronous calls between services, declared as Java interfaces. | Replaces OpenFeign, which is feature-complete and whose own documentation points to this successor.
+| Spring Data JPA, Hibernate | {v-hibernate} | The PostgreSQL adapters: mapping, queries, optimistic locking. | The standard pairing with Spring Boot. Confined to adapters; domain objects are never JPA entities.
+| Spring Security | {v-spring-security} | Validates the identity token on every request, enforces roles, protects administration functions. | Brought by Spring Boot; native OAuth 2.0 resource-server support.
+| Spring Boot Actuator | Spring Boot | Liveness, readiness and startup probes for Kubernetes; metrics and build information. | Built in.
+| Spring Modulith | {v-spring-modulith} | Verifies module boundaries inside the two services that hold more than one module (order, cart) and documents them. | Used for its verification and documentation only. Its event registry is not our outbox: it has no Pub/Sub publisher.
+| Spring Cloud GCP | {v-spring-cloud-gcp} | Spring integration with Pub/Sub, Secret Manager and Cloud SQL. | The supported bridge between Spring Boot 4 and Google Cloud.
+| Spring Cloud | {v-spring-cloud} | Gateway (Server Web MVC), if the edge decision retains a backend-for-frontend. | The release train matching Spring Boot 4.1.
+| BootUI | {v-bootui} | A developer console inside the running service: beans, configuration, endpoints, requests. | Requested for the project; Spring Boot 4 only. *Development profiles only*: it bypasses the application's security chain, so it is never packaged for a deployed environment.
+|===
+
+Owner: {role-arch} {role-swe}
+
+== Persistence and data
+
+.Strategy question
+****
+What strategy lets the storage technology change without the business code noticing?
+****
+
+The domain talks to storage through ports.
+PostgreSQL is the reference for every service that takes part in the order saga; the catalog and the cart additionally prove the ports with a document database and a file.
+The design is specified in document 04-04.
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| PostgreSQL | {v-postgresql} | System of record. One database per service, on one managed instance. | Transactions are what make the outbox pattern safe. Managed by Cloud SQL: backups, point-in-time recovery, high availability.
+| Flyway | {v-flyway} | Versions the database schema: numbered SQL scripts applied at deployment. | Plain SQL, integrated with Spring Boot. Liquibase moved to a source-available license in its 5.0 release.
+| Firestore | Managed service | Document database adapter for the catalog and the cart. | The NoSQL store of Google Cloud. Used through the Google client library: the Spring Data module for Firestore is reactive only.
+| JSON file | – | File adapter for the catalog and the cart, for demonstrations and local runs. | Proves that a port can be implemented with no database at all. Never used in a deployed environment.
+| H2 | {v-h2} | In-memory database for fast tests of the JPA mappings. | Required for speed. It is not PostgreSQL: anything that relies on row locking or JSON columns is tested on the real database.
+| MapStruct | {v-mapstruct} | Generates the mapping code between domain objects, persistence entities and API payloads. | Compile-time generation: no reflection, errors at build time.
+| Lombok | {v-lombok} | Removes boilerplate in adapters. | Tolerated outside the domain only; the domain uses records and plain classes.
+|===
+
+Owner: {role-data} {role-swe}
+
+== Messaging and events
+
+.Strategy question
+****
+What strategy makes services talk through events that any team, in any language, can read and validate?
+****
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| Google Cloud Pub/Sub | Managed service | The only message bus: topics, pull subscriptions, ordering keys, retry policy, dead-letter topics. | Imposed. No delayed delivery: deadlines are handled by the services themselves.
+| Spring Cloud GCP Pub/Sub | {v-spring-cloud-gcp} | Publishing and subscribing from Spring, with explicit acknowledgement. | Direct use of the Pub/Sub template and subscriber, inside adapters. No additional binder abstraction.
+| CloudEvents | {v-cloudevents} | The envelope of every message: identifier, type, source, time, subject, and our extensions for the saga and correlation identifiers. | Imposed. Binary mode on Pub/Sub: attributes prefixed `ce-`, payload untouched.
+| CloudEvents SDK for Java | {v-cloudevents-sdk} | Builds and reads the envelope. | Reference implementation.
+| Protocol Buffers | {v-protobuf} | The schema and binary encoding of every payload. | Imposed. Compact, typed, with explicit compatibility rules.
+| Pub/Sub schemas | Managed service | Rejects, at the topic, a message that does not match its schema. | Validation at the door. Constraint: one self-contained message per schema, no imports.
+| buf | {v-buf} | Lints the schemas and blocks incompatible changes in the pipeline. | The standard tool for Protobuf governance.
+| AsyncAPI | {v-asyncapi} | The contract of the asynchronous interfaces: channels, messages, Pub/Sub bindings ({v-asyncapi-pubsub-binding}). | The asynchronous counterpart of OpenAPI. Written by hand, specification first: no generator scans Pub/Sub listeners.
+|===
+
+Owner: {role-sol} {role-data}
+
+== API and contracts
+
+.Strategy question
+****
+What strategy guarantees that two services, or the storefront and a service, never disagree on an interface?
+****
+
+Contracts are written first and are the source of truth; code is generated from them or tested against them, never the reverse.
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| OpenAPI | {v-openapi} | The contract of every REST interface, versioned. | The standard. REST is the only synchronous style; gRPC and GraphQL are not used.
+| OpenAPI Generator | {v-openapi-generator} | Generates the server interfaces of the services and the typed client of the storefront from the contract. | One contract, two generated sides: they cannot drift.
+| springdoc-openapi | {v-springdoc} | Serves the contract and an interactive console in non-production environments. | The 3.x line is the one for Spring Boot 4.
+| Problem Details | RFC 9457 | The single format of every error response. | Standard, supported natively by Spring.
+| Spectral | {v-spectral} | Lints the contracts against the API guidelines. | Rules as code, run in the pipeline.
+| oasdiff | {v-oasdiff} | Detects a breaking change between two versions of a REST contract. | Fails the pipeline before the change is merged.
+| Microcks | {v-microcks} | Checks that a service honors its REST and asynchronous contracts, and simulates its neighbors in component tests. | Handles OpenAPI and AsyncAPI over Pub/Sub with one tool.
+|===
+
+Owner: {role-sol} {role-qa}
+
+== Resilience
+
+.Strategy question
+****
+What strategy stops one slow dependency from taking the whole platform down?
+****
+
+Resilience patterns guard *synchronous* calls: storefront to services, order to catalog, payment to its provider, notification to the e-mail provider.
+Asynchronous exchanges are protected by the bus itself.
+The complete strategy is in document 05-02.
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| Resilience4j | {v-resilience4j} | Circuit breaker, bulkhead, time limiter and retry around synchronous calls. | Has a dedicated Spring Boot 4 module. Spring Framework's own resilience features cover retry and concurrency limits only.
+| Spring Framework resilience | Spring Framework | Simple retries and concurrency limits by annotation. | Built in; used where a circuit breaker is not needed.
+| Pub/Sub retry and dead-letter topics | Managed service | Redelivers a failed message with backoff, then sets it aside after a number of attempts. | The bus already does it; consumers are not wrapped in additional retries.
+| Kubernetes | {v-kubernetes} | Restarts failed instances, removes unready ones from traffic, keeps a minimum number running during maintenance. | Built into the platform.
+|===
+
+Owner: {role-sre} {role-arch}
+
+== Security
+
+.Strategy question
+****
+What strategy keeps credentials, tokens and secrets out of our code altogether?
+****
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| Keycloak | {v-keycloak} | Identity provider: registration, sign-in, password policy, roles, tokens. | Open source, standard protocols, first-class Spring Security support. No service of the platform ever sees a password.
+| OpenID Connect, OAuth 2.0 | Standards | Sign-in with the authorization code flow and PKCE; services validate signed tokens. | The standards. Whether tokens stay on the server (backend for frontend) or reach the browser is the edge decision recorded in document 04-07.
+| Secret Manager | Managed service | Holds every secret; delivered to pods by the GKE add-on. | Imposed.
+| Workload Identity Federation for GKE | Managed service | Gives each service its own Google identity, without any key file. | Always on in Autopilot. No long-lived credential exists.
+| Cloud Armor | Managed service | Web application firewall and rate limiting at the entry point. | Attached to the load balancer through the Gateway.
+| Certificate Manager | Managed service | Issues and renews the TLS certificates. | The certificate mechanism supported by the GKE Gateway.
+|===
+
+Owner: {role-sec}
+
+== Observability
+
+.Strategy question
+****
+What strategy lets us follow one order across six services with one identifier?
+****
+
+Services emit traces, metrics and logs through open standards; Google Cloud stores and displays them.
+Nothing in the code depends on the backend.
+The strategy, the saga dashboards and the alerts are in document 05-03.
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| Micrometer, OpenTelemetry starter | Spring Boot | Measures every request and message, propagates the trace context, exports with the OpenTelemetry protocol. | Built into Spring Boot 4. Replaces Zipkin, whose exporter Spring Boot is retiring.
+| Structured logging | Spring Boot | Writes logs as JSON on standard output, with trace, saga and order identifiers. | Built in. GKE collects standard output: no log agent or appender in the services.
+| Cloud Logging, Cloud Trace, Cloud Monitoring | Managed services | Store and search logs, display traces, raise alerts. | Native to GKE.
+| Managed Service for Prometheus | Managed service | Scrapes the metrics endpoint of each service. | Enabled by default on Autopilot.
+| Grafana | Current | Dashboards for services and for the order flow. | The standard dashboard tool on Prometheus data.
+| otel-lgtm | {v-otel-lgtm} | Logs, metrics and traces in one container on the workstation. | The same signals locally as in the cloud, with nothing to operate.
+|===
+
+Owner: {role-sre} {role-platform}
+
+== Testing
+
+.Strategy question
+****
+What strategy gives each kind of risk the cheapest test that can catch it?
+****
+
+The levels, families and tools are detailed in document 07-01.
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| JUnit | {v-junit} | The test engine of everything. | Managed by Spring Boot.
+| AssertJ, Mockito | {v-assertj}, {v-mockito} | Fluent assertions; test doubles, used sparingly outside the domain. | Managed by Spring Boot.
+| ArchUnit | {v-archunit} | Turns the architecture rules into tests that fail the build. | Reads Java 25 class files.
+| JaCoCo | {v-jacoco} | Measures coverage; enforces 100 % on domain packages. | Supports Java 25.
+| PIT | {v-pitest} | Mutation testing: checks that the tests would notice a bug. | Makes the 100 % coverage meaningful. To be confirmed with JUnit {v-junit} before it becomes a gate.
+| Cucumber-JVM | {v-cucumber} | Executes the Gherkin acceptance scenarios. | Runs on the JUnit platform.
+| Testcontainers | {v-testcontainers} | Real PostgreSQL and Google emulators in tests. | Managed by Spring Boot; modules for PostgreSQL, Pub/Sub and Firestore.
+| RestTestClient | Spring Framework | Calls a running service in integration tests. | The client Spring Boot 4 documents first; TestRestTemplate has moved to a separate module.
+| WireMock | {v-wiremock} | Simulates an HTTP dependency, with faults and delays. | Stable line; version 4 is still in beta.
+| Vitest | Angular {v-angular} | Unit tests of the storefront. | The default runner of Angular.
+| Playwright | {v-playwright} | End-to-end tests through the storefront, with accessibility checks. | Fast, reliable, multi-browser.
+| Gatling | {v-gatling} | Load, stress and endurance tests. | Scenarios written in Java, Apache license.
+| OWASP ZAP | {v-zap} | Dynamic security scan of the deployed test environment. | The reference open-source scanner.
+|===
+
+Owner: {role-qa} {role-swe}
+
+== Code quality and build
+
+.Strategy question
+****
+What strategy makes code style and static checks something the build decides, not something reviewers argue about?
+****
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| Maven | {v-maven} | Builds every service; one repository, one module per service and per shared library. | Stable line; Maven 4 is not released. Run through its wrapper.
+| Google Java Style | – | The coding guideline. | A published, complete guide with zero configuration. Spring's own formatter is designed for the Spring projects themselves.
+| Spotless, google-java-format | {v-spotless}, {v-google-java-format} | Formats the code and fails the build on a deviation. | Formatting is automatic and not negotiable.
+| Checkstyle | {v-checkstyle} | Checks what a formatter cannot: naming, imports, documentation. | Ships the Google rule set.
+| Error Prone, NullAway | {v-error-prone}, {v-nullaway} | Catch bug patterns and null dereferences at compile time. | Works with the JSpecify annotations Spring Framework 7 uses.
+| SonarQube | {v-sonarqube} | Quality gate: duplication, complexity, security hotspots, coverage on new code. | The reference. Hosted or self-hosted edition is decided in document 06-05.
+| ESLint, Prettier | angular-eslint {v-angular-eslint} | The same for the storefront. | The Angular standard.
+|===
+
+Owner: {role-arch} {role-qa}
+
+== Front end
+
+.Strategy question
+****
+What strategy keeps the storefront simple while the back end carries the complexity?
+****
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| Angular | {v-angular} | The storefront and the administration screens: standalone components, signals, no zone. | Imposed. Current stable release.
+| TypeScript | {v-typescript} | Typed language of the storefront. | The version Angular requires.
+| Node.js | {v-node} | Builds and tests the storefront. | Active long-term support line.
+| Generated API client | OpenAPI Generator | Typed access to the services. | Generated from the same contract as the server.
+| nginx | Current stable | Serves the built storefront from a container. | Small, standard, stateless.
+|===
+
+Owner: {role-swe}
+
+== Containers and platform
+
+.Strategy question
+****
+What strategy runs the same artifact on a workstation and in production?
+****
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| Docker image format | OCI | One image per service, built in two stages, with the application split in layers. | Imposed. An explicit Dockerfile keeps the build auditable.
+| Podman or Docker | Current | Builds and runs images locally; runs the local dependencies with Compose. | Both produce and run the same images.
+| GKE Autopilot | Kubernetes {v-kubernetes} | Runs the platform. Google manages nodes, upgrades and security hardening; we pay for what pods request. | Imposed.
+| Gateway API | GKE managed | The entry point: a Google load balancer configured from Kubernetes, with TLS and routing. | The successor of Ingress; the community ingress controller was retired in 2026.
+| Helm | {v-helm} | Packages the deployment of each service: one shared chart, one values file per service and per environment. | Versioned releases and rollbacks. YAML throughout.
+| Artifact Registry | Managed service | Stores images and scans them for vulnerabilities. | Native to Google Cloud.
+| Cloud SQL | Managed service | Runs PostgreSQL. | Managed backups, recovery and failover.
+|===
+
+Owner: {role-platform} {role-cloud} {role-net}
+
+== Infrastructure as code and delivery
+
+.Strategy question
+****
+What strategy makes an environment something we can recreate, review and destroy on demand?
+****
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| Terraform | {v-terraform} | Declares every Google Cloud resource: network, cluster, database, topics and subscriptions, identities, budgets. | Imposed. Changes are reviewed as code; an environment is reproducible and can be destroyed to stop its cost.
+| Google provider | {v-terraform-google-full} | The Terraform provider for Google Cloud. | Current major line.
+| GitHub Actions | Hosted | Continuous integration: build, tests, quality and security gates, image publication. | The repository is on GitHub. Authenticates to Google Cloud without a key (action {v-google-auth-action}).
+| Cloud Deploy | Managed service | Continuous delivery: promotion from test to integration to production, with approval and verification. | Native to GKE. A Jenkins server would be one more system to operate and secure.
+| Renovate | Current | Proposes dependency updates as pull requests. | Keeps the stack current without manual tracking.
+|===
+
+Owner: {role-devops} {role-cloud}
+
+== Software supply chain
+
+.Strategy question
+****
+What strategy proves that what runs in production is what we built, and that it carries no known vulnerability?
+****
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| gitleaks | {v-gitleaks} | Blocks a commit or a pull request that contains a secret. | Fast, widely used.
+| Syft | {v-syft} | Produces the bill of materials of each image. | Standard formats.
+| Grype | {v-grype} | Scans dependencies and images for known vulnerabilities. | Open source, pairs with Syft.
+| cosign | {v-cosign} | Signs images; the cluster can refuse unsigned ones. | The standard for image signing.
+| Checkov | {v-checkov} | Scans Terraform and Kubernetes files for insecure settings. | Covers both.
+| CodeQL | Current | Static security analysis of Java and TypeScript. | Native to GitHub.
+|===
+
+Every scanner and every pipeline action is pinned to an exact digest, not to a moving tag: in 2026 the release pipeline of a widely used scanner was compromised, and a moving tag would have pulled the tampered version.
+
+Owner: {role-sec} {role-devops}
+
+== Documentation
+
+.Strategy question
+****
+What strategy keeps the documentation next to the code and as reviewable as the code?
+****
+
+[cols="4,3,7,7", options="header"]
+|===
+| Tool | Version | What it does for us | Why this one
+| AsciiDoc, Asciidoctor PDF | {v-asciidoctor-pdf} | Sources and PDF generation of this specification. | The documentation format of the Spring ecosystem; attributes carry the versions, anchors carry the identifiers.
+| PlantUML | {v-plantuml-bundled} | Every UML, C4 and network diagram, as text. | One language for all diagram types, rendered locally.
+| BPMN 2.0, bpmn-js | – | Business process diagrams. | The standard notation, generated from text.
+| GitHub Issues and Projects | Hosted | Backlog: epics, stories, tasks. | Next to the code, scriptable. Jira only if the organization imposes it.
+|===
+
+Owner: {role-arch}
+
+[[rejected]]
+== What was considered and not retained
+
+.Strategy question
+****
+What strategy prevents the same technology debate from being reopened every month?
+****
+
+A rejection is a decision.
+It is written here with its reason, and the most structural ones are detailed as architecture decision records in document 04-07.
+
+[cols="4,3,10", options="header"]
+|===
+| Candidate | Verdict | Reason
+| Spring Cloud OpenFeign | Replaced | Feature-complete, maintenance only. Spring HTTP service clients do the same job in the framework itself.
+| TestRestTemplate | Replaced | Still available, in a separate module. RestTestClient is the documented default.
+| Zipkin | Replaced | Spring Boot is retiring its exporter. OpenTelemetry protocol to Cloud Trace, and to otel-lgtm locally.
+| Loki, loki4j appender | Not needed | GKE collects standard output into Cloud Logging. Loki is present only inside the local otel-lgtm container.
+| Liquibase | Replaced | License changed to a source-available one in 5.0. Flyway covers the need with plain SQL.
+| Jenkins | Rejected | A server to host, patch and secure. GitHub Actions and Cloud Deploy are managed.
+| Two-phase commit | Rejected | No transaction manager spans PostgreSQL, Pub/Sub and several services, and a coordinator would couple their availability. Saga and outbox instead; explained in document 04-06.
+| gRPC | Deferred | A second contract technology for very few synchronous calls. Spring gRPC is generally available: the door stays open.
+| Apache Flink | Rejected | A stream-processing engine; the platform has no stream analytics.
+| State machine engine, workflow engine | Rejected | Excluded by the brief. Order and saga states are plain domain code, fully unit-tested.
+| Spring Cloud Kubernetes, Config Server, Eureka | Not needed | Kubernetes already provides discovery, load balancing and configuration.
+| Spring Cloud Stream binder for Pub/Sub | Not needed | An abstraction over a bus we will not replace. The Pub/Sub template and subscriber are used directly, inside adapters.
+| Springwolf | Not usable | Generates AsyncAPI from code for Kafka, AMQP and others; it cannot scan Pub/Sub listeners.
+| Spring Modulith event registry | Not used | A persistent event log without a Pub/Sub publisher. The transactional outbox is implemented explicitly, behind a port.
+| Chaos Mesh | Not usable | Needs privileges that Autopilot does not grant. Faults are injected by the simulated provider and by stopping pods.
+| Skaffold | Rejected | Announced for archival in January 2027.
+| Trivy | Replaced | Works, but its release pipeline was compromised in March 2026. Grype and Syft are retained; whatever is used is pinned by digest.
+| k6 | Alternative | Equally capable. Gatling is preferred for scenarios in Java and its license.
+| Gradle | Alternative | Equally capable. Maven is preferred for its ubiquity in enterprise Java teams.
+| Jira | Deferred | Used only if the organization requires it; the backlog structure is the same.
+| GKE and gcloud MCP servers for the AI agent | Not needed | They add nothing the `gcloud` and `kubectl` command lines do not already do, and they widen what an agent can change. See document 08-02.
+|===
+
+== Points to watch
+
+.Strategy question
+****
+What strategy tells us today where the stack could bite tomorrow?
+****
+
+[cols="5,10", options="header"]
+|===
+| Point | What we do about it
+| Spring Boot 4.2 will be released during the project | Stay on 4.1 until 4.2 is released and Spring Cloud GCP supports it; then upgrade through a dedicated change.
+| Jackson 3 is the default in Spring Boot 4 | New package names. Any library still tied to Jackson 2 is checked before it is added.
+| PIT with JUnit {v-junit} | The JUnit plugin of PIT has not been released since 2025. Prototype it before mutation testing becomes a gate; otherwise keep it as a report.
+| The Pub/Sub emulator does not validate Protobuf schemas | Schema compatibility is checked by buf in the pipeline and by tests against the real Pub/Sub of the test environment.
+| Managed OpenTelemetry for GKE was a preview at the last check | Services export with the standard protocol; the collection side can change without touching them.
+| Flyway Community license terms | To be read before the first commercial use; the alternative is plain SQL scripts applied by the pipeline.
+| Autopilot bills what pods request | Small requests, non-production scaled to zero when unused, budget alerts. See document 06-06.
+|===
+
+== Version policy
+
+.Strategy question
+****
+What strategy keeps the stack current without a migration project every year?
+****
+
+* Versions are declared in one place and nowhere else.
+* Everything Spring Boot manages follows Spring Boot; a patch release of Spring Boot is adopted within two weeks.
+* Dependency updates arrive as pull requests from Renovate and go through the same gates as any change.
+* A minor or major upgrade of the baseline (Java, Spring Boot, Angular, Kubernetes) is a planned change with its own decision record.
+* Images, pipeline actions and scanners are pinned by digest.
+* This document is re-verified at each baseline upgrade, and its verification date updated.

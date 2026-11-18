@@ -1,0 +1,12 @@
+# Toolchain of the project, pinned for every workstation and for the pipeline.
+# Installed by mise in the user's home, without administrator rights:  mise install
+# Versions are those of doc/2-spec/_shared/versions.adoc.
+
+[tools]
+java = "temurin-25"
+maven = "3.9"
+node = "26"
+kubectl = "1.36"
+helm = "4.3"
+terraform = "1.17"
+buf = "1.75"

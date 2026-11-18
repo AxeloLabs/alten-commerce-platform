@@ -1,0 +1,298 @@
+= Developer Workstation: IDE, JDK, Command-Line Tools and AI Assistant
+:doc-id: 08-01
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: What a workstation needs to build, test, deploy and document the platform, how it is installed, and what requires administrator rights.
+include::../_shared/attributes.adoc[]
+
+== Principles
+
+.Strategy question
+****
+What strategy gives every developer, and the pipeline, exactly the same tools at exactly the same versions?
+****
+
+A build that works on one workstation and fails on another costs more than any tool.
+Three rules prevent it.
+
+. *The toolchain is declared in the repository.* One file, `mise.toml`, lists the tools and their versions. Installing them is one command. The pipeline reads the same file.
+. *Nothing is installed system-wide for the project.* Tools go into the developer's home directory, need no administrator rights, and never conflict with what other projects use.
+. *Everything else runs in containers.* Databases, emulators, the identity provider and the observability stack are started from images, never installed.
+
+The reference workstation is Linux (Fedora 44). The same setup works on macOS and on Windows with WSL 2.
+
+Owner: {role-platform} {role-swe}
+
+== Toolchain
+
+.Strategy question
+****
+What strategy installs seven tools at pinned versions with one command and no administrator rights?
+****
+
+The toolchain is installed by https://mise.jdx.dev[mise], a version manager that reads `mise.toml` at the root of the repository.
+
+.Tools pinned in `mise.toml`
+[%unbreakable, cols="3,3,9", options="header"]
+|===
+| Tool | Version | Used for
+| Java (Eclipse Temurin) | {v-java-patch} | Compiling and running the services, and the Java language server.
+| Maven | {v-maven} | Building the services. The repository also carries the Maven wrapper.
+| Node.js | {v-node} | Building and testing the storefront, and the documentation tooling.
+| kubectl | {v-kubernetes} | Talking to the GKE cluster.
+| Helm | {v-helm} | Rendering and installing the deployment charts.
+| Terraform | {v-terraform} | Planning and applying the infrastructure.
+| buf | {v-buf} | Linting the Protobuf schemas and detecting breaking changes.
+|===
+
+.Commands
+[source,shell]
+----
+mise trust          # once: accept the configuration of this repository
+mise install        # install every pinned tool into the home directory
+mise ls --current   # show what is active in this directory
+----
+
+.Tools expected on the workstation, outside `mise.toml`
+[cols="3,9,4", options="header"]
+|===
+| Tool | Used for | Administrator rights
+| Git, GitHub CLI | Source control, pull requests, backlog | Usually preinstalled
+| Podman or Docker | Building images, running local dependencies, Testcontainers | To install; not to use
+| Google Cloud CLI | Authentication to Google Cloud, cluster credentials, emulators | To install from system packages
+| GKE authentication plugin | Lets `kubectl` authenticate to GKE | Yes, when the Google Cloud CLI came from system packages
+| pnpm | Package manager of the storefront and of the documentation tooling | No
+| Chrome or Chromium | Rendering BPMN diagrams, running end-to-end tests locally | To install
+| Python 3.11 or later | Documentation build scripts | Usually preinstalled
+|===
+
+The Firebase CLI is *not* required: the Firestore and Pub/Sub emulators are used as container images, by Testcontainers and by the local Compose file.
+
+== Java development kit
+
+.Strategy question
+****
+What strategy avoids "it works with my JDK" between workstation, pipeline and production?
+****
+
+"OpenJDK" is the open-source project that produces the reference implementation of Java.
+Nobody installs "OpenJDK" itself: one installs a *build* of it, published by a vendor.
+All builds of a given version pass the same compatibility kit; they differ in support terms and packaging.
+
+.Builds considered
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Build | Verdict
+| Eclipse Temurin (Adoptium) | *Retained.* Vendor-neutral, free, and published as the container image our services use: the same build runs on the workstation, in the pipeline and in production.
+| Red Hat build of OpenJDK | Valid. It is the one shipped by Fedora and may already be on the workstation; it stays as the system default outside the project.
+| Oracle JDK, Amazon Corretto, Azul Zulu, BellSoft Liberica | Valid, not needed. Choosing one would only add a vendor.
+|===
+
+The rule is one major version and one vendor from the workstation to production: Java {v-java}, Temurin {v-java-patch}, image `{v-container-base}`.
+Inside the repository `mise` activates Temurin; outside it, the system JDK is untouched.
+
+== Integrated development environment
+
+.Strategy question
+****
+What strategy makes the IDE apply the project's rules instead of each developer's preferences?
+****
+
+The project uses IntelliJ IDEA {v-intellij}.
+Since the unified distribution, one download serves everyone; a subscription unlocks additional features.
+
+.What needs a subscription
+[%unbreakable, cols="5,5,5", options="header"]
+|===
+| Capability | Free | With subscription
+| Java, Maven, Git, debugger, test runner | Yes | Yes
+| Spring support | Basic: project wizard, highlighting | Full: bean navigation, configuration assistance, endpoints view
+| Database tools | Basic: connections, schema, SQL completion | Full data editor and tools
+| Kubernetes | Yes | Yes
+| HTTP client | No | Yes
+|===
+
+The free tier is enough to build the platform.
+Where the HTTP client is missing, requests are kept as shell scripts in the repository, which also makes them usable by the pipeline.
+
+.IDE plugins
+[cols="4,11", options="header"]
+|===
+| Plugin | Purpose
+| google-java-format | Formats with the project style on save, identical to the build.
+| CheckStyle-IDEA | Shows Checkstyle violations while typing.
+| SonarQube for IDE | Shows quality-gate issues before the pipeline does.
+| AsciiDoc | Previews the specification; understands includes and attributes.
+| PlantUML | Previews diagrams.
+| Cucumber for Java, Gherkin | Navigates from a scenario step to its implementation.
+| MapStruct Support | Completion and navigation in mappers.
+| Terraform and HCL | Editing the infrastructure code.
+|===
+
+Code style, inspections and run configurations that must be shared are committed with the repository; personal settings are not.
+
+.Installation without administrator rights
+[source,shell]
+----
+# 1. Download the archive and its checksum from the publisher
+curl -fLO https://download.jetbrains.com/idea/idea-{v-intellij}.tar.gz
+curl -fLO https://download.jetbrains.com/idea/idea-{v-intellij}.tar.gz.sha256
+sha256sum --check idea-{v-intellij}.tar.gz.sha256
+
+# 2. Extract into the home directory and expose the launcher
+mkdir -p ~/.local/opt ~/.local/bin
+tar -xzf idea-{v-intellij}.tar.gz -C ~/.local/opt
+ln -sfn ~/.local/opt/idea-IU-*/bin/idea ~/.local/bin/idea
+----
+
+== Containers on the workstation
+
+.Strategy question
+****
+What strategy runs a database, a message bus and an identity provider locally without installing any of them?
+****
+
+Images are built and run with Podman or Docker; both handle the same images and the same Compose files.
+On Fedora, Podman is preinstalled, runs without a daemon and without root, and is the default choice.
+
+.Making Testcontainers use rootless Podman
+[source,shell]
+----
+systemctl --user enable --now podman.socket
+export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock
+export TESTCONTAINERS_RYUK_DISABLED=true
+----
+
+If a test library proves incompatible with Podman, Docker Engine is the fallback; it requires administrator rights to install.
+
+.Local dependencies, started with Compose
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Container | Stands for
+| PostgreSQL {v-postgresql} | Cloud SQL
+| Pub/Sub emulator | Google Cloud Pub/Sub. It does not validate Protobuf schemas; see document 04-01.
+| Firestore emulator | Firestore
+| Keycloak {v-keycloak} | The identity provider, with a development realm
+| otel-lgtm {v-otel-lgtm} | Logs, metrics and traces, with Grafana
+| Simulated payment provider | The external payment provider
+|===
+
+== Google Cloud access
+
+.Strategy question
+****
+What strategy lets a developer reach the cluster without a single long-lived key on the workstation?
+****
+
+A developer authenticates with their own Google identity; no service-account key file is ever downloaded.
+
+[source,shell]
+----
+gcloud auth login                                   # interactive, once
+gcloud config set project <project-id>
+gcloud container clusters get-credentials <cluster> --region <region>
+kubectl get namespaces                              # test, integration, prod
+----
+
+`kubectl` needs the GKE authentication plugin.
+When the Google Cloud CLI was installed from system packages, the plugin is a system package too and needs administrator rights:
+
+[source,shell]
+----
+sudo dnf install google-cloud-cli-gke-gcloud-auth-plugin
+----
+
+What an identity may do in each environment, and which commands are forbidden, is defined in documents 06-06 and 08-02.
+
+== AI coding assistant
+
+.Strategy question
+****
+What strategy gives the AI assistant the context it needs and nothing it could misuse?
+****
+
+The project is developed with Claude Code.
+Its safeguards — permissions, sandbox, forbidden commands, review of what it produces — are the subject of document 08-02.
+This section covers only what is installed.
+
+.Plugins from the official marketplace
+[cols="4,7,4", options="header"]
+|===
+| Plugin | Purpose | Prerequisite
+| `jdtls-lsp` | Java code intelligence: definitions, references, compile errors, without building | `jdtls` on the path
+| `typescript-lsp` | The same for the storefront | `typescript-language-server` on the path
+| `context7` | Documentation of each library *at the version we use*; avoids code written for an older release | –
+| `security-guidance` | Flags risky patterns as code is edited and reviews the change for injection, secrets and unsafe calls | –
+| `commit-commands` | Commit and pull-request commands with the project's conventions | Git, GitHub CLI
+| `pr-review-toolkit` | Specialized reviewers for a pull request: tests, error handling, types, comments | –
+| `feature-dev` | A guided workflow: explore, design, implement, review | –
+| `frontend-design` | Design guidance for the storefront | –
+| `terraform` | Up-to-date provider documentation while writing infrastructure code | –
+|===
+
+[source,shell]
+----
+/plugin install jdtls-lsp@claude-plugins-official
+/plugin install typescript-lsp@claude-plugins-official
+/plugin install context7@claude-plugins-official
+/plugin install security-guidance@claude-plugins-official
+/plugin install commit-commands@claude-plugins-official
+----
+
+.Model Context Protocol servers: what is connected and what is not
+[cols="4,3,9", options="header"]
+|===
+| Server | Decision | Reason
+| Context7 | Connected | Read-only documentation lookup. Directly improves the correctness of generated code on Spring Boot {v-spring-boot} and Angular {v-angular}.
+| Playwright | Connected | Lets the assistant open the storefront and check what it built.
+| BootUI | Optional, development only | Lets the assistant inspect a service running locally: beans, configuration, endpoints.
+| GKE (open source) | Not connected | Exposes tools that create, update and apply resources, with no documented read-only mode. `kubectl`, under explicit permission rules, gives finer control.
+| gcloud (preview) | Not connected | A single tool that runs any `gcloud` command with the developer's identity. Nothing the command line does not already do, and still a preview.
+| Google Cloud managed servers (Logging, Monitoring) | Later | Useful for production diagnostics, with a read-only identity. Not needed before there is something to diagnose.
+| GitHub | Not connected | The GitHub CLI covers the need.
+|===
+
+The rule behind the table: a server is connected when it gives the assistant *knowledge*; it is refused when it gives the assistant *power* it can already exercise, under better control, through a command line whose every call can be allowed, asked or denied.
+
+Owner: {role-sec} {role-platform}
+
+== Reference workstation
+
+.Strategy question
+****
+What strategy proves the setup described here actually works?
+****
+
+The setup was applied to the reference workstation on {revdate}.
+Each line was checked by running the tool, not by reading its documentation.
+
+.State of the reference workstation
+[cols="4,4,7", options="header"]
+|===
+| Tool | Version found | Installed by
+| Java, Temurin | 25.0.5+8 | mise, from `mise.toml`
+| Maven | 3.9.16 | mise
+| Node.js | 26.13.1 | mise
+| kubectl | 1.36.6 | mise
+| Helm | 4.3.2 | mise
+| Terraform | 1.17.2 | mise
+| buf | 1.75.0 | mise
+| IntelliJ IDEA | 2026.3, build 263.7307.200 | Archive in the home directory, checksum verified
+| Java language server (jdtls) | 1.63.0 | Archive in the home directory, checksum verified
+| TypeScript language server | 6.1.0 | pnpm, in the home directory
+| Podman | 5.8.9 | Preinstalled
+| Google Cloud CLI | 593.0.0 | Preinstalled, system package
+| GitHub CLI, Git, Python, Chrome | – | Preinstalled
+|===
+
+.Remaining steps, reserved to the owner of the workstation
+[cols="6,6,4", options="header"]
+|===
+| Step | Why it is not automated | Needed for
+| Install the GKE authentication plugin | Administrator rights | First connection to the cluster
+| Enable the Podman socket | Changes a user service of the workstation | First Testcontainers run
+| `gcloud auth login` | Interactive sign-in | Any Google Cloud access
+| Install the Claude Code plugins | Changes the assistant's own configuration | Development phase
+| Choose the IntelliJ IDEA license | Personal or company account | Advanced Spring tooling only
+|===

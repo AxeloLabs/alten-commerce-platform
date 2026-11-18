@@ -23,6 +23,9 @@
 :v-flyway: 13
 :v-h2: 2.5
 // --- Contracts
+:v-spectral: 6.17
+:v-oasdiff: 1.39
+:v-asyncapi-cli: 6.3
 :v-openapi: 3.2
 :v-openapi-generator: 7.27
 :v-asyncapi: 3.1
@@ -33,6 +36,8 @@
 :v-buf: 1.75
 :v-microcks: 1.16
 // --- Tests
+:v-mockito: 5.24
+:v-assertj: 3.27
 :v-junit: 6
 :v-testcontainers: 2.0
 :v-archunit: 1.5
@@ -44,6 +49,8 @@
 :v-gatling: 3.16
 :v-zap: 2.17
 // --- Build and code style
+:v-error-prone: 2.53
+:v-nullaway: 0.14
 :v-maven: 3.9.16
 :v-google-java-format: 2.0.0
 :v-spotless: 3.11
@@ -51,10 +58,14 @@
 :v-mapstruct: 1.6.3
 :v-lombok: 1.18.48
 // --- Front end
+:v-angular-eslint: 22.8
 :v-angular: 22.3
 :v-node: 26 LTS
 :v-typescript: 6.0
 // --- Platform
+:v-gke-channel: Regular
+:v-terraform-google-full: 8.12
+:v-google-auth-action: v3
 :v-kubernetes: 1.36
 :v-helm: 4.3
 :v-terraform: 1.17
@@ -63,3 +74,19 @@
 // --- Documentation toolchain
 :v-asciidoctor-pdf: 2.3.27
 :v-asciidoctor-image: 1.108.1
+// --- Supply chain and quality
+:v-sonarqube: 2026.5 LTA
+:v-gitleaks: 8.30
+:v-syft: 1.57
+:v-grype: 0.122
+:v-cosign: 3.1
+:v-checkov: 3.4
+// --- Observability
+:v-otel-lgtm: 0.41
+// --- Workstation
+:v-intellij: 2026.3
+:v-plantuml-bundled: 1.2026.2
+// --- Support windows
+:eol-java: September 2031
+:eol-spring-boot: 31 July 2027
+:eol-spring-boot-40: 31 December 2026

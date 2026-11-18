@@ -1,0 +1,45 @@
+@startuml
+title The stack, layer by layer
+
+rectangle "Storefront" as FRONT #E3F2FD {
+  rectangle "Angular · TypeScript\nOpenAPI-generated client" as F1
+}
+
+rectangle "Edge" as EDGE #E8EAF6 {
+  rectangle "GKE Gateway API · Cloud Armor\nCertificate Manager · Keycloak" as E1
+}
+
+rectangle "Services" as SVC #F4F7F9 {
+  rectangle "Java · Spring Boot\nSpring Security · Resilience4j\nOpenAPI · Problem Details" as S1
+}
+
+rectangle "Messaging" as MSG #FFF3E0 {
+  rectangle "Pub/Sub · CloudEvents\nProtocol Buffers · AsyncAPI" as M1
+}
+
+rectangle "Data" as DATA #E8F5E9 {
+  rectangle "PostgreSQL on Cloud SQL · Flyway\nFirestore · JSON file (catalog, cart)" as D1
+}
+
+rectangle "Platform" as PLAT #ECEFF1 {
+  rectangle "GKE Autopilot · Helm · Artifact Registry\nSecret Manager · Workload Identity" as P1
+}
+
+rectangle "Observability" as OBS #FFF8E1 {
+  rectangle "OpenTelemetry · Micrometer\nCloud Logging · Cloud Trace\nManaged Prometheus · Grafana" as O1
+}
+
+rectangle "Delivery" as DEL #FCE4EC {
+  rectangle "Terraform · GitHub Actions · Cloud Deploy\nSonarQube · Grype · cosign" as L1
+}
+
+FRONT -down-> EDGE
+EDGE -down-> SVC
+SVC -down-> MSG
+SVC -down-> DATA
+MSG -[hidden]right-> DATA
+SVC -right-> OBS
+PLAT -up-> SVC : runs
+DEL -right-> PLAT : deploys to
+MSG -[hidden]down-> PLAT
+@enduml
