@@ -1,0 +1,39 @@
+@startuml
+title Journeys and how they chain
+
+package "Customer side" {
+  rectangle "JRN-IAM-001\nBecome a customer\nand sign in" as IAM
+  rectangle "JRN-CAT-001\nDiscover products" as DISC
+  rectangle "JRN-CART-002\nKeep favorites" as FAV
+  rectangle "JRN-CART-001\nPrepare a purchase" as CART
+  rectangle "JRN-ORD-001\nBuy the cart" as BUY #FFE0B2
+  rectangle "JRN-ORD-002\nFollow an order" as FOLLOW
+  rectangle "JRN-ORD-003\nCancel an order\nand be refunded" as CANCEL #ECEFF1
+}
+
+package "Administrator side" {
+  rectangle "JRN-CAT-002\nManage the catalog" as CATALOG #FFE0B2
+  rectangle "JRN-INV-001\nManage stock" as STOCK
+  rectangle "JRN-ORD-004\nFulfill orders" as FULFILL #ECEFF1
+  rectangle "JRN-ORD-005\nRecover a\nblocked order" as RECOVER
+}
+
+DISC -right-> CART
+IAM -down-> CART
+DISC -down-> FAV
+FAV -right-> CART
+CART -right-> BUY
+BUY -right-> FOLLOW
+FOLLOW -down-> CANCEL
+
+CATALOG -right-> STOCK
+CATALOG -up-> DISC : publishes
+STOCK -up-> DISC : availability
+BUY -down-> FULFILL : confirmed orders
+BUY -down-> RECOVER : blocked orders
+
+legend right
+  Orange: critical journey
+  Grey: proposed, awaiting validation
+endlegend
+@enduml

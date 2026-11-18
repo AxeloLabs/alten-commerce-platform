@@ -1,0 +1,52 @@
+@startuml
+title Use cases: administrator
+
+left to right direction
+
+actor Administrator as A
+
+rectangle "Alten Commerce Platform" {
+  usecase "UC-IAM-002\nSign in and access\nprotected functions" as IAM2
+  usecase "UC-CAT-003\nCreate a product" as CAT3
+  usecase "UC-CAT-004\nUpdate a product" as CAT4
+  usecase "UC-CAT-005\nChange a product price" as CAT5 #FFE0B2
+  usecase "UC-CAT-006\nPublish or retire\na product" as CAT6 #FFE0B2
+  usecase "UC-INV-001\nAdjust stock" as INV1
+  usecase "UC-INV-002\nReview stock levels" as INV2
+  usecase "UC-ORD-003\nTrack an order" as ORD3
+  usecase "UC-ORD-005\nSearch orders" as ORD5 #ECEFF1
+  usecase "UC-ORD-006\nUpdate the fulfillment\nof an order" as ORD6 #ECEFF1
+  usecase "UC-ORD-007\nResolve an order\nunder review" as ORD7 #FFE0B2
+  usecase "UC-PAY-002\nRefund a payment" as PAY2 #FFE0B2
+  usecase "UC-NOT-001\nNotify the customer\nby e-mail" as NOT1
+}
+
+actor "Identity\nprovider" as IDP <<system>>
+actor "Payment\nprovider" as PSP <<system>>
+actor "E-mail\nprovider" as MAIL <<system>>
+
+A --> IAM2
+A --> CAT3
+A --> CAT4
+A --> CAT5
+A --> CAT6
+A --> INV1
+A --> INV2
+A --> ORD3
+A --> ORD5
+A --> ORD6
+A --> ORD7
+
+ORD6 ..> NOT1 : <<include>>
+ORD7 ..> PAY2 : <<extend>>\nrejected with\na captured payment
+ORD7 ..> NOT1 : <<include>>
+
+IAM2 --> IDP
+PAY2 --> PSP
+NOT1 --> MAIL
+
+legend right
+  Orange: critical path
+  Grey: proposed, awaiting validation
+endlegend
+@enduml

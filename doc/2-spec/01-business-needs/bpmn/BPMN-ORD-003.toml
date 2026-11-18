@@ -1,0 +1,32 @@
+# BPMN-ORD-003 (proposed): the administrator takes a confirmed order to delivery.
+id = "BPMN-ORD-003"
+name = "Order fulfillment"
+pool = "Alten Commerce Platform"
+
+lanes = [
+  { id = "admin", name = "Administrator" },
+  { id = "order", name = "Order" },
+  { id = "notification", name = "Notification" },
+  { id = "customer", name = "Customer" },
+]
+
+nodes = [
+  { id = "start", type = "startEvent", lane = "order", col = 0, name = "Order CONFIRMED" },
+  { id = "ship", type = "userTask", lane = "admin", col = 1, name = "Mark the order as shipped" },
+  { id = "shipped", type = "serviceTask", lane = "order", col = 2, name = "Set SHIPPED, record author and date" },
+  { id = "mail_shipped", type = "sendTask", lane = "notification", col = 3, name = "Send the shipment e-mail" },
+  { id = "deliver", type = "userTask", lane = "admin", col = 4, name = "Mark the order as delivered" },
+  { id = "delivered", type = "serviceTask", lane = "order", col = 5, name = "Set DELIVERED, record author and date" },
+  { id = "mail_delivered", type = "sendTask", lane = "notification", col = 6, name = "Send the delivery e-mail" },
+  { id = "end", type = "endEvent", lane = "customer", col = 7, name = "Order delivered" },
+]
+
+flows = [
+  { from = "start", to = "ship" },
+  { from = "ship", to = "shipped" },
+  { from = "shipped", to = "mail_shipped" },
+  { from = "mail_shipped", to = "deliver" },
+  { from = "deliver", to = "delivered" },
+  { from = "delivered", to = "mail_delivered" },
+  { from = "mail_delivered", to = "end" },
+]

@@ -1,0 +1,53 @@
+@startuml
+title Outcomes of an order placement
+
+start
+:Customer submits the checkout;
+if (Cart unchanged since the review?) then (no)
+  :Show the differences,\nback to the cart;
+  stop
+else (yes)
+endif
+:Create the order PENDING;
+:Reserve the stock;
+switch (Stock reservation)
+case (not available)
+  :REJECTED\nOUT_OF_STOCK; <<#FFCDD2>>
+  stop
+case (no answer in time)
+  :Send a release,\njust in case;
+  :REJECTED\nTIMED_OUT; <<#FFCDD2>>
+  stop
+case (reserved)
+endswitch
+:Charge the payment;
+switch (Payment)
+case (refused)
+  :Release the stock;
+  :REJECTED\nPAYMENT_REFUSED; <<#FFCDD2>>
+  stop
+case (no answer in time)
+  :Ask the payment status;
+  if (Captured after all?) then (no)
+    :Release the stock;
+    :REJECTED\nTIMED_OUT; <<#FFCDD2>>
+    stop
+  else (yes)
+  endif
+case (captured)
+endswitch
+note right
+  Point of no return:
+  from here the order goes forward
+end note
+:Confirm the reservation\n(retried until it succeeds);
+if (Stock secured?) then (yes)
+  :CONFIRMED; <<#C8E6C9>>
+  :Empty the cart,\nsend the e-mail;
+  stop
+else (reservation lost\nand stock gone)
+  :Refund the payment;
+  :REJECTED\nOUT_OF_STOCK; <<#FFCDD2>>
+  stop
+endif
+@enduml

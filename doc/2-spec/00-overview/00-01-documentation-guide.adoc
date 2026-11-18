@@ -193,7 +193,7 @@ An item that is abandoned keeps its identifier and is marked {st-rejected}; its 
 | `PLT` | Platform | Cross-cutting concerns: errors, resilience, observability, security, delivery
 |===
 
-Non-functional requirements use the quality attribute as their context: `PERF`, `AVAIL`, `SEC`, `OBS`, `MAINT`, `USAB`, `COST`.
+Non-functional requirements use the quality attribute as their context: `PERF`, `AVAIL`, `REL`, `SEC`, `OBS`, `MAINT`, `SCAL`, `USAB`, `COST`.
 
 === Defining and referencing
 

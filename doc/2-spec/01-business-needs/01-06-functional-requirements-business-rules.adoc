@@ -1,0 +1,290 @@
+= Functional Requirements and Business Rules: What the System Shall Always Do
+:doc-id: 01-06
+:revnumber: 0.1
+:revdate: 2026-11-18
+:revremark: Draft
+:description: Verifiable functional requirements and business rules, by bounded context, with the amounts, limits and statuses they rely on.
+include::../_shared/attributes.adoc[]
+
+== How rules are written
+
+.Strategy question
+****
+What strategy turns business intentions into statements that a test can prove right or wrong?
+****
+
+A functional requirement is *one sentence, one behavior, one verdict*.
+It uses "shall", names no screen and no technology, and can be checked by a test that either passes or fails.
+Use cases say *when* a rule applies; this document says *what* the rule is, once.
+
+Every rule below is the root of tests in four families:
+
+Nominal:: The rule applied to an ordinary case.
+Error:: The rule refusing what it must refuse.
+Edge case:: The rule at its limits: zero, the maximum, the exact threshold.
+Invariant:: What stays true whatever happens — after retries, duplicates, concurrency or a restart.
+
+Rules live in the domain code of the service that owns them, with no framework around them, so that each one is proven by unit tests alone.
+
+Owner: {role-sol} {role-swe} {role-qa}
+
+== Reference values
+
+.Strategy question
+****
+What strategy keeps limits, delays and statuses identical in the rules, the code and the tests?
+****
+
+Limits and delays are configuration values with the defaults below.
+A rule quotes the name of the value; changing a default changes no rule.
+
+.Limits and delays
+[%unbreakable, cols="6,3,8", options="header"]
+|===
+| Value | Default | Used by
+| Price range | 0.01 to 99,999.99 EUR | {FR-CAT-002}
+| Page size, default and maximum | 20 and 100 | {FR-CAT-007}
+| Low-stock threshold | 5 units | {FR-CAT-008}
+| Maximum quantity per cart line | 10 units | {FR-CART-002}
+| Maximum number of cart lines | 50 | {FR-CART-002}
+| Maximum number of favorites | 100 | {FR-CART-008}
+| Reservation lifetime | 15 minutes | {FR-INV-004}
+| Order deadline | 2 minutes | {FR-ORD-015}
+|===
+
+.Product status
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Status | Meaning
+| `DRAFT` | Being prepared. Visible to administrators only.
+| `PUBLISHED` | On sale: listed, searchable, can be added to a cart.
+| `RETIRED` | Withdrawn for good. Readable only where an order or a favorite references it.
+|===
+
+.Displayed availability
+[%unbreakable, cols="3,5,7", options="header"]
+|===
+| Level | Available quantity | Effect in the storefront
+| `IN_STOCK` | More than 5 | Can be added to a cart.
+| `LOW_STOCK` | 1 to 5 | Can be added to a cart; the customer is told few units remain.
+| `OUT_OF_STOCK` | 0 | Cannot be added to a cart; can be marked as favorite.
+|===
+
+.Order status
+[cols="3,9,3", options="header"]
+|===
+| Status | Meaning | Final
+| `PENDING` | Created; stock reservation and payment are in progress. | No
+| `CONFIRMED` | Paid, stock secured. | No
+| `REJECTED` | Could not be confirmed. Carries one reason. Nothing is owed by the customer. | Yes
+| `UNDER_REVIEW` | The system could not settle the order alone; an administrator must act. | No
+| `SHIPPED` {st-proposed} | Handed to the carrier. | No
+| `DELIVERED` {st-proposed} | Received by the customer. | Yes
+| `CANCELLED` {st-proposed} | Cancelled by the customer before shipment; refunded. | Yes
+|===
+
+.Rejection reasons
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Reason | Meaning for the customer
+| `OUT_OF_STOCK` | A product was no longer available in the quantity ordered. Nothing was charged, or the charge was refunded.
+| `PAYMENT_REFUSED` | The payment was declined. Nothing was charged.
+| `TIMED_OUT` | The order could not be completed in time. Nothing was charged, or the charge was refunded.
+|===
+
+.Payment status
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Status | Meaning
+| `PENDING` | Requested, not yet sent to the provider or awaiting its answer.
+| `CAPTURED` | The provider took the amount.
+| `REFUSED` | The provider declined. Final.
+| `UNKNOWN` | The provider did not answer; the outcome must be queried.
+| `REFUNDED` | The captured amount was returned. Final.
+|===
+
+== Identity and access
+
+.Strategy question
+****
+What strategy guarantees that every function is reached only by those entitled to it?
+****
+
+[cols="3,10,2", options="header"]
+|===
+| ID | Rule | Priority
+| [[FR-IAM-001]]FR-IAM-001 | The system shall identify an account by its e-mail address, which is unique. | {must}
+| [[FR-IAM-002]]FR-IAM-002 | The system shall give a newly registered account the role `CUSTOMER` and no other; the role `ADMIN` is never obtained by registration. | {must}
+| [[FR-IAM-003]]FR-IAM-003 | The system shall let anyone read the published catalog, and shall require an authenticated actor for every other function. | {must}
+| [[FR-IAM-004]]FR-IAM-004 | The system shall let a customer read and change only their own cart, favorites, orders and payments, and shall answer "not found" for those of another customer. | {must}
+| [[FR-IAM-005]]FR-IAM-005 | The system shall reserve to administrators every change to the catalog, to the stock and to the fulfillment of orders, and the resolution of orders under review. | {must}
+| [[FR-IAM-006]]FR-IAM-006 | The system shall leave the handling of credentials to the identity provider; no service of the platform shall receive, store or log a password. | {must}
+|===
+
+== Catalog
+
+.Strategy question
+****
+What strategy keeps what customers see equal to what the administrator decided to sell?
+****
+
+[cols="3,10,2", options="header"]
+|===
+| ID | Rule | Priority
+| [[FR-CAT-001]]FR-CAT-001 | A product shall have a unique SKU, a name, a description, a category, a price and a status; the SKU shall never change. | {must}
+| [[FR-CAT-002]]FR-CAT-002 | A price shall be an amount in EUR with at most two decimals, within the price range, VAT included. | {must}
+| [[FR-CAT-003]]FR-CAT-003 | The system shall show to visitors and customers, and allow in a cart, only products whose status is `PUBLISHED`. | {must}
+| [[FR-CAT-004]]FR-CAT-004 | The system shall publish a product only if it has a name, a category and a price. | {must}
+| [[FR-CAT-005]]FR-CAT-005 | The system shall keep a retired product readable in the orders and favorites that reference it; a retired product shall never be published again and its SKU shall never be reused. | {must}
+| [[FR-CAT-006]]FR-CAT-006 | A price change shall apply to the catalog and to carts at once, and shall never change an order already placed. | {must}
+| [[FR-CAT-007]]FR-CAT-007 | The system shall return catalog lists in pages of the default page size, never more than the maximum, filterable by keyword, category, price range and availability, sortable by name or price. | {should}
+| [[FR-CAT-008]]FR-CAT-008 | The system shall display one availability level per product, derived from its available quantity and the low-stock threshold; this level is an indication, not a guarantee. | {must}
+|===
+
+== Inventory
+
+.Strategy question
+****
+What strategy makes overselling impossible, even when two customers buy the last unit at the same instant?
+****
+
+Stock is counted in three quantities.
+_On hand_ is what the store holds.
+_Reserved_ is what is set aside for orders being paid.
+_Available_ is the difference, and the only quantity customers can buy.
+
+[cols="3,10,2", options="header"]
+|===
+| ID | Rule | Priority
+| [[FR-INV-001]]FR-INV-001 | The stock on hand of a product shall be a whole number, never negative. | {must}
+| [[FR-INV-002]]FR-INV-002 | The available quantity shall equal the stock on hand minus the reserved quantity, and shall never be negative. | {must}
+| [[FR-INV-003]]FR-INV-003 | A reservation shall cover every line of an order in full, or nothing: a partial reservation shall never exist. | {must}
+| [[FR-INV-004]]FR-INV-004 | A reservation that is neither confirmed nor released within the reservation lifetime shall expire, and its quantities shall become available again. | {must}
+| [[FR-INV-005]]FR-INV-005 | Confirming a reservation shall decrease the stock on hand and the reserved quantity by the reserved amounts; releasing it shall decrease the reserved quantity only. | {must}
+| [[FR-INV-006]]FR-INV-006 | The system shall refuse a stock adjustment that would bring the stock on hand below the reserved quantity. | {must}
+| [[FR-INV-007]]FR-INV-007 | The system shall publish every change of an available quantity, so that the displayed availability follows. | {must}
+| [[FR-INV-008]]FR-INV-008 | The system shall record every stock movement with its quantity, its cause and, for an adjustment, its author and reason. | {must}
+|===
+
+A reservation goes through a small lifecycle of its own:
+
+plantuml::diagrams/reservation-lifecycle.puml[format=svg, align=center]
+
+== Cart and favorites
+
+.Strategy question
+****
+What strategy keeps a cart cheap and forgiving, while the order that comes out of it is strict?
+****
+
+A cart is a list of intentions.
+It reserves nothing and promises nothing; its amounts are recomputed from the catalog every time it is read.
+Strictness begins at checkout.
+
+[cols="3,10,2", options="header"]
+|===
+| ID | Rule | Priority
+| [[FR-CART-001]]FR-CART-001 | A customer shall have exactly one cart, kept between sessions and devices. | {must}
+| [[FR-CART-002]]FR-CART-002 | A cart line shall reference one published product with a quantity between 1 and the maximum quantity per line; a cart shall hold no more than the maximum number of lines. | {must}
+| [[FR-CART-003]]FR-CART-003 | Adding a product that is already in the cart shall increase the quantity of its line instead of creating a second line. | {must}
+| [[FR-CART-004]]FR-CART-004 | The system shall refuse a line quantity above the available quantity displayed when the change is made. | {must}
+| [[FR-CART-005]]FR-CART-005 | A line total shall equal the current catalog price multiplied by the quantity; the cart total shall equal the sum of the line totals. | {must}
+| [[FR-CART-006]]FR-CART-006 | The cart counter shall equal the sum of the quantities of all lines. | {must}
+| [[FR-CART-007]]FR-CART-007 | The system shall empty the cart when the order created from it is confirmed, and shall keep it when the order is rejected. | {must}
+| [[FR-CART-008]]FR-CART-008 | A product shall appear at most once in a customer's favorites, which shall hold no more than the maximum number of favorites. | {must}
+| [[FR-CART-009]]FR-CART-009 | A favorite whose product is out of stock or retired shall stay in the list, flagged as unavailable. | {must}
+|===
+
+== Order
+
+.Strategy question
+****
+What strategy ensures an order is either fully honored or leaves no trace on the customer's money and the store's stock?
+****
+
+[cols="3,10,2", options="header"]
+|===
+| ID | Rule | Priority
+| [[FR-ORD-001]]FR-ORD-001 | An order shall be created from the customer's own cart, with at least one line, a shipping address and a payment token. | {must}
+| [[FR-ORD-002]]FR-ORD-002 | The unit prices of an order shall be copied from the catalog when the order is placed, and shall be the prices of that order forever. | {must}
+| [[FR-ORD-003]]FR-ORD-003 | If the price, the status or the displayed availability of a line differs from what the customer reviewed, the system shall create no order and shall return the differences. | {must}
+| [[FR-ORD-004]]FR-ORD-004 | The order total shall equal the sum, over the lines, of the unit price multiplied by the quantity. Shipping is free and prices include VAT. | {must}
+| [[FR-ORD-005]]FR-ORD-005 | The system shall assign each order a unique order number that the customer can read and quote. | {must}
+| [[FR-ORD-006]]FR-ORD-006 | The system shall reserve the stock of an order before requesting its payment, and shall never request the payment of an order whose stock was not reserved. | {must}
+| [[FR-ORD-007]]FR-ORD-007 | An order shall become `CONFIRMED` only when its payment is captured and its reservation is confirmed. | {must}
+| [[FR-ORD-008]]FR-ORD-008 | An order that cannot be confirmed shall become `REJECTED` with exactly one reason, after everything done for it has been undone: stock released, payment refunded. | {must}
+| [[FR-ORD-009]]FR-ORD-009 | Submitting the same checkout more than once shall return the same order and create nothing new. | {must}
+| [[FR-ORD-010]]FR-ORD-010 | The status of an order shall change only along the transitions below; a final status shall never change. | {must}
+| [[FR-ORD-011]]FR-ORD-011 | The lines, prices and shipping address of an order shall not change once the order is placed. | {must}
+| [[FR-ORD-012]]FR-ORD-012 | A customer shall be able to cancel an order only while it is `CONFIRMED`; cancellation shall return the stock and refund the payment in full. {st-proposed} | {should}
+| [[FR-ORD-013]]FR-ORD-013 | Only an administrator shall move an order from `CONFIRMED` to `SHIPPED` and from `SHIPPED` to `DELIVERED`. {st-proposed} | {should}
+| [[FR-ORD-014]]FR-ORD-014 | When an undo keeps failing, the system shall set the order to `UNDER_REVIEW` and alert an administrator; it shall never record as undone something that was not. | {must}
+| [[FR-ORD-015]]FR-ORD-015 | An order that is still `PENDING` when the order deadline expires shall be rejected with the reason `TIMED_OUT` and undone, unless its payment is found captured, in which case it shall be carried through. | {must}
+|===
+
+The transitions allowed by {FR-ORD-010}; the complete state machines, with the technical states of the saga, are in document 02-03.
+
+plantuml::diagrams/order-status.puml[format=svg, align=center]
+
+.Order amounts: worked examples for {FR-ORD-004}
+[%unbreakable, cols="6,3,3,3", options="header"]
+|===
+| Lines | Unit price | Quantity | Line total
+| Mechanical keyboard | 89.90 | 1 | 89.90
+| USB-C cable | 9.99 | 3 | 29.97
+| Screen wipe | 0.01 | 10 | 0.10
+3+>| *Order total* | *119.97*
+|===
+
+Amounts are decimal numbers with two decimals, never floating-point numbers.
+Because every price has at most two decimals and every quantity is a whole number, no rounding ever occurs in this release.
+
+== Payment
+
+.Strategy question
+****
+What strategy makes it impossible to charge a customer twice, or to keep money for an order that does not exist?
+****
+
+[cols="3,10,2", options="header"]
+|===
+| ID | Rule | Priority
+| [[FR-PAY-001]]FR-PAY-001 | An order shall be charged at most once, whatever the number of retries, duplicate requests or restarts. | {must}
+| [[FR-PAY-002]]FR-PAY-002 | The amount charged shall equal the order total, in EUR. | {must}
+| [[FR-PAY-003]]FR-PAY-003 | The platform shall never receive, store or log card data; a payment is requested with a token issued by the payment provider. | {must}
+| [[FR-PAY-004]]FR-PAY-004 | When the provider declines a payment, the system shall record it as `REFUSED` with the provider's reason and shall give the customer a general explanation only. | {must}
+| [[FR-PAY-005]]FR-PAY-005 | When the provider does not answer, the system shall record the payment as `UNKNOWN` and shall establish its real outcome before anything is undone; a payment found captured for an order already rejected shall be refunded. | {must}
+| [[FR-PAY-006]]FR-PAY-006 | A refund shall return the full captured amount, and a payment shall be refunded at most once. | {must}
+| [[FR-PAY-007]]FR-PAY-007 | The simulated provider shall answer according to the payment token, so that every outcome can be reproduced on demand. | {must}
+|===
+
+.Tokens understood by the simulated payment provider ({FR-PAY-007})
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Token | Behavior
+| `tok_ok` | Captures at once.
+| `tok_declined` | Refuses: insufficient funds.
+| `tok_slow` | Captures after a delay shorter than the order deadline.
+| `tok_timeout` | Never answers the charge. A status query answers "not captured".
+| `tok_late_capture` | Never answers the charge, but captures. A status query answers "captured".
+| `tok_very_late_capture` | Never answers the charge. A status query answers "not captured"; the capture is reported afterwards.
+| `tok_error` | Fails with a technical error on every attempt.
+| `tok_flaky` | Fails twice, then captures.
+| `tok_refund_fails` | Captures at once; every refund fails.
+|===
+
+== Notification
+
+.Strategy question
+****
+What strategy informs the customer reliably without ever putting an e-mail in the way of an order?
+****
+
+[cols="3,10,2", options="header"]
+|===
+| ID | Rule | Priority
+| [[FR-NOT-001]]FR-NOT-001 | The system shall e-mail the customer when an order is confirmed or rejected and, when those journeys are accepted, when it is cancelled, refunded, shipped or delivered. | {must}
+| [[FR-NOT-002]]FR-NOT-002 | The system shall send at most one e-mail per event, even when the event is received several times. | {must}
+| [[FR-NOT-003]]FR-NOT-003 | A failure to send an e-mail shall never change, delay or reject an order; the sending shall be retried, then recorded as failed. | {must}
+| [[FR-NOT-004]]FR-NOT-004 | An order e-mail shall contain the order number, the lines, the total and the new status, and shall never contain payment data. | {must}
+|===

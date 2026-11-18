@@ -1,0 +1,61 @@
+@startuml
+title Use cases: visitor and customer
+
+left to right direction
+
+actor Visitor as V
+actor Customer as C
+V <|-- C
+
+rectangle "Alten Commerce Platform" {
+  usecase "UC-IAM-001\nRegister an account" as IAM1
+  usecase "UC-IAM-002\nSign in and access\nprotected functions" as IAM2
+  usecase "UC-CAT-001\nBrowse and search\nthe catalog" as CAT1
+  usecase "UC-CAT-002\nView a product" as CAT2
+  usecase "UC-CART-001\nAdd a product\nto the cart" as CART1
+  usecase "UC-CART-002\nView the cart" as CART2
+  usecase "UC-CART-003\nUpdate the cart" as CART3
+  usecase "UC-CART-004\nManage favorites" as CART4
+  usecase "UC-ORD-001\nPlace an order" as ORD1 #FFE0B2
+  usecase "UC-ORD-002\nView order history" as ORD2
+  usecase "UC-ORD-003\nTrack an order" as ORD3
+  usecase "UC-ORD-004\nCancel an order" as ORD4 #ECEFF1
+  usecase "UC-PAY-001\nTake a payment" as PAY1 #FFE0B2
+  usecase "UC-PAY-002\nRefund a payment" as PAY2 #FFE0B2
+  usecase "UC-NOT-001\nNotify the customer\nby e-mail" as NOT1
+}
+
+actor "Identity\nprovider" as IDP <<system>>
+actor "Payment\nprovider" as PSP <<system>>
+actor "E-mail\nprovider" as MAIL <<system>>
+
+V --> IAM1
+V --> IAM2
+V --> CAT1
+V --> CAT2
+C --> CART1
+C --> CART2
+C --> CART3
+C --> CART4
+C --> ORD1
+C --> ORD2
+C --> ORD3
+C --> ORD4
+
+ORD1 ..> PAY1 : <<include>>
+ORD1 ..> NOT1 : <<include>>
+ORD1 ..> PAY2 : <<extend>>\npaid, then\nnot confirmable
+ORD4 ..> PAY2 : <<include>>
+ORD4 ..> NOT1 : <<include>>
+
+IAM1 --> IDP
+IAM2 --> IDP
+PAY1 --> PSP
+PAY2 --> PSP
+NOT1 --> MAIL
+
+legend right
+  Orange: critical path
+  Grey: proposed, awaiting validation
+endlegend
+@enduml

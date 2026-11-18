@@ -1,0 +1,16 @@
+@startuml
+title Lifecycle of a stock reservation
+
+hide empty description
+
+[*] --> HELD : all lines available\nreserved += quantities
+[*] --> REJECTED_R : one line not available\nnothing reserved
+state "REJECTED" as REJECTED_R
+HELD --> CONFIRMED : order paid\non hand -= quantities\nreserved -= quantities
+HELD --> RELEASED : order rejected\nreserved -= quantities
+HELD --> EXPIRED : lifetime elapsed\nreserved -= quantities
+CONFIRMED --> [*]
+RELEASED --> [*]
+EXPIRED --> [*]
+REJECTED_R --> [*]
+@enduml

@@ -1,0 +1,202 @@
+= Vision, Scope and Actors: What the Platform Is For and Where It Stops
+:doc-id: 01-01
+:revnumber: 0.1
+:revdate: 2026-11-18
+:revremark: Draft
+:description: Business vision, actors, scope, constraints, open decisions and glossary.
+include::../_shared/attributes.adoc[]
+
+== Vision
+
+.Strategy question
+****
+What strategy keeps a small e-commerce product focused on what matters to the business?
+****
+
+The {project-name} is an online store where customers buy products from a catalog managed by an administrator.
+The business lives or dies on one promise: *an order that is accepted is paid, in stock and delivered; an order that cannot be honored costs the customer nothing*.
+
+Everything in this specification is ranked against that promise.
+Placing an order is the critical journey; browsing, carts and favorites feed it; notifications and order tracking report on it.
+
+.Business objectives
+[cols="1,6,7", options="header"]
+|===
+| # | Objective | How we know it is met
+| 1 | A customer finds a product and buys it without help | The journey {JRN-ORD-001} completes end to end in a few clicks
+| 2 | The store never sells what it does not have | No confirmed order without confirmed stock ({FR-ORD-007})
+| 3 | A customer is never charged for nothing | No captured payment without a confirmed order, or else a refund ({FR-PAY-005})
+| 4 | The administrator runs the catalog alone | Products, prices and stock are managed without a developer ({JRN-CAT-002}, {JRN-INV-001})
+| 5 | The customer always knows where an order stands | Status on screen and by e-mail at every change ({JRN-ORD-002})
+| 6 | A failure degrades the store, it does not corrupt it | Every order ends in a consistent state, whatever fails ({CP-ORD-004})
+|===
+
+Owner: {role-sol}
+
+== Actors
+
+.Strategy question
+****
+What strategy tells us who the system serves and which other systems it depends on?
+****
+
+An actor is anyone or anything outside the platform that interacts with it.
+Human actors have goals; system actors provide a service the platform relies on.
+
+.Human actors
+[%unbreakable, cols="3,3,9", options="header"]
+|===
+| Actor | Authenticated | Description and goals
+| Visitor | No | Anyone on the storefront who is not signed in. Browses the catalog, views products, registers, signs in.
+| Customer | Yes, role `CUSTOMER` | A registered person. Does everything a visitor does, keeps a cart and favorites, places orders, pays, follows orders.
+| Administrator | Yes, role `ADMIN` | Runs the store. Manages products, prices and stock, follows all orders, resolves blocked orders.
+|===
+
+.System actors
+[%unbreakable, cols="3,3,9", options="header"]
+|===
+| Actor | Nature | Role
+| Identity provider | Off-the-shelf product, deployed with the platform | Registers accounts, authenticates people, issues tokens that carry the role.
+| Payment provider | External service, *simulated* in this release | Accepts or refuses a payment, refunds it. Its behavior is scriptable so that every scenario can be reproduced.
+| E-mail provider | External service | Delivers the e-mails sent by the platform.
+| Time | The clock | Triggers what must happen without anyone asking: a stock reservation expires, an order that received no answer is rejected.
+|===
+
+plantuml::diagrams/system-context.puml[format=svg, align=center]
+
+== Scope
+
+.Strategy question
+****
+What strategy prevents the scope from growing until nothing is finished?
+****
+
+The first release covers one complete purchase loop and the administration needed to feed it.
+Anything that does not exercise a new business rule or a new architectural pattern is left out, and listed here so that the omission is a decision, not an oversight.
+
+.In scope
+[cols="4,9,3", options="header"]
+|===
+| Capability | Content | Journey
+| Account and access | Registration, sign-in, sign-out, two roles | {JRN-IAM-001}
+| Product discovery | Catalog browsing, search and filters, product page with availability | {JRN-CAT-001}
+| Cart | Add, change, remove, cart counter, cart kept between sessions | {JRN-CART-001}
+| Favorites | Mark, unmark, list, add to cart from the list | {JRN-CART-002}
+| Order placement | Checkout, stock reservation, simulated payment, confirmation or rejection | {JRN-ORD-001}
+| Order tracking | Order history, order detail and status, e-mails | {JRN-ORD-002}
+| Catalog administration | Create, update, price, publish and retire products | {JRN-CAT-002}
+| Stock administration | Adjust stock, review stock levels | {JRN-INV-001}
+| Blocked order recovery | An administrator resolves an order the system could not settle alone | {JRN-ORD-005}
+|===
+
+.Proposed, awaiting validation
+[cols="4,9,3", options="header"]
+|===
+| Capability | Content | Journey
+| Order cancellation | A customer cancels a confirmed order before it ships and is refunded | {JRN-ORD-003}
+| Order fulfillment | The administrator marks an order shipped, then delivered | {JRN-ORD-004}
+|===
+
+.Out of scope for this release
+[cols="4,11", options="header"]
+|===
+| Excluded | Reason
+| Guest checkout | A cart and an order belong to an account. Buying requires signing in.
+| Real payment provider | Payment is simulated behind a port; a real provider is a later adapter, not a redesign.
+| Shipping fees, taxes, promotions | Prices include VAT and shipping is free: order amounts stay simple, the saga does not.
+| Returns after delivery | Same pattern as cancellation; adds a second saga without teaching anything new.
+| Reviews, ratings, recommendations | No link with the order lifecycle.
+| Several currencies, languages or warehouses | One currency (EUR), one language (English), one stock per product.
+| Invoices and accounting exports | Downstream of the order; no impact on its consistency.
+| Supplier purchasing and replenishment | Stock arrives through manual adjustment by the administrator.
+|===
+
+== Constraints and assumptions
+
+.Strategy question
+****
+What strategy separates what is imposed from what we chose, so that nobody re-opens a constraint by mistake?
+****
+
+.Imposed constraints
+[cols="4,11", options="header"]
+|===
+| Constraint | Consequence
+| Microservices | The platform is split into independently deployable services, one per bounded context.
+| Spring Boot back end, Angular front end | Fixed for every service and for the storefront.
+| Docker and Kubernetes on GKE Autopilot | Every service is a container; the platform runs on Google Cloud.
+| Google Cloud Pub/Sub as the only message bus | Asynchronous communication uses Pub/Sub; no Kafka.
+| CloudEvents and Protocol Buffers | Every message follows the CloudEvents convention with a Protobuf payload.
+| REST for synchronous exchanges | No GraphQL.
+| Terraform, Secret Manager | Infrastructure is code; secrets live in Secret Manager.
+| English | Code, identifiers and documentation are in English.
+| No state machine engine | Order states are modeled in domain code.
+|===
+
+.Working assumptions
+[cols="4,11", options="header"]
+|===
+| Assumption | If it proves wrong
+| A cart and favorites require a signed-in customer | A visitor cart would be added in the storefront and merged at sign-in.
+| One line holds at most 10 units; a cart holds at most 50 lines | The limits are configuration values ({FR-CART-002}).
+| A stock reservation lives 15 minutes | Configuration value ({FR-INV-004}); must stay well above the order deadline.
+| An order with no outcome after 2 minutes is rejected | Configuration value ({FR-ORD-015}).
+| Low stock means 5 units or fewer | Configuration value ({FR-CAT-008}).
+| The administrator role is granted in the identity provider | A user-administration screen would be a new journey.
+|===
+
+[[decisions]]
+== Decisions awaiting validation
+
+.Strategy question
+****
+What strategy keeps the product owner in control of the scope before detailed design starts?
+****
+
+These points are submitted at the gate of this lot.
+Everything written about them in the business documents carries the badge {st-proposed}; nothing downstream depends on them yet.
+
+[cols="1,5,6,4", options="header"]
+|===
+| # | Decision | Recommendation | Impact if refused
+| 1 | Add order cancellation by the customer ({JRN-ORD-003}) | Accept. It is the one journey where a refund is a normal business event rather than a failure recovery. | Refund is exercised only by the late-payment failure case.
+| 2 | Add order fulfillment by the administrator ({JRN-ORD-004}) | Accept. It gives the order lifecycle its `SHIPPED` and `DELIVERED` states. | The lifecycle ends at `CONFIRMED`.
+| 3 | Require sign-in to keep a cart | Accept. | A visitor cart must be designed in the storefront.
+| 4 | Keep the limits and delays listed in the working assumptions | Accept; they are configuration values. | Values change, design does not.
+|===
+
+== Glossary
+
+.Strategy question
+****
+What strategy makes the business, the documents and the code use the same word for the same thing?
+****
+
+These terms are the ubiquitous language of the platform.
+They are used with this meaning, and only this meaning, in every document and in the code.
+
+[cols="3,12", options="header"]
+|===
+| Term | Meaning
+| Product | Something the store sells, identified by its SKU.
+| SKU | Stock keeping unit: the permanent, unique business identifier of a product.
+| Catalog | The set of products with their descriptions, categories and prices.
+| Published, retired | A published product is visible and sellable. A retired product is no longer sold but remains readable where it is referenced.
+| Stock on hand | The quantity of a product physically held.
+| Reservation | A quantity of stock set aside for one order while it is being paid. It is confirmed, released, or it expires.
+| Available quantity | Stock on hand minus reserved quantities: what can still be sold.
+| Displayed availability | What the storefront shows: in stock, low stock or out of stock. An indication, not a guarantee.
+| Cart | The products a customer intends to buy, with quantities. One per customer.
+| Favorite | A product a customer marked to find it again.
+| Checkout | The step where the customer reviews the cart, gives a shipping address and a payment token, and submits.
+| Order | A customer's commitment to buy given products at given prices. Created at checkout, immutable afterwards.
+| Order number | The human-readable identifier of an order.
+| Payment | The charge of an order total on the customer's means of payment.
+| Payment token | An opaque value issued by the payment provider that stands for a card. The platform never sees card data.
+| Refund | The return of a captured payment to the customer.
+| Confirmed, rejected | An order is confirmed when it is paid and its stock is secured. It is rejected, with a reason, when it cannot be.
+| Under review | The state of an order the system could not settle alone; an administrator must act.
+| Saga | The sequence of steps, spread over several services, that takes an order to its outcome.
+| Compensation | The action that undoes a completed step when a later step fails: releasing stock, refunding a payment.
+| Critical path | A journey, or a branch of one, whose failure stops the business or harms the customer.
+|===

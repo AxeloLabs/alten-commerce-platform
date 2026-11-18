@@ -1,0 +1,201 @@
+// ids:end
+== Catalog
+
+The catalog is read by everyone and written by the administrator alone.
+
+[[UC-CAT-001]]
+=== UC-CAT-001 — Browse and search the catalog
+
+[cols="3,11"]
+|===
+| Overview | Anyone lists the products on sale, page by page, optionally narrowed by keyword, category, price range and availability.
+| Primary actor | Visitor (also customer, administrator)
+| Supporting actors | –
+| Goal | Find products worth opening.
+| Priority and status | {must} for browsing, {should} for search and filters · {st-draft}
+| Trigger | The actor opens the storefront or changes a search criterion.
+| Preconditions | None.
+| Success guarantees | The list contains published products only, each with name, price and displayed availability.
+| Minimal guarantees | A draft or retired product is never listed. The catalog stays readable when the order, payment or notification services are down.
+| Authorization | {allowed} Everyone, without signing in.
+| Business rules | {FR-CAT-003} {FR-CAT-007} {FR-CAT-008} {FR-IAM-003}
+| Quality attributes | {NFR-PERF-001} {NFR-AVAIL-001} {NFR-AVAIL-003}
+| Stories | {US-CAT-001} {US-CAT-002}
+| Acceptance | {BDD-CAT-001} {BDD-CAT-002} {BDD-CAT-003}
+|===
+
+.Main success scenario
+. The actor opens the catalog.
+. The system returns the first page of published products, 20 per page, sorted by name.
+. The actor enters a keyword, picks filters or a sort order, or asks for another page.
+. The system returns the matching page, with the total number of results.
+
+.Alternative flows
+3a. No product matches:: The system returns an empty page and keeps the criteria.
+3b. The actor asks for more than 100 products per page:: The system returns 100.
+
+.Exception flows
+3c. A criterion is malformed (negative price, unknown sort key):: The request is refused and the faulty criterion is named.
+
+[[UC-CAT-002]]
+=== UC-CAT-002 — View a product
+
+[cols="3,11"]
+|===
+| Overview | Anyone opens a published product to read its description, its price and whether it is in stock.
+| Primary actor | Visitor (also customer, administrator)
+| Supporting actors | –
+| Goal | Decide whether to buy the product.
+| Priority and status | {must} · {st-draft}
+| Trigger | The actor selects a product.
+| Preconditions | None.
+| Success guarantees | The actor sees the name, description, category, current price and displayed availability of the product.
+| Minimal guarantees | The displayed availability is at most a few seconds behind the stock. It is an indication: only the reservation made when the order is placed guarantees the stock.
+| Authorization | {allowed} Everyone for a published product. {denied} Visitor and customer for a draft or retired product: answered "not found".
+| Business rules | {FR-CAT-003} {FR-CAT-005} {FR-CAT-008} {FR-INV-007}
+| Quality attributes | {NFR-PERF-001} {NFR-AVAIL-003}
+| Stories | {US-CAT-003} {US-INV-003}
+| Acceptance | {BDD-CAT-004} {BDD-CAT-005}
+|===
+
+.Main success scenario
+. The actor selects a product.
+. The system returns the product with its current price and one availability level: in stock, low stock or out of stock.
+. The storefront offers "add to cart" when the product is available, and "favorite" to a signed-in customer.
+
+.Alternative flows
+2a. The product is out of stock:: The product is shown; it cannot be added to a cart but can be marked as favorite.
+
+.Exception flows
+2b. The product does not exist, is a draft or is retired:: The system answers "not found".
+
+[[UC-CAT-003]]
+=== UC-CAT-003 — Create a product
+
+[cols="3,11"]
+|===
+| Overview | The administrator records a new product. It starts as a draft, invisible to customers, until it is published.
+| Primary actor | Administrator
+| Supporting actors | –
+| Goal | Have a product ready to be put on sale.
+| Priority and status | {must} · {st-draft}
+| Trigger | A new product is to be sold.
+| Preconditions | The administrator is signed in.
+| Success guarantees | A product exists with the status `DRAFT`, a unique SKU and a valid price. Its stock is zero.
+| Minimal guarantees | Nothing is created if one field is invalid. The action and its author are recorded.
+| Authorization | {allowed} Administrator. {denied} Visitor, customer.
+| Business rules | {FR-CAT-001} {FR-CAT-002} {FR-IAM-005}
+| Quality attributes | {NFR-SEC-002} {NFR-SEC-006}
+| Stories | {US-CAT-004}
+| Acceptance | {BDD-CAT-006} {BDD-CAT-007} {BDD-CAT-008}
+|===
+
+.Main success scenario
+. The administrator enters a SKU, a name, a description, a category and a price.
+. The system checks every field and that the SKU is not in use.
+. The system creates the product as a draft and returns it.
+
+.Exception flows
+2a. The SKU already exists:: Nothing is created. The conflict is reported.
+2b. A field is missing or invalid, or the price is outside 0.01–99,999.99 EUR:: Nothing is created. Every faulty field is reported, not just the first.
+
+[[UC-CAT-004]]
+=== UC-CAT-004 — Update a product
+
+[cols="3,11"]
+|===
+| Overview | The administrator corrects the name, description or category of a product. The price and the status have their own use cases because they have their own rules.
+| Primary actor | Administrator
+| Supporting actors | –
+| Goal | Keep the catalog accurate.
+| Priority and status | {must} · {st-draft}
+| Trigger | A product's information is wrong or outdated.
+| Preconditions | The administrator is signed in. The product exists and is not retired.
+| Success guarantees | The product carries the new information; the storefront shows it within seconds.
+| Minimal guarantees | An update based on an outdated version of the product is refused: no change is silently overwritten. The SKU never changes.
+| Authorization | {allowed} Administrator. {denied} Visitor, customer.
+| Business rules | {FR-CAT-001} {FR-IAM-005}
+| Quality attributes | {NFR-SEC-006}
+| Stories | {US-CAT-005}
+| Acceptance | {BDD-CAT-009} {BDD-CAT-010}
+|===
+
+.Main success scenario
+. The administrator opens a product; the system returns it with its version.
+. The administrator changes the name, the description or the category and submits, with the version read.
+. The system checks the fields and that the version is still current, then saves the product.
+
+.Exception flows
+3a. The product was changed by someone else since step 1:: The update is refused. The current product is returned so that the administrator can redo the change.
+3b. A field is invalid:: Nothing is saved. Every faulty field is reported.
+3c. The product is retired:: The update is refused.
+
+[[UC-CAT-005]]
+=== UC-CAT-005 — Change a product price
+
+{critical}
+
+[cols="3,11"]
+|===
+| Overview | The administrator sets a new price. It applies to what is sold from now on, never to what was already ordered.
+| Primary actor | Administrator
+| Supporting actors | –
+| Goal | Sell the product at the new price.
+| Priority and status | {must} · {st-draft}
+| Trigger | A commercial decision.
+| Preconditions | The administrator is signed in. The product exists and is not retired.
+| Success guarantees | The catalog, and every cart holding the product, show the new price. The change is recorded with the old price, the new price, the author and the date.
+| Minimal guarantees | No order already placed changes. A checkout started at the old price is not silently charged the new one: the customer is asked to review.
+| Authorization | {allowed} Administrator. {denied} Visitor, customer.
+| Business rules | {FR-CAT-002} {FR-CAT-006} {FR-ORD-002} {FR-ORD-003}
+| Quality attributes | {NFR-SEC-006}
+| Stories | {US-CAT-006}
+| Acceptance | {BDD-CAT-011}
+|===
+
+.Main success scenario
+. The administrator opens a product and enters a new price.
+. The system checks the price range and saves the new price with its history entry.
+. The storefront shows the new price in the catalog and in carts.
+
+.Alternative flows
+2a. The new price equals the current price:: Nothing changes and no history entry is written.
+
+.Exception flows
+2b. The price is outside 0.01–99,999.99 EUR or has more than two decimals:: The change is refused.
+
+[[UC-CAT-006]]
+=== UC-CAT-006 — Publish or retire a product
+
+{critical}
+
+[cols="3,11"]
+|===
+| Overview | The administrator decides whether a product is on sale. Publishing makes a draft visible and sellable; retiring withdraws a product for good.
+| Primary actor | Administrator
+| Supporting actors | –
+| Goal | Have the storefront show exactly what is on sale.
+| Priority and status | {must} · {st-draft}
+| Trigger | A draft is ready, or a product is discontinued.
+| Preconditions | The administrator is signed in.
+| Success guarantees | A published product is listed, searchable and can be added to a cart. A retired product is not; it remains readable in the orders and favorites that reference it.
+| Minimal guarantees | A product is never published incomplete. A SKU is never reused.
+| Authorization | {allowed} Administrator. {denied} Visitor, customer.
+| Business rules | {FR-CAT-003} {FR-CAT-004} {FR-CAT-005}
+| Quality attributes | {NFR-SEC-006}
+| Stories | {US-CAT-007}
+| Acceptance | {BDD-CAT-012} {BDD-CAT-013} {BDD-CAT-014}
+|===
+
+.Main success scenario — publish
+. The administrator asks to publish a draft.
+. The system checks that the product has a name, a category and a price.
+. The system sets the status to `PUBLISHED`; the product appears in the storefront with its availability.
+
+.Alternative flows — retire
+1a. The administrator asks to retire a published product:: The system sets the status to `RETIRED`. The product leaves the catalog and search. Carts holding it flag the line as unavailable; orders already placed are not affected.
+1b. The administrator retires a draft:: Same outcome; the product was never visible.
+
+.Exception flows
+2a. The draft is incomplete:: It is not published. The missing information is listed.
+1c. The product is already retired:: Publishing it is refused: retirement is final.

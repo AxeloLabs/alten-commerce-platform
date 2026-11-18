@@ -1,0 +1,64 @@
+= BDD Acceptance Scenarios: Examples That Define "Done"
+:doc-id: 01-08
+:revnumber: 0.1
+:revdate: 2026-11-18
+:revremark: Draft
+:description: Gherkin acceptance scenarios, generated from the feature files, with their index and trace links.
+include::../_shared/attributes.adoc[]
+
+== How scenarios are written
+
+.Strategy question
+****
+What strategy removes the ambiguity of a requirement before a line of code is written, and proves it afterwards?
+****
+
+Behavior-driven development replaces "the system shall handle stock correctly" with examples nobody can read two ways: _given 1 unit on hand, when two customers order it at the same time, then exactly one order is confirmed_.
+The practice has three moments.
+
+Discovery:: Product owner, developer and tester go through a story and its rules, and look for the examples that would surprise one of them. Each rule gets its nominal example, its refusals and its limits.
+Formulation:: The examples are written in Gherkin, in business language, in the feature files of this folder.
+Automation:: When the code exists, the same files are executed by Cucumber {v-cucumber}. A scenario that passes is a requirement that is met; nothing is rewritten in between.
+
+.Gherkin conventions
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Element | Convention
+| `Feature` | One per bounded context.
+| `Rule` | One business rule, phrased as in document 01-06. Scenarios are grouped under the rule they illustrate.
+| `Scenario` | One behavior. Its title says what is special about the example.
+| `Scenario Outline` | The same behavior at several values: used for limits and for decision tables.
+| `Given` | The situation, as facts about the business. Never a sequence of actions on a screen.
+| `When` | One action of an actor, or one event.
+| `Then` | What can be observed afterwards. Includes what must *not* have happened: no payment, no e-mail, nothing changed.
+|===
+
+Scenarios are *declarative*: they say what the customer does and sees, never which button, page or endpoint.
+That is what allows the same scenario to run at two levels.
+
+.Tags
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Tag | Meaning
+| `@BDD-…` | The identifier of the scenario. Exactly one per scenario.
+| `@UC-…` | The use case the scenario proves. At least one.
+| `@FR-…` | The business rules the scenario exercises.
+| `@nominal` `@error` `@edge` `@invariant` | The family of the example. Every rule should have its nominal example and at least one of the others.
+| `@critical-path` | The scenario belongs to a critical path. It is also run end to end against the deployed system.
+| `@proposed` | The scenario belongs to a journey awaiting validation.
+|===
+
+.Where scenarios run
+[%unbreakable, cols="3,7,5", options="header"]
+|===
+| Level | Against | When
+| Acceptance | The domain and application code of the services, with in-memory adapters in place of databases, messaging and providers | At every build, in seconds
+| End to end | The deployed platform, through the storefront and the public interfaces; only `@critical-path` scenarios | After each deployment to the test and integration environments
+|===
+
+The feature files are the single source.
+The pages below are generated from them by the build, which also checks that every scenario has its identifier, that every use case has at least one scenario, and that every identifier quoted in a tag exists.
+
+Owner: {role-qa} {role-sol}
+
+include::../../9-generated/spec/bdd.adoc[]

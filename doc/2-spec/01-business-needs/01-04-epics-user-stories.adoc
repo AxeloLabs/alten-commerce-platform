@@ -1,0 +1,778 @@
+= Epics and User Stories: The Backlog of the First Release
+:doc-id: 01-04
+:revnumber: 0.1
+:revdate: 2026-11-18
+:revremark: Draft
+:description: Epics, user stories with priority, estimate and acceptance criteria, and the story map.
+include::../_shared/attributes.adoc[]
+
+== How epics and stories are written
+
+.Strategy question
+****
+What strategy turns business journeys into a backlog that can be prioritized, estimated and accepted?
+****
+
+An *epic* is a capability of the store, too large to deliver at once; it serves one journey.
+A *user story* is the smallest increment of that capability that is worth something to an actor.
+Stories are what is planned, built, demonstrated and accepted.
+
+.Rules for a user story
+[%unbreakable, cols="3,11", options="header"]
+|===
+| Rule | Meaning
+| One actor, one benefit | "As a _role_, I want _capability_ so that _benefit_." A story with no benefit is a task.
+| INVEST | Independent, Negotiable, Valuable, Estimable, Small, Testable. A story that fails one of them is rewritten or split.
+| Acceptance criteria | Two to five observable outcomes. Each becomes at least one acceptance scenario in document 01-08.
+| Priority | MoSCoW. {must}: the release has no value without it. {should}: expected, can slip. {could}: only if time allows. {wont}: explicitly excluded.
+| Estimate | Story points on the Fibonacci scale (1, 2, 3, 5, 8). Relative size, not days. A story above 8 is split.
+| Realized by | The use case that details every flow of the story, in document 01-05.
+|===
+
+A story is *ready* to be built when its acceptance criteria are agreed, its use case is approved and its acceptance scenarios exist.
+It is *done* when those scenarios pass, the quality gates are green and the product owner accepted it.
+Both definitions are detailed in document 08-04.
+
+Owner: {role-sol} {role-qa}
+
+== Backlog overview
+
+.Strategy question
+****
+What strategy shows the whole release on one page, so that scope can be traded against time?
+****
+
+.Epics
+[cols="3,6,3,2,2,3", options="header"]
+|===
+| ID | Epic | Journey | Stories | Points | Status
+| {EPIC-IAM-001} | Account and access | {JRN-IAM-001} | 3 | 8 | {st-draft}
+| {EPIC-CAT-001} | Product discovery | {JRN-CAT-001} | 3 | 10 | {st-draft}
+| {EPIC-CAT-002} | Catalog administration | {JRN-CAT-002} | 4 | 10 | {st-draft}
+| {EPIC-INV-001} | Stock management | {JRN-INV-001} | 3 | 10 | {st-draft}
+| {EPIC-CART-001} | Shopping cart | {JRN-CART-001} | 4 | 10 | {st-draft}
+| {EPIC-CART-002} | Favorites | {JRN-CART-002} | 3 | 5 | {st-draft}
+| {EPIC-ORD-001} | Checkout and order placement | {JRN-ORD-001} | 5 | 24 | {st-draft}
+| {EPIC-PAY-001} | Payment and refund | {JRN-ORD-001} | 2 | 10 | {st-draft}
+| {EPIC-ORD-002} | Order tracking | {JRN-ORD-002} | 2 | 5 | {st-draft}
+| {EPIC-NOT-001} | Customer notifications | {JRN-ORD-002} | 3 | 7 | {st-draft}
+| {EPIC-ORD-003} | Order cancellation | {JRN-ORD-003} | 2 | 8 | {st-proposed}
+| {EPIC-ORD-004} | Order fulfillment | {JRN-ORD-004} | 3 | 6 | {st-proposed}
+| {EPIC-ORD-005} | Blocked order recovery | {JRN-ORD-005} | 1 | 5 | {st-draft}
+| | *Total* | | *38* | *118* |
+|===
+
+The story map reads left to right along the customer's path, then the administrator's.
+Each row is a slice that could be released on its own: the first row is the smallest store that sells something.
+
+.Story map
+[cols="3,4,4,4,4,4,4", options="header"]
+|===
+| | Account | Discover | Cart and favorites | Buy | Follow | Administer
+
+| {must}
+| {US-IAM-001} {US-IAM-002} {US-IAM-003}
+| {US-CAT-001} {US-CAT-003} {US-INV-003}
+| {US-CART-001} {US-CART-002} {US-CART-003} {US-CART-005} {US-CART-006}
+| {US-ORD-001} {US-ORD-002} {US-ORD-003} {US-ORD-004} {US-ORD-005} {US-PAY-001} {US-PAY-002}
+| {US-ORD-006} {US-ORD-007} {US-NOT-001} {US-NOT-002}
+| {US-CAT-004} {US-CAT-005} {US-CAT-006} {US-CAT-007} {US-INV-001} {US-ORD-012}
+
+| {should}
+|
+| {US-CAT-002}
+| {US-CART-004}
+| {US-ORD-008} {US-PAY-003}
+| {US-NOT-003}
+| {US-INV-002} {US-ORD-009} {US-ORD-010} {US-ORD-011}
+
+| {could}
+|
+|
+| {US-CART-007}
+|
+|
+|
+|===
+
+[[EPIC-IAM-001]]
+== EPIC-IAM-001 — Account and access
+
+[cols="2,11"]
+|===
+| Journey | {JRN-IAM-001}
+| Value | A visitor becomes a known customer; the store knows who may do what.
+| Scope | Registration, sign-in, sign-out, the two roles `CUSTOMER` and `ADMIN`. Credentials are handled by the identity provider.
+| Owner | {role-sec} {role-swe}
+|===
+
+[[US-IAM-001]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-IAM-001 — Register as a customer
+| Epic | {EPIC-IAM-001}
+| Story | *As a* visitor, *I want* to create an account with my e-mail address and a password *so that* I can keep a cart and buy.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. With a valid e-mail address and a password that meets the policy, the account is created with the role `CUSTOMER`.
+. An e-mail address already registered is refused.
+. A password that does not meet the policy is refused, and the policy is shown.
+. After registering, the visitor can sign in at once.
+| Realized by | {UC-IAM-001}
+|===
+
+[[US-IAM-002]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-IAM-002 — Sign in and sign out
+| Epic | {EPIC-IAM-001}
+| Story | *As a* customer or an administrator, *I want* to sign in and sign out *so that* my cart, my orders and my rights are mine alone.
+| Priority | {must} · 2 points
+| Acceptance criteria a|
+. Valid credentials sign the actor in; the storefront shows who is signed in.
+. Invalid credentials are refused with one message that does not say which part was wrong.
+. Signing out ends the session; a protected page then leads to the sign-in page.
+| Realized by | {UC-IAM-002}
+|===
+
+[[US-IAM-003]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-IAM-003 — Reach only what my role allows
+| Epic | {EPIC-IAM-001}
+| Story | *As an* administrator, *I want* each function to be reserved to the roles entitled to it *so that* nobody can alter the store or read someone else's data.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. A visitor who calls a customer function is asked to sign in.
+. A customer who calls an administration function is refused, even by typing its address directly.
+. A customer who asks for another customer's cart, favorites or order is answered as if it did not exist.
+. The refusal is decided by the server, whatever the storefront displays.
+| Realized by | {UC-IAM-002}
+|===
+
+[[EPIC-CAT-001]]
+== EPIC-CAT-001 — Product discovery
+
+[cols="2,11"]
+|===
+| Journey | {JRN-CAT-001}
+| Value | Anyone finds a product, its price and whether it can be bought now, without signing in.
+| Scope | Catalog list, search, filters, product page, displayed availability.
+| Owner | {role-swe}
+|===
+
+[[US-CAT-001]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CAT-001 — Browse the catalog
+| Epic | {EPIC-CAT-001}
+| Story | *As a* visitor, *I want* to browse the products on sale *so that* I can see what the store offers.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. The list shows each published product with its name, price and availability.
+. The list is paginated, 20 products per page by default.
+. A draft or retired product never appears.
+. Browsing needs no account.
+| Realized by | {UC-CAT-001}
+|===
+
+[[US-CAT-002]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CAT-002 — Search and filter products
+| Epic | {EPIC-CAT-001}
+| Story | *As a* visitor, *I want* to search by keyword and filter by category, price and availability *so that* I find a product quickly.
+| Priority | {should} · 5 points
+| Acceptance criteria a|
+. A keyword matches the name and the description of products.
+. Filters by category, price range and "in stock only" can be combined.
+. The result can be sorted by name or by price.
+. A search with no result says so and keeps the criteria.
+| Realized by | {UC-CAT-001}
+|===
+
+[[US-CAT-003]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CAT-003 — See product details and availability
+| Epic | {EPIC-CAT-001}
+| Story | *As a* visitor, *I want* to open a product and see its description, its price and whether it is in stock *so that* I can decide to buy it.
+| Priority | {must} · 2 points
+| Acceptance criteria a|
+. The page shows name, description, category, price and one of three availability levels: in stock, low stock, out of stock.
+. An out-of-stock product can be viewed and marked as favorite, but not added to the cart.
+. A retired or unknown product answers "not found".
+| Realized by | {UC-CAT-002}
+|===
+
+[[EPIC-CAT-002]]
+== EPIC-CAT-002 — Catalog administration
+
+[cols="2,11"]
+|===
+| Journey | {JRN-CAT-002}
+| Value | The administrator decides alone what is sold and at what price.
+| Scope | Product creation and update, price change, publication and retirement.
+| Owner | {role-swe} {role-data}
+|===
+
+[[US-CAT-004]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CAT-004 — Create a product
+| Epic | {EPIC-CAT-002}
+| Story | *As an* administrator, *I want* to create a product with its SKU, name, description, category and price *so that* it can be put on sale.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. The product is created as a draft, invisible to customers.
+. A SKU that already exists is refused.
+. A missing name, an unknown category or a price outside the allowed range is refused, field by field.
+| Realized by | {UC-CAT-003}
+|===
+
+[[US-CAT-005]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CAT-005 — Update a product
+| Epic | {EPIC-CAT-002}
+| Story | *As an* administrator, *I want* to change the name, description or category of a product *so that* the catalog stays accurate.
+| Priority | {must} · 2 points
+| Acceptance criteria a|
+. Name, description and category can be changed; the SKU cannot.
+. The storefront shows the change within seconds.
+. If another administrator changed the product in the meantime, the update is refused and the current version is shown.
+| Realized by | {UC-CAT-004}
+|===
+
+[[US-CAT-006]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CAT-006 — Change a price
+| Epic | {EPIC-CAT-002}
+| Story | *As an* administrator, *I want* to change the price of a product *so that* future orders use the new price.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. The new price applies at once to the catalog and to every cart that holds the product.
+. Orders already placed keep the price they were placed at.
+. Each change is recorded: old price, new price, author, date.
+| Realized by | {UC-CAT-005}
+|===
+
+[[US-CAT-007]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CAT-007 — Publish or retire a product
+| Epic | {EPIC-CAT-002}
+| Story | *As an* administrator, *I want* to publish a draft and to retire a product *so that* customers see exactly what is on sale.
+| Priority | {must} · 2 points
+| Acceptance criteria a|
+. A complete draft can be published; it then appears in the storefront.
+. A retired product disappears from the catalog and from search, and can no longer be added to a cart.
+. A retired product remains readable in the orders and the favorites that reference it.
+| Realized by | {UC-CAT-006}
+|===
+
+[[EPIC-INV-001]]
+== EPIC-INV-001 — Stock management
+
+[cols="2,11"]
+|===
+| Journey | {JRN-INV-001}
+| Value | The store sells only what it holds, and customers see an availability they can trust.
+| Scope | Stock adjustment, stock review, propagation of availability to the storefront.
+| Owner | {role-swe} {role-data}
+|===
+
+[[US-INV-001]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-INV-001 — Adjust the stock of a product
+| Epic | {EPIC-INV-001}
+| Story | *As an* administrator, *I want* to set or correct the stock on hand of a product, with a reason, *so that* the store knows what it really holds.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. The stock on hand is changed by the quantity given, up or down.
+. An adjustment that would bring the stock on hand below the quantity reserved is refused.
+. The movement is recorded with its reason, its author and its date.
+| Realized by | {UC-INV-001}
+|===
+
+[[US-INV-002]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-INV-002 — Review stock levels
+| Epic | {EPIC-INV-001}
+| Story | *As an* administrator, *I want* to see the stock on hand, reserved and available of every product *so that* I know what to replenish.
+| Priority | {should} · 2 points
+| Acceptance criteria a|
+. The list shows, per SKU, the stock on hand, the reserved quantity and the available quantity.
+. The list can be limited to products that are low or out of stock.
+| Realized by | {UC-INV-002}
+|===
+
+[[US-INV-003]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-INV-003 — See an availability I can trust
+| Epic | {EPIC-INV-001}
+| Story | *As a* customer, *I want* the availability shown in the storefront to follow the real stock *so that* I do not try to order what is gone.
+| Priority | {must} · 5 points
+| Acceptance criteria a|
+. After a sale, a reservation or an adjustment, the displayed availability is up to date within 5 seconds.
+. When nothing is available the product shows "out of stock" and cannot be added to a cart.
+. When 5 units or fewer remain the product shows "low stock".
+| Realized by | {UC-CAT-002} {UC-INV-001}
+|===
+
+[[EPIC-CART-001]]
+== EPIC-CART-001 — Shopping cart
+
+[cols="2,11"]
+|===
+| Journey | {JRN-CART-001}
+| Value | The customer gathers what to buy, sees what it costs, and finds it again later.
+| Scope | Add, view, change, remove; the cart counter; persistence between sessions.
+| Owner | {role-swe}
+|===
+
+[[US-CART-001]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CART-001 — Add a product to the cart
+| Epic | {EPIC-CART-001}
+| Story | *As a* customer, *I want* to add a product to my cart *so that* I can buy several products in a single order.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. The product is added with the chosen quantity and the cart counter is updated.
+. Adding a product that is already in the cart increases the quantity of its line.
+. A quantity above the displayed availability, or above 10 units, is refused with an explanatory message.
+. An out-of-stock or retired product cannot be added.
+| Realized by | {UC-CART-001}
+|===
+
+[[US-CART-002]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CART-002 — See my cart and its counter
+| Epic | {EPIC-CART-001}
+| Story | *As a* customer, *I want* to see what is in my cart and how many items it holds from any page *so that* I always know what I am about to buy.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. The cart shows each line with the product name, the current unit price, the quantity and the line total, then the cart total.
+. A counter on every page shows the total number of units in the cart.
+. A line whose price changed, or whose product is no longer available, is flagged.
+| Realized by | {UC-CART-002}
+|===
+
+[[US-CART-003]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CART-003 — Change quantities and remove lines
+| Epic | {EPIC-CART-001}
+| Story | *As a* customer, *I want* to change a quantity or remove a line *so that* my cart holds exactly what I want.
+| Priority | {must} · 2 points
+| Acceptance criteria a|
+. A quantity can be set between 1 and 10, within the displayed availability.
+. Removing a line, or setting its quantity to zero, deletes it.
+. Totals and counter follow at once.
+| Realized by | {UC-CART-003}
+|===
+
+[[US-CART-004]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CART-004 — Find my cart again later
+| Epic | {EPIC-CART-001}
+| Story | *As a* customer, *I want* my cart to be kept when I sign out or change device *so that* I can finish my purchase later.
+| Priority | {should} · 2 points
+| Acceptance criteria a|
+. The cart is the same after signing out and in again, on any device.
+. A cart is visible to its owner only.
+| Realized by | {UC-CART-002}
+|===
+
+[[EPIC-CART-002]]
+== EPIC-CART-002 — Favorites
+
+[cols="2,11"]
+|===
+| Journey | {JRN-CART-002}
+| Value | The customer keeps track of liked products and comes back to buy them.
+| Scope | Mark, unmark, list, add to cart from the list.
+| Owner | {role-swe}
+|===
+
+[[US-CART-005]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CART-005 — Mark and unmark a favorite
+| Epic | {EPIC-CART-002}
+| Story | *As a* customer, *I want* to mark a product as favorite, and unmark it, *so that* I can find it again.
+| Priority | {must} · 2 points
+| Acceptance criteria a|
+. A product can be marked from the catalog list or from its page; the mark is visible at once.
+. Marking a product twice keeps a single favorite.
+. A visitor who tries to mark a product is invited to sign in.
+| Realized by | {UC-CART-004}
+|===
+
+[[US-CART-006]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CART-006 — See my favorites
+| Epic | {EPIC-CART-002}
+| Story | *As a* customer, *I want* to see my favorites with their current price and availability *so that* I can decide what to buy.
+| Priority | {must} · 2 points
+| Acceptance criteria a|
+. The list shows each favorite with its current price and availability.
+. A favorite that is out of stock or retired stays in the list, flagged as unavailable.
+. A favorite can be unmarked from the list.
+| Realized by | {UC-CART-004}
+|===
+
+[[US-CART-007]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CART-007 — Add a favorite to the cart
+| Epic | {EPIC-CART-002}
+| Story | *As a* customer, *I want* to add a favorite to my cart in one action *so that* I do not have to look for the product again.
+| Priority | {could} · 1 point
+| Acceptance criteria a|
+. One unit of the product is added to the cart, under the same rules as any addition.
+. The product stays in the favorites.
+| Realized by | {UC-CART-001} {UC-CART-004}
+|===
+
+[[EPIC-ORD-001]]
+== EPIC-ORD-001 — Checkout and order placement
+
+{critical}
+
+[cols="2,11"]
+|===
+| Journey | {JRN-ORD-001}
+| Value | The cart becomes a paid order, or the customer is told why not and has paid nothing.
+| Scope | Checkout review, order creation, stock reservation, outcome, safe retry.
+| Owner | {role-sol} {role-swe} {role-sre}
+|===
+
+[[US-ORD-001]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-001 — Review my order before paying
+| Epic | {EPIC-ORD-001}
+| Story | *As a* customer, *I want* to review my order with up-to-date prices before I pay *so that* I know exactly what I commit to.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. The checkout shows the lines, the current prices and the total, and asks for a shipping address and a means of payment.
+. A line whose price or availability changed since it was put in the cart is highlighted and must be acknowledged.
+. An empty cart cannot be checked out.
+| Realized by | {UC-ORD-001}
+|===
+
+[[US-ORD-002]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-002 — Place my order
+| Epic | {EPIC-ORD-001}
+| Story | *As a* customer, *I want* to submit my order and be acknowledged at once *so that* I know the store has taken it in charge.
+| Priority | {must} · 8 points
+| Acceptance criteria a|
+. Submitting creates an order with an order number and the status "pending"; the answer does not wait for the payment.
+. The prices of the order are those shown at checkout and never change afterwards.
+. The order appears in the order history immediately.
+. If a price or an availability changed between the review and the submission, no order is created and the customer is sent back to the cart.
+| Realized by | {UC-ORD-001}
+|===
+
+[[US-ORD-003]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-003 — Know the outcome of my order
+| Epic | {EPIC-ORD-001}
+| Story | *As a* customer, *I want* to be told whether my order is confirmed or rejected, and why, *so that* I know what to do next.
+| Priority | {must} · 5 points
+| Acceptance criteria a|
+. The order page updates by itself to "confirmed" or "rejected" within seconds.
+. A rejection gives its reason in plain language and says that nothing was charged, or that the charge is being refunded.
+. The outcome is also sent by e-mail.
+. An order with no outcome after 2 minutes is rejected; it never stays pending.
+| Realized by | {UC-ORD-001} {UC-ORD-003}
+|===
+
+[[US-ORD-004]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-004 — Never pay for an unavailable product
+| Epic | {EPIC-ORD-001}
+| Story | *As a* customer, *I want* the store to secure the stock before taking my payment *so that* I am never charged for something it cannot deliver.
+| Priority | {must} · 5 points
+| Acceptance criteria a|
+. The stock of every line is reserved before any payment is requested.
+. If one line cannot be reserved in full, the order is rejected and no payment is attempted.
+. When two customers order the last unit at the same time, exactly one order is confirmed.
+. After a rejection the cart is kept.
+| Realized by | {UC-ORD-001}
+|===
+
+[[US-ORD-005]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-005 — Retry safely
+| Epic | {EPIC-ORD-001}
+| Story | *As a* customer, *I want* a double click, a page refresh or a retry after a network error to be harmless *so that* I never get two orders or two charges.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. Submitting the same checkout twice returns the same order.
+. One checkout leads to at most one payment.
+| Realized by | {UC-ORD-001}
+|===
+
+[[EPIC-PAY-001]]
+== EPIC-PAY-001 — Payment and refund
+
+{critical}
+
+[cols="2,11"]
+|===
+| Journey | {JRN-ORD-001}
+| Value | The store is paid exactly once for each confirmed order, and gives back what it should not keep.
+| Scope | Payment through the simulated provider, refusal, automatic refund.
+| Owner | {role-swe} {role-sec}
+|===
+
+[[US-PAY-001]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-PAY-001 — Pay by card
+| Epic | {EPIC-PAY-001}
+| Story | *As a* customer, *I want* to pay my order by card *so that* it can be confirmed.
+| Priority | {must} · 5 points
+| Acceptance criteria a|
+. The payment is taken for exactly the order total.
+. A refused payment rejects the order, gives a plain reason and keeps the cart.
+. Card data never reaches the store: the customer supplies a token issued by the payment provider.
+. An order is charged at most once.
+| Realized by | {UC-PAY-001}
+|===
+
+[[US-PAY-002]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-PAY-002 — Be refunded when a paid order cannot be completed
+| Epic | {EPIC-PAY-001}
+| Story | *As a* customer, *I want* to be refunded without asking when an order I paid cannot be confirmed *so that* I never pay for nothing.
+| Priority | {must} · 5 points
+| Acceptance criteria a|
+. A payment captured for an order that ends rejected is refunded in full, automatically.
+. The refund is visible on the order and announced by e-mail.
+. A payment is never refunded twice.
+| Realized by | {UC-PAY-002}
+|===
+
+[[EPIC-ORD-002]]
+== EPIC-ORD-002 — Order tracking
+
+[cols="2,11"]
+|===
+| Journey | {JRN-ORD-002}
+| Value | The customer knows where every order stands without contacting anyone.
+| Scope | Order history, order detail, status timeline.
+| Owner | {role-swe}
+|===
+
+[[US-ORD-006]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-006 — See my order history
+| Epic | {EPIC-ORD-002}
+| Story | *As a* customer, *I want* the list of my orders *so that* I can find any of them.
+| Priority | {must} · 2 points
+| Acceptance criteria a|
+. The list shows my orders, newest first, with number, date, total and status.
+. It shows my orders only.
+| Realized by | {UC-ORD-002}
+|===
+
+[[US-ORD-007]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-007 — See the details and status of an order
+| Epic | {EPIC-ORD-002}
+| Story | *As a* customer, *I want* to open an order and see its content, its status and its history *so that* I know where it stands.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. The order shows its lines, the prices paid, the shipping address, the current status and the date of each status change.
+. A rejected order shows its reason.
+. Another customer's order answers "not found".
+| Realized by | {UC-ORD-003}
+|===
+
+[[EPIC-NOT-001]]
+== EPIC-NOT-001 — Customer notifications
+
+[cols="2,11"]
+|===
+| Journey | {JRN-ORD-002}, and every journey that changes an order
+| Value | The customer learns what happens to an order without watching the screen.
+| Scope | E-mails on confirmation, rejection, and on the other status changes.
+| Owner | {role-swe}
+|===
+
+[[US-NOT-001]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-NOT-001 — Receive an order confirmation e-mail
+| Epic | {EPIC-NOT-001}
+| Story | *As a* customer, *I want* an e-mail when my order is confirmed *so that* I have a record of my purchase.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. The e-mail is sent after the confirmation, with the order number, the lines and the total.
+. One confirmation produces one e-mail, even when the system retries.
+. A failure to send the e-mail does not change the order.
+| Realized by | {UC-NOT-001}
+|===
+
+[[US-NOT-002]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-NOT-002 — Receive an e-mail when my order is rejected
+| Epic | {EPIC-NOT-001}
+| Story | *As a* customer, *I want* an e-mail when my order is rejected *so that* I know why and that I was not charged.
+| Priority | {must} · 2 points
+| Acceptance criteria a|
+. The e-mail gives the reason in plain language.
+. It states that nothing was charged, or that the charge is being refunded.
+| Realized by | {UC-NOT-001}
+|===
+
+[[US-NOT-003]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-NOT-003 — Receive an e-mail when my order progresses
+| Epic | {EPIC-NOT-001}
+| Story | *As a* customer, *I want* an e-mail when my order is shipped, delivered, cancelled or refunded *so that* I can follow it without signing in.
+| Priority | {should} · 2 points · {st-proposed}
+| Acceptance criteria a|
+. Each of these changes produces one e-mail with the order number and the new status.
+| Realized by | {UC-NOT-001}
+|===
+
+[[EPIC-ORD-003]]
+== EPIC-ORD-003 — Order cancellation
+
+{st-proposed}
+
+[cols="2,11"]
+|===
+| Journey | {JRN-ORD-003}
+| Value | The customer undoes a purchase that has not shipped; the store gets its stock back.
+| Scope | Cancellation of a confirmed order, return of the stock, full refund.
+| Owner | {role-sol} {role-swe}
+|===
+
+[[US-ORD-008]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-008 — Cancel my order before it ships
+| Epic | {EPIC-ORD-003}
+| Story | *As a* customer, *I want* to cancel a confirmed order that has not shipped *so that* I can change my mind.
+| Priority | {should} · 5 points · {st-proposed}
+| Acceptance criteria a|
+. A confirmed order that has not shipped can be cancelled; its status becomes "cancelled".
+. The quantities of the order become available again.
+. An order that has shipped, or that is already cancelled or rejected, cannot be cancelled, and the reason is given.
+| Realized by | {UC-ORD-004}
+|===
+
+[[US-PAY-003]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-PAY-003 — Be refunded after a cancellation
+| Epic | {EPIC-ORD-003}
+| Story | *As a* customer, *I want* the full amount back when I cancel an order *so that* cancelling costs me nothing.
+| Priority | {should} · 3 points · {st-proposed}
+| Acceptance criteria a|
+. The cancellation triggers a refund of the full amount paid.
+. The refund is visible on the order and announced by e-mail.
+| Realized by | {UC-PAY-002} {UC-ORD-004}
+|===
+
+[[EPIC-ORD-004]]
+== EPIC-ORD-004 — Order fulfillment
+
+{st-proposed}
+
+[cols="2,11"]
+|===
+| Journey | {JRN-ORD-004}
+| Value | The administrator takes confirmed orders to delivery and the customer follows along.
+| Scope | Order search for administrators, shipment, delivery.
+| Owner | {role-swe}
+|===
+
+[[US-ORD-009]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-009 — Find any order
+| Epic | {EPIC-ORD-004}
+| Story | *As an* administrator, *I want* to search all orders by number, customer, status or date *so that* I can prepare them and answer customers.
+| Priority | {should} · 3 points · {st-proposed}
+| Acceptance criteria a|
+. The search covers the orders of all customers.
+. Criteria can be combined; the result is paginated, newest first.
+. An order opens with the same detail the customer sees, plus its technical history.
+| Realized by | {UC-ORD-005}
+|===
+
+[[US-ORD-010]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-010 — Mark an order as shipped
+| Epic | {EPIC-ORD-004}
+| Story | *As an* administrator, *I want* to mark a confirmed order as shipped *so that* the customer knows it is on its way.
+| Priority | {should} · 2 points · {st-proposed}
+| Acceptance criteria a|
+. Only a confirmed order can be marked as shipped.
+. The change is recorded with its author and date, and the customer is told.
+| Realized by | {UC-ORD-006}
+|===
+
+[[US-ORD-011]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-011 — Mark an order as delivered
+| Epic | {EPIC-ORD-004}
+| Story | *As an* administrator, *I want* to mark a shipped order as delivered *so that* its lifecycle is closed.
+| Priority | {should} · 1 point · {st-proposed}
+| Acceptance criteria a|
+. Only a shipped order can be marked as delivered.
+. The change is recorded with its author and date, and the customer is told.
+| Realized by | {UC-ORD-006}
+|===
+
+[[EPIC-ORD-005]]
+== EPIC-ORD-005 — Blocked order recovery
+
+[cols="2,11"]
+|===
+| Journey | {JRN-ORD-005}
+| Value | No order stays in a state nobody understands; a person can always settle it.
+| Scope | List of orders under review, retry, manual settlement, audit trail.
+| Owner | {role-sre} {role-swe}
+|===
+
+[[US-ORD-012]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-012 — Resolve an order under review
+| Epic | {EPIC-ORD-005}
+| Story | *As an* administrator, *I want* to see the orders the system could not settle and to settle them myself *so that* no customer is left charged without an order, or with an order in limbo.
+| Priority | {must} · 5 points
+| Acceptance criteria a|
+. The list shows each order under review with what was done and what failed.
+. The failed action can be retried.
+. The order can be settled by hand: confirmed, or rejected with a refund.
+. Each decision is recorded with its author and a comment, and the customer is told the outcome.
+| Realized by | {UC-ORD-007}
+|===

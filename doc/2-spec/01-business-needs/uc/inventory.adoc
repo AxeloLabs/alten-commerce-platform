@@ -1,0 +1,65 @@
+// ids:end
+== Inventory
+
+The inventory is the only place that knows what can really be sold.
+
+[[UC-INV-001]]
+=== UC-INV-001 — Adjust stock
+
+[cols="3,11"]
+|===
+| Overview | The administrator records that goods were received, counted, lost or damaged. It is the only way stock enters the store in this release.
+| Primary actor | Administrator
+| Supporting actors | –
+| Goal | Make the stock known to the store equal to the stock really held.
+| Priority and status | {must} · {st-draft}
+| Trigger | A delivery, a stock count, a loss.
+| Preconditions | The administrator is signed in. The product exists.
+| Success guarantees | The stock on hand is changed by the quantity given. The movement is recorded with its reason, author and date. The storefront availability follows within seconds.
+| Minimal guarantees | The stock on hand never goes below the quantity reserved for orders in progress, and never below zero.
+| Authorization | {allowed} Administrator. {denied} Visitor, customer.
+| Business rules | {FR-INV-001} {FR-INV-002} {FR-INV-006} {FR-INV-007} {FR-INV-008}
+| Quality attributes | {NFR-SEC-006} {NFR-REL-001}
+| Stories | {US-INV-001} {US-INV-003}
+| Acceptance | {BDD-INV-001} {BDD-INV-002} {BDD-INV-003}
+|===
+
+.Main success scenario
+. The administrator selects a product and enters a quantity to add or remove, with a reason.
+. The system checks that the resulting stock on hand is not below the reserved quantity.
+. The system records the movement and the new stock on hand.
+. The system publishes the new available quantity; the catalog refreshes the displayed availability.
+
+.Alternative flows
+1a. The administrator enters the counted quantity instead of a difference:: The system computes the difference and continues at step 2.
+
+.Exception flows
+2a. The adjustment would bring the stock on hand below the reserved quantity:: The adjustment is refused; the reserved quantity is shown.
+1b. The quantity is zero or the reason is missing:: The adjustment is refused.
+
+[[UC-INV-002]]
+=== UC-INV-002 — Review stock levels
+
+[cols="3,11"]
+|===
+| Overview | The administrator sees, for every product, what is held, what is set aside for orders in progress and what can still be sold.
+| Primary actor | Administrator
+| Supporting actors | –
+| Goal | Know what to replenish.
+| Priority and status | {should} · {st-draft}
+| Trigger | Routine review, or a customer question.
+| Preconditions | The administrator is signed in.
+| Success guarantees | The list shows, per SKU, the stock on hand, the reserved quantity and the available quantity.
+| Minimal guarantees | The figures are those of the inventory itself, not the displayed availability of the catalog.
+| Authorization | {allowed} Administrator. {denied} Visitor, customer.
+| Business rules | {FR-INV-002} {FR-CAT-008}
+| Quality attributes | {NFR-PERF-001}
+| Stories | {US-INV-002}
+| Acceptance | {BDD-INV-004}
+|===
+
+.Main success scenario
+. The administrator opens the stock review.
+. The system returns the stock levels page by page.
+. The administrator limits the list to products that are low or out of stock.
+. The system returns the matching products.

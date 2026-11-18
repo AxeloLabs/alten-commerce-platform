@@ -35,6 +35,11 @@ if [[ ${#sources[@]} -eq 0 ]]; then
   echo "no document matches '$filter'" >&2
   exit 1
 fi
+if [[ -z "$filter" ]]; then
+  # Full build: render every diagram afresh, so that a renamed or removed diagram leaves nothing behind.
+  rm -rf "$GEN/diagram-cache"
+  rm -f "$GEN"/diagrams/*.svg
+fi
 mkdir -p "$GEN/pdf" "$GEN/diagrams" "$GEN/diagram-cache"
 "$ENGINE" run --rm --security-opt label=disable \
   -v "$DOC":/documents -w /documents "$IMAGE" \
@@ -42,6 +47,14 @@ mkdir -p "$GEN/pdf" "$GEN/diagrams" "$GEN/diagram-cache"
     --failure-level WARN \
     -R 2-spec -D 9-generated/pdf \
     "${sources[@]}"
+
+step "Diagram check"
+# PlantUML draws its warnings and errors inside the image instead of failing: look for them.
+if grep -l -i -E 'deprecated|Syntax(&#160;| )Error|Cannot(&#160;| )(include|open)' "$GEN"/diagrams/*.svg 2>/dev/null; then
+  echo "the diagrams listed above contain a PlantUML warning or error" >&2
+  exit 1
+fi
+echo "diagrams: no PlantUML warning or error"
 
 step "Done"
 printf '%s document(s) in %s\n' "${#sources[@]}" "$GEN/pdf"

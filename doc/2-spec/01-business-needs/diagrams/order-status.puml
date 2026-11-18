@@ -1,0 +1,32 @@
+@startuml
+title Order status: transitions allowed by the business
+
+hide empty description
+
+state PENDING
+state CONFIRMED
+state REJECTED #FFCDD2
+state UNDER_REVIEW #FFF8E1
+state SHIPPED #ECEFF1
+state DELIVERED #ECEFF1
+state CANCELLED #ECEFF1
+
+[*] --> PENDING : order placed
+PENDING --> CONFIRMED : paid and stock secured
+PENDING --> REJECTED : out of stock,\npayment refused\nor timed out
+PENDING --> UNDER_REVIEW : an undo keeps failing
+UNDER_REVIEW --> CONFIRMED : administrator
+UNDER_REVIEW --> REJECTED : administrator
+CONFIRMED --> SHIPPED : administrator
+SHIPPED --> DELIVERED : administrator
+CONFIRMED --> CANCELLED : customer cancels,\nstock returned, refunded
+CONFIRMED --> UNDER_REVIEW : refund of a\ncancellation fails
+UNDER_REVIEW --> CANCELLED : administrator
+REJECTED --> [*]
+DELIVERED --> [*]
+CANCELLED --> [*]
+
+legend right
+  Grey: proposed, awaiting validation
+endlegend
+@enduml

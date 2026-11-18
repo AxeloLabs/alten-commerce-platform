@@ -1,0 +1,116 @@
+// ids:end
+== Payment
+
+Payment and refund are never started by a person.
+They are steps of an order, requested by the platform; their primary actor is the order saga.
+
+[[UC-PAY-001]]
+=== UC-PAY-001 — Take a payment
+
+{critical}
+
+[cols="3,11"]
+|===
+| Overview | The platform charges the total of an order on the customer's means of payment, through the payment provider. In this release the provider is simulated and its answers are scripted by the token.
+| Primary actor | Order saga (on behalf of the customer)
+| Supporting actors | Payment provider
+| Goal | Capture the order total exactly once.
+| Priority and status | {must} · {st-draft}
+| Trigger | The stock of the order is reserved.
+| Preconditions | The order is `PENDING` with its stock reserved. The request carries the order identifier, the amount and the payment token.
+| Success guarantees | One payment is `CAPTURED` for the order, for the order total.
+| Minimal guarantees | An order is charged at most once, however many times the request is received. The outcome of every request to the provider is recorded: captured, refused or unknown. No card data is stored.
+| Authorization | {denied} Every human actor. Only the order saga requests a payment.
+| Business rules | {FR-PAY-001} {FR-PAY-002} {FR-PAY-003} {FR-PAY-004} {FR-PAY-005} {FR-PAY-007}
+| Quality attributes | {NFR-REL-002} {NFR-SEC-003} {NFR-SEC-007} {NFR-OBS-001}
+| Stories | {US-PAY-001}
+| Acceptance | {BDD-PAY-001} {BDD-PAY-002} {BDD-PAY-003} {BDD-PAY-004} {BDD-PAY-007}
+|===
+
+.Main success scenario
+. The order saga requests a payment for an order, an amount and a token.
+. The system records the payment as `PENDING`.
+. The system asks the provider to charge the amount.
+. The provider accepts.
+. The system records the payment as `CAPTURED` and answers the saga.
+
+.Alternative flows
+1a. A payment already exists for the order:: The system answers with the recorded outcome. The provider is not called again.
+3a. The provider is slow or fails transiently:: The system retries a limited number of times, with the same reference so that the provider itself cannot charge twice.
+
+.Exception flows
+4a. The provider refuses:: The payment is recorded as `REFUSED` with the provider's reason. The saga is told.
+3b. The provider does not answer after the retries:: The payment is recorded as `UNKNOWN`. The saga is told nothing was confirmed; it will ask for the status. A later answer from the provider updates the payment and the saga is told.
+3c. The provider is failing repeatedly:: Further calls are suspended for a while instead of piling up; requests received meanwhile are answered `UNKNOWN`.
+
+[[UC-PAY-002]]
+=== UC-PAY-002 — Refund a payment
+
+{critical}
+
+[cols="3,11"]
+|===
+| Overview | The platform gives back a captured payment in full: because the order could not be confirmed after all, because it was captured late for an order already rejected, or because the customer cancelled.
+| Primary actor | Order saga (on behalf of the customer)
+| Supporting actors | Payment provider
+| Goal | Return the full amount exactly once.
+| Priority and status | {must} · {st-draft}
+| Trigger | An order with a captured payment is rejected or cancelled.
+| Preconditions | The payment is `CAPTURED`.
+| Success guarantees | The payment is `REFUNDED` for the full captured amount.
+| Minimal guarantees | A payment is refunded at most once. A refund that could not be made is never recorded as made.
+| Authorization | {denied} Every human actor directly. An administrator triggers it through {UC-ORD-007}, a customer through {UC-ORD-004}.
+| Business rules | {FR-PAY-006} {FR-PAY-005} {FR-ORD-014}
+| Quality attributes | {NFR-REL-002} {NFR-OBS-004}
+| Stories | {US-PAY-002} {US-PAY-003}
+| Acceptance | {BDD-PAY-005} {BDD-PAY-006} {BDD-ORD-023}
+|===
+
+.Main success scenario
+. The order saga requests the refund of the payment of an order.
+. The system asks the provider to refund the captured amount.
+. The provider accepts.
+. The system records the payment as `REFUNDED` and answers the saga.
+
+.Alternative flows
+1a. The payment is already refunded:: The system answers "refunded". The provider is not called again.
+1b. The payment was refused or never captured:: There is nothing to refund; the system answers so and the saga continues.
+
+.Exception flows
+3a. The provider refuses or does not answer:: The system retries. After the retries the saga is told the refund failed; the order goes `UNDER_REVIEW`.
+
+// ids:end
+== Notification
+
+[[UC-NOT-001]]
+=== UC-NOT-001 — Notify the customer by e-mail
+
+[cols="3,11"]
+|===
+| Overview | When something the customer should know happens to an order, the platform sends an e-mail. Notification listens to what happened; it is never in the way of the order.
+| Primary actor | Order events (confirmed, rejected, cancelled, refunded, shipped, delivered)
+| Supporting actors | E-mail provider
+| Goal | Inform the customer once, promptly.
+| Priority and status | {must} for confirmed and rejected, {should} for the others · {st-draft}
+| Trigger | An order changes status.
+| Preconditions | The event carries the order number, the customer's e-mail address and what the e-mail must say.
+| Success guarantees | One e-mail was handed to the e-mail provider for the event.
+| Minimal guarantees | At most one e-mail per event. A failure to notify never changes or delays the order. No payment data appears in an e-mail.
+| Authorization | {denied} Every human actor. Only order events trigger an e-mail.
+| Business rules | {FR-NOT-001} {FR-NOT-002} {FR-NOT-003} {FR-NOT-004}
+| Quality attributes | {NFR-REL-002} {NFR-SEC-007} {NFR-AVAIL-003}
+| Stories | {US-NOT-001} {US-NOT-002} {US-NOT-003}
+| Acceptance | {BDD-NOT-001} {BDD-NOT-002} {BDD-NOT-003} {BDD-NOT-004}
+|===
+
+.Main success scenario
+. An order changes status.
+. The system builds the e-mail for that change: order number, lines, total, new status and, for a rejection, the reason in plain language.
+. The system hands the e-mail to the provider.
+. The system records the e-mail as sent.
+
+.Alternative flows
+1a. The same event is received again:: Nothing is sent.
+
+.Exception flows
+3a. The provider fails:: The system retries later, with increasing delays. After the last retry the e-mail is recorded as not sent and an alert is raised. The order is not affected.

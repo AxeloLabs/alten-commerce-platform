@@ -184,7 +184,12 @@ def build(source: Path) -> str:
         marker = ' isMarkerVisible="true"' if node["type"] == "exclusiveGateway" else ""
         x.append(f'      <bpmndi:BPMNShape id={q(node["id"] + "_di")} bpmnElement={q(node["id"])}{marker}>')
         x.append(f'        <dc:Bounds x="{nx:.0f}" y="{ny:.0f}" width="{nw}" height="{nh}" />')
-        if kind(node["type"]) != "task" and node.get("name"):
+        if kind(node["type"]) == "gateway" and node.get("name"):
+            # Above and to the left: flows leave a gateway by its right, top and bottom corners.
+            x += ['        <bpmndi:BPMNLabel>',
+                  f'          <dc:Bounds x="{nx - 92:.0f}" y="{ny - 18:.0f}" width="110" height="28" />',
+                  '        </bpmndi:BPMNLabel>']
+        elif kind(node["type"]) == "event" and node.get("name"):
             x += ['        <bpmndi:BPMNLabel>',
                   f'          <dc:Bounds x="{nx + nw / 2 - 55:.0f}" y="{ny + nh + 4:.0f}" width="110" height="28" />',
                   '        </bpmndi:BPMNLabel>']
@@ -196,8 +201,10 @@ def build(source: Path) -> str:
         if flow.get("name"):
             lx, ly = points[0]
             label_width = 7 * len(flow["name"]) + 8
+            going_down = len(points) > 1 and points[1][1] > ly and abs(points[1][0] - lx) < 1
+            label_y = ly + 6 if going_down else ly - 19
             x += ['        <bpmndi:BPMNLabel>',
-                  f'          <dc:Bounds x="{lx + 6:.0f}" y="{ly - 19:.0f}" width="{label_width}" height="14" />',
+                  f'          <dc:Bounds x="{lx + 6:.0f}" y="{label_y:.0f}" width="{label_width}" height="14" />',
                   '        </bpmndi:BPMNLabel>']
         x.append('      </bpmndi:BPMNEdge>')
     x += ['    </bpmndi:BPMNPlane>', '  </bpmndi:BPMNDiagram>', '</bpmn:definitions>', '']

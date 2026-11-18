@@ -1,0 +1,463 @@
+= Business Journeys and Critical Paths: What Actors Achieve and What Must Never Break
+:doc-id: 01-02
+:revnumber: 0.1
+:revdate: 2026-11-18
+:revremark: Draft
+:description: End-to-end business journeys, the critical paths among them, and the failure analysis of order placement.
+include::../_shared/attributes.adoc[]
+
+== Method
+
+.Strategy question
+****
+What strategy finds the few paths on which the business depends, before any technical design is drawn?
+****
+
+A senior engineer does not start from services or tables.
+The work starts from what actors want to achieve, and from what happens when the system fails while they are achieving it.
+
+. *List the journeys.* A journey is an actor's goal followed from intent to outcome, across every screen and service it touches.
+. *Rank them.* For each journey, estimate the damage of a failure (lost sale, customer charged for nothing, corrupted data) and how exposed it is (number of services, external dependencies, concurrency).
+. *Name the critical paths.* The journeys, or branches of journeys, with the highest damage and exposure. They receive the detailed use cases, the business process diagrams, the sequence diagrams and the end-to-end tests.
+. *Break each critical path on purpose.* At every step ask: what if this fails, answers twice, answers late, or never answers? Decide the state the business must end in, and how what was already done is undone.
+. *Derive the rest.* Use cases, business rules, the order saga and the tests all come from that table of failures, not the other way around.
+
+Owner: {role-sol} {role-qa}
+
+== Journey overview
+
+.Strategy question
+****
+What strategy gives a complete picture of what the store does, in one table?
+****
+
+.Business journeys
+[cols="3,6,3,3,3", options="header"]
+|===
+| ID | Journey | Actor | Priority | Status
+| {JRN-IAM-001} | Become a customer and sign in | Visitor | {must} | {st-draft}
+| {JRN-CAT-001} | Discover products | Visitor, customer | {must} | {st-draft}
+| {JRN-CART-001} | Prepare a purchase | Customer | {must} | {st-draft}
+| {JRN-CART-002} | Keep favorites | Customer | {must} | {st-draft}
+| {JRN-ORD-001} | Buy the cart | Customer | {must} {critical} | {st-draft}
+| {JRN-ORD-002} | Follow an order | Customer | {must} | {st-draft}
+| {JRN-ORD-003} | Cancel an order and be refunded | Customer | {should} | {st-proposed}
+| {JRN-CAT-002} | Manage the catalog | Administrator | {must} {critical} | {st-draft}
+| {JRN-INV-001} | Manage stock | Administrator | {must} | {st-draft}
+| {JRN-ORD-004} | Fulfill orders | Administrator | {should} | {st-proposed}
+| {JRN-ORD-005} | Recover a blocked order | Administrator | {must} | {st-draft}
+|===
+
+plantuml::diagrams/journey-map.puml[format=svg, align=center]
+
+== Journeys
+
+.Strategy question
+****
+What strategy describes a journey so that the product owner can accept or reject it in one reading?
+****
+
+Each journey is a sheet: who, why, the stages as the actor lives them, and the outcome.
+Stages are business steps, not screens; the use cases that detail them are in document 01-05.
+
+[[JRN-IAM-001]]
+=== JRN-IAM-001 — Become a customer and sign in
+
+[cols="2,11"]
+|===
+| Actor | Visitor
+| Goal | Have an account and be recognized by the store.
+| Trigger | The visitor wants to keep a cart or buy.
+| Stages a|
+. The visitor registers with an e-mail address and a password.
+. The visitor signs in.
+. The store recognizes the customer and shows what the role allows.
+. The customer signs out.
+| Outcome | The visitor has become a customer with the role `CUSTOMER`.
+| Epics | {EPIC-IAM-001}
+| Critical paths | {CP-IAM-001}
+|===
+
+[[JRN-CAT-001]]
+=== JRN-CAT-001 — Discover products
+
+[cols="2,11"]
+|===
+| Actor | Visitor or customer
+| Goal | Find a product worth buying.
+| Trigger | The actor opens the storefront.
+| Stages a|
+. Browse the catalog page by page.
+. Narrow the list by keyword, category, price or availability.
+. Open a product to read its description, its price and whether it is in stock.
+| Outcome | The actor knows what the product is, what it costs and whether it can be bought now.
+| Epics | {EPIC-CAT-001}
+| Critical paths | {CP-CAT-001}
+|===
+
+[[JRN-CART-001]]
+=== JRN-CART-001 — Prepare a purchase
+
+[cols="2,11"]
+|===
+| Actor | Customer
+| Goal | Gather the products to buy and see what they will cost.
+| Trigger | The customer decides to buy a product.
+| Stages a|
+. Add a product to the cart, from the catalog, a product page or the favorites.
+. See the cart counter change.
+. Open the cart: lines, quantities, prices, total.
+. Change a quantity or remove a line.
+. Come back later, on any device, and find the cart as it was.
+| Outcome | The cart holds exactly what the customer wants to buy.
+| Epics | {EPIC-CART-001}
+| Critical paths | –
+|===
+
+[[JRN-CART-002]]
+=== JRN-CART-002 — Keep favorites
+
+[cols="2,11"]
+|===
+| Actor | Customer
+| Goal | Remember products without buying them now.
+| Trigger | The customer likes a product.
+| Stages a|
+. Mark a product as favorite.
+. Open the list of favorites, with current prices and availability.
+. Add a favorite to the cart, or unmark it.
+| Outcome | The customer finds liked products again in one place.
+| Epics | {EPIC-CART-002}
+| Critical paths | –
+|===
+
+[[JRN-ORD-001]]
+=== JRN-ORD-001 — Buy the cart
+
+[cols="2,11"]
+|===
+| Actor | Customer
+| Goal | Turn the cart into a paid order.
+| Trigger | The customer proceeds to checkout.
+| Stages a|
+. Review the order: lines, prices as they are now, total.
+. Give a shipping address and a means of payment.
+. Submit. The store acknowledges at once and shows the order as pending.
+. The store secures the stock, then takes the payment.
+. The store confirms the order, on screen and by e-mail; the cart is emptied.
+| Outcome | Either the order is confirmed, paid and its stock secured; or it is rejected with a reason and the customer has paid nothing.
+| Epics | {EPIC-ORD-001} {EPIC-PAY-001} {EPIC-NOT-001}
+| Critical paths | {CP-ORD-001} {CP-ORD-002} {CP-ORD-003} {CP-ORD-004}
+|===
+
+[[JRN-ORD-002]]
+=== JRN-ORD-002 — Follow an order
+
+[cols="2,11"]
+|===
+| Actor | Customer
+| Goal | Know where an order stands.
+| Trigger | The customer placed an order, or receives an e-mail about one.
+| Stages a|
+. Open the order history.
+. Open one order: lines, prices paid, address, status, dates of each change.
+. Receive an e-mail at each change of status.
+| Outcome | The customer knows the current status of every order without contacting anyone.
+| Epics | {EPIC-ORD-002} {EPIC-NOT-001}
+| Critical paths | –
+|===
+
+[[JRN-ORD-003]]
+=== JRN-ORD-003 — Cancel an order and be refunded
+
+{st-proposed}
+
+[cols="2,11"]
+|===
+| Actor | Customer
+| Goal | Undo a purchase that has not shipped yet.
+| Trigger | The customer changes their mind after the order is confirmed.
+| Stages a|
+. Open the order and ask to cancel it.
+. The store checks that the order has not shipped.
+. The store returns the stock and refunds the payment.
+. The store confirms the cancellation and the refund, on screen and by e-mail.
+| Outcome | The order is cancelled, the full amount is refunded, the stock is sellable again.
+| Epics | {EPIC-ORD-003} {EPIC-PAY-001} {EPIC-NOT-001}
+| Critical paths | –
+|===
+
+[[JRN-CAT-002]]
+=== JRN-CAT-002 — Manage the catalog
+
+[cols="2,11"]
+|===
+| Actor | Administrator
+| Goal | Decide what the store sells and at what price.
+| Trigger | A new product arrives, or a product changes.
+| Stages a|
+. Create a product as a draft: SKU, name, description, category, price.
+. Publish it: it becomes visible and sellable.
+. Update its description or change its price.
+. Retire it when it is no longer sold.
+| Outcome | The storefront shows exactly the products the administrator published, at the prices set.
+| Epics | {EPIC-CAT-002}
+| Critical paths | {CP-CAT-001} {CP-IAM-001}
+|===
+
+[[JRN-INV-001]]
+=== JRN-INV-001 — Manage stock
+
+[cols="2,11"]
+|===
+| Actor | Administrator
+| Goal | Keep the stock known to the store equal to the stock really held.
+| Trigger | Goods are received, counted, lost or damaged.
+| Stages a|
+. Review stock levels: on hand, reserved, available, products running low.
+. Adjust the stock of a product, giving a reason.
+. The storefront availability follows.
+| Outcome | Customers see an availability that reflects reality, and the store cannot sell what it does not hold.
+| Epics | {EPIC-INV-001}
+| Critical paths | {CP-CAT-001}
+|===
+
+[[JRN-ORD-004]]
+=== JRN-ORD-004 — Fulfill orders
+
+{st-proposed}
+
+[cols="2,11"]
+|===
+| Actor | Administrator
+| Goal | Take confirmed orders to delivery.
+| Trigger | An order is confirmed.
+| Stages a|
+. Find the orders to prepare.
+. Mark an order as shipped; the customer is told.
+. Mark it as delivered; the customer is told.
+| Outcome | The order reaches `DELIVERED` and its history shows who did what and when.
+| Epics | {EPIC-ORD-004} {EPIC-NOT-001}
+| Critical paths | –
+|===
+
+[[JRN-ORD-005]]
+=== JRN-ORD-005 — Recover a blocked order
+
+[cols="2,11"]
+|===
+| Actor | Administrator
+| Goal | Settle an order the system could not settle alone.
+| Trigger | An automatic undo failed repeatedly; the order is under review and an alert was raised.
+| Stages a|
+. See the orders under review, with what was done and what failed.
+. Retry the failed action, or settle the order by hand: confirm it, or reject it and refund it.
+. The order leaves the review state; the customer is told the outcome.
+| Outcome | No order stays in an inconsistent state, and every manual decision is recorded.
+| Epics | {EPIC-ORD-005}
+| Critical paths | {CP-ORD-004}
+|===
+
+// ids:end
+== Critical paths
+
+.Strategy question
+****
+What strategy decides where the most detailed analysis and the most expensive tests are spent?
+****
+
+A path is critical when its failure costs money or trust, and when it is exposed enough for that failure to be likely.
+Six paths meet both conditions.
+
+.Selection of the critical paths
+[cols="3,6,5,5", options="header"]
+|===
+| ID | Path | Damage if it fails | Exposure
+| {CP-ORD-001} | Order placed and confirmed | No revenue | Four services, three asynchronous steps, one external provider
+| {CP-ORD-002} | Order rejected: payment refused | Stock frozen, customer misinformed | Requires undoing a completed step
+| {CP-ORD-003} | Order rejected: stock no longer available | Overselling, or charging for nothing | Concurrent buyers on the last units
+| {CP-ORD-004} | Order outcome stays consistent under failure | Customer charged without an order, or stock lost | Crashes, time-outs, duplicate and late messages
+| {CP-CAT-001} | Published product becomes purchasable | Nothing to sell, or wrong price sold | Two services kept in sync by events
+| {CP-IAM-001} | Only authorized actors act | Data exposed, catalog vandalized | Every entry point
+|===
+
+[[CP-ORD-001]]
+=== CP-ORD-001 — Order placed and confirmed
+
+{critical}
+
+The nominal purchase: the customer submits the checkout, the stock is reserved, the payment is captured, the reservation is confirmed, the order becomes `CONFIRMED`, the cart is emptied and a confirmation e-mail is sent.
+
+Guarantees:: The customer is charged exactly once, for exactly the order total. The stock on hand decreases by exactly the quantities ordered.
+Use cases:: {UC-ORD-001} {UC-PAY-001} {UC-NOT-001} {UC-ORD-003}
+
+plantuml::diagrams/cp-order-confirmed-sequence.puml[format=svg, align=center]
+
+[[CP-ORD-002]]
+=== CP-ORD-002 — Order rejected: payment refused
+
+{critical}
+
+The payment provider declines the payment.
+The stock that was reserved is released, the order becomes `REJECTED` with the reason `PAYMENT_REFUSED`, the cart is kept so that the customer can try another means of payment.
+
+Guarantees:: Nothing is charged. The reserved quantities are available again at once.
+Use cases:: {UC-ORD-001} {UC-PAY-001} {UC-NOT-001}
+
+[[CP-ORD-003]]
+=== CP-ORD-003 — Order rejected: stock no longer available
+
+{critical}
+
+Between the moment the customer saw the product and the moment the order is placed, another customer bought the last units.
+The reservation fails, the order becomes `REJECTED` with the reason `OUT_OF_STOCK`, and *payment is never requested*.
+
+Guarantees:: When two customers compete for the last unit, exactly one order is confirmed. The other customer is never charged.
+Use cases:: {UC-ORD-001} {UC-CART-002}
+
+[[CP-ORD-004]]
+=== CP-ORD-004 — Order outcome stays consistent under failure
+
+{critical}
+
+Something technical goes wrong while an order is being processed: a service is down or slow, the payment provider does not answer, a message is delivered twice or late, the order service restarts in the middle.
+The order still ends either `CONFIRMED` or `REJECTED`; when the system cannot decide alone, it ends `UNDER_REVIEW` and an administrator is alerted.
+
+Guarantees:: Never a captured payment without a confirmed order, unless it is refunded. Never a confirmed order without confirmed stock. Never the same payment taken twice. Never an order left pending forever.
+Use cases:: {UC-ORD-001} {UC-PAY-001} {UC-PAY-002} {UC-ORD-007}
+
+[[CP-CAT-001]]
+=== CP-CAT-001 — Published product becomes purchasable
+
+{critical}
+
+The administrator creates a product, sets its price, gives it stock and publishes it.
+The product appears in the storefront with the right price and the right availability, and can be added to a cart and bought.
+
+Guarantees:: A customer never sees a draft or retired product. The price charged is the price published when the order was placed.
+Use cases:: {UC-CAT-003} {UC-CAT-005} {UC-CAT-006} {UC-INV-001} {UC-CAT-002}
+
+[[CP-IAM-001]]
+=== CP-IAM-001 — Only authorized actors act
+
+{critical}
+
+A visitor cannot buy. A customer cannot read or change what belongs to another customer, nor touch the catalog, the stock or other people's orders. Only an administrator administers.
+
+Guarantees:: Every request is checked on the server, whatever the storefront shows or hides.
+Use cases:: {UC-IAM-001} {UC-IAM-002}
+
+// ids:end
+== Failure analysis of order placement
+
+.Strategy question
+****
+What strategy guarantees that an order ends in a state the business can live with, whatever fails and whenever it fails?
+****
+
+The order is placed in five steps spread over four services.
+A database transaction cannot span them, so each step commits alone and a later failure is repaired by *undoing* the earlier steps.
+The order of the steps is chosen so that as little as possible has to be undone:
+
+. the stock is reserved first, because a reservation is cheap to release;
+. the payment comes after, because money is the costly thing to give back;
+. once the payment is captured there is no way back: the remaining steps are retried until they succeed.
+
+The table lists, for each step, what can go wrong, how the system notices, what it does, and where the order ends.
+
+.What can fail when an order is placed
+[cols="3,5,4,6,4", options="header"]
+|===
+| Step | What goes wrong | How it is noticed | What the system does | The order ends
+
+| Checkout review
+| A price changed, a product was retired or the cart is empty
+| Checked when the checkout is submitted
+| Nothing is created. The customer is sent back to the cart with the differences shown.
+| No order
+
+| Order creation
+| The customer submits twice, or the browser retries
+| Same idempotency key
+| The first order is returned; nothing new is created.
+| One order
+
+.2+| Stock reservation
+| One line cannot be reserved in full
+| Inventory answers "rejected"
+| Nothing was reserved, nothing to undo. Payment is not requested.
+| `REJECTED` `OUT_OF_STOCK`
+
+| Inventory does not answer
+| Order deadline reached
+| A release is sent in case the reservation was made after all; the reservation expires by itself anyway.
+| `REJECTED` `TIMED_OUT`
+
+.3+| Payment
+| The provider refuses
+| Payment answers "refused"
+| The reservation is released.
+| `REJECTED` `PAYMENT_REFUSED`
+
+| The provider or the payment service does not answer
+| Order deadline reached
+| The payment status is asked first. Not captured: the reservation is released. Captured: the order continues.
+| `REJECTED` `TIMED_OUT`, or continues
+
+| The answer "captured" arrives after the order was rejected
+| Late message on a closed order
+| The payment is refunded.
+| Stays `REJECTED`, refund recorded
+
+.2+| Reservation confirmation
+| Inventory is unavailable
+| No answer
+| Retried until it succeeds; the reservation is still held. An alert is raised if it lasts.
+| `CONFIRMED` once it succeeds
+
+| The reservation no longer exists
+| Inventory answers "unknown reservation"
+| Inventory tries to reserve again. If it cannot, the payment is refunded.
+| `CONFIRMED`, or `REJECTED` `OUT_OF_STOCK` with refund
+
+| Confirmation e-mail
+| The e-mail provider fails
+| Send error
+| Retried, then recorded as not sent. The order is not affected.
+| `CONFIRMED`
+
+.2+| Any undo
+| A release or a refund keeps failing
+| Retries exhausted, message set aside
+| The order is handed to an administrator and an alert is raised. It is never marked as undone when it is not.
+| `UNDER_REVIEW`
+
+| The undo is delivered twice
+| Same message identifier
+| The second one is ignored.
+| Unchanged
+
+.3+| Any step
+| The order service restarts in the middle
+| On restart
+| The order resumes from the last step it recorded; nothing is asked twice with a different effect.
+| As if nothing happened
+
+| A message is delivered twice, or two messages arrive together
+| Message identifier and order version
+| Each message has its effect once; the others are ignored.
+| Unchanged
+
+| A service commits its work and stops before telling the others
+| On restart
+| The pending message is sent; no business operation is lost.
+| As if nothing happened
+|===
+
+The technical design that implements these guarantees — the orchestrated saga, the transactional outbox, idempotent consumers, deadlines — is specified in folder 03.
+Each row of the table becomes a saga scenario there, with its sequence diagram and its tests.
+
+Owner: {role-sol} {role-arch} {role-sre}
+
+.The same analysis as a decision flow
+plantuml::diagrams/order-outcomes.puml[format=svg, align=center]

@@ -1,0 +1,30 @@
+@startuml
+title CP-ORD-001 — Order placed and confirmed (business view)
+
+actor Customer as C
+participant "Storefront" as S
+participant "Order" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Notification" as N
+
+C -> S : submit checkout
+S -> O : place order
+O --> S : accepted, order PENDING
+S --> C : "Your order is being processed"
+
+O ->> I : reserve stock
+I -->> O : stock reserved
+O ->> P : charge order total
+P -->> O : payment captured
+note right of P : point of no return
+O ->> I : confirm reservation
+I -->> O : reservation confirmed
+O -> O : order CONFIRMED
+
+O ->> N : order confirmed
+N ->> C : confirmation e-mail
+S -> O : ask order status
+O --> S : CONFIRMED
+S --> C : "Order confirmed"
+@enduml

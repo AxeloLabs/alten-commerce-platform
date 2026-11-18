@@ -1,0 +1,41 @@
+# BPMN-ORD-002 (proposed): a customer cancels a confirmed order and is refunded.
+id = "BPMN-ORD-002"
+name = "Order cancellation and refund"
+pool = "Alten Commerce Platform"
+
+lanes = [
+  { id = "customer", name = "Customer" },
+  { id = "order", name = "Order" },
+  { id = "inventory", name = "Inventory" },
+  { id = "payment", name = "Payment" },
+  { id = "notification", name = "Notification" },
+]
+
+nodes = [
+  { id = "start", type = "startEvent", lane = "customer", col = 0, name = "Cancellation requested" },
+  { id = "check", type = "serviceTask", lane = "order", col = 1, name = "Check the order status" },
+  { id = "allowed", type = "exclusiveGateway", lane = "order", col = 2, name = "CONFIRMED, not shipped?" },
+  { id = "refused", type = "endEvent", lane = "customer", col = 3, name = "Cancellation refused" },
+  { id = "restock", type = "serviceTask", lane = "inventory", col = 3, name = "Return the quantities to stock" },
+  { id = "refund", type = "serviceTask", lane = "payment", col = 4, name = "Refund the payment in full" },
+  { id = "refunded", type = "exclusiveGateway", lane = "order", col = 5, name = "Refunded?" },
+  { id = "cancel", type = "serviceTask", lane = "order", col = 6, name = "Set CANCELLED" },
+  { id = "review", type = "serviceTask", lane = "order", col = 6, row = 1, name = "Set UNDER_REVIEW, raise an alert" },
+  { id = "end_review", type = "endEvent", lane = "order", col = 7, row = 1, name = "Administrator takes over" },
+  { id = "mail", type = "sendTask", lane = "notification", col = 7, name = "Send the cancellation e-mail" },
+  { id = "end", type = "endEvent", lane = "customer", col = 8, name = "Order cancelled and refunded" },
+]
+
+flows = [
+  { from = "start", to = "check" },
+  { from = "check", to = "allowed" },
+  { from = "allowed", to = "refused", name = "no", exit = "top", enter = "left" },
+  { from = "allowed", to = "restock", name = "yes" },
+  { from = "restock", to = "refund" },
+  { from = "refund", to = "refunded" },
+  { from = "refunded", to = "cancel", name = "yes" },
+  { from = "refunded", to = "review", name = "keeps failing", exit = "bottom", enter = "left" },
+  { from = "review", to = "end_review" },
+  { from = "cancel", to = "mail" },
+  { from = "mail", to = "end" },
+]

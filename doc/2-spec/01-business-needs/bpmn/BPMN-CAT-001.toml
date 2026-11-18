@@ -1,0 +1,38 @@
+# BPMN-CAT-001: from a new product to a product customers can buy.
+id = "BPMN-CAT-001"
+name = "Product publication"
+pool = "Alten Commerce Platform"
+
+lanes = [
+  { id = "admin", name = "Administrator" },
+  { id = "catalog", name = "Catalog" },
+  { id = "inventory", name = "Inventory" },
+  { id = "customer", name = "Customer" },
+]
+
+nodes = [
+  { id = "start", type = "startEvent", lane = "admin", col = 0, name = "New product to sell" },
+  { id = "create", type = "userTask", lane = "admin", col = 1, name = "Enter SKU, name, category, price" },
+  { id = "draft", type = "serviceTask", lane = "catalog", col = 2, name = "Check the fields, save the draft" },
+  { id = "stock", type = "userTask", lane = "admin", col = 3, name = "Add stock, with a reason" },
+  { id = "movement", type = "serviceTask", lane = "inventory", col = 4, name = "Record the movement, publish availability" },
+  { id = "refresh", type = "serviceTask", lane = "catalog", col = 5, name = "Refresh displayed availability" },
+  { id = "publish", type = "userTask", lane = "admin", col = 6, name = "Publish the product" },
+  { id = "complete", type = "exclusiveGateway", lane = "catalog", col = 7, name = "Complete?" },
+  { id = "incomplete", type = "endEvent", lane = "admin", col = 8, name = "Missing information listed" },
+  { id = "published", type = "serviceTask", lane = "catalog", col = 8, name = "Set status PUBLISHED" },
+  { id = "end", type = "endEvent", lane = "customer", col = 9, name = "Product visible and purchasable" },
+]
+
+flows = [
+  { from = "start", to = "create" },
+  { from = "create", to = "draft" },
+  { from = "draft", to = "stock" },
+  { from = "stock", to = "movement" },
+  { from = "movement", to = "refresh" },
+  { from = "refresh", to = "publish" },
+  { from = "publish", to = "complete" },
+  { from = "complete", to = "incomplete", name = "no", exit = "top", enter = "left" },
+  { from = "complete", to = "published", name = "yes" },
+  { from = "published", to = "end" },
+]

@@ -1,0 +1,47 @@
+@startuml
+title Actors and their goals
+
+left to right direction
+
+actor Visitor as V
+actor Customer as C
+actor Administrator as A
+
+rectangle "Alten Commerce Platform" {
+  usecase "Become a customer\nand sign in" as IAM
+  usecase "Discover products" as DISC
+  usecase "Prepare a purchase" as CART
+  usecase "Keep favorites" as FAV
+  usecase "Buy the cart" as BUY
+  usecase "Follow an order" as FOLLOW
+  usecase "Cancel an order" as CANCEL
+  usecase "Manage the catalog" as CATALOG
+  usecase "Manage stock" as STOCK
+  usecase "Fulfill orders" as FULFILL
+  usecase "Recover a blocked order" as RECOVER
+}
+
+actor "Identity\nprovider" as IDP <<system>>
+actor "Payment provider\n(simulated)" as PSP <<system>>
+actor "E-mail\nprovider" as MAIL <<system>>
+
+V <|-- C
+
+V --> IAM
+V --> DISC
+C --> CART
+C --> FAV
+C --> BUY
+C --> FOLLOW
+C --> CANCEL
+A --> CATALOG
+A --> STOCK
+A --> FULFILL
+A --> RECOVER
+
+IAM --> IDP
+BUY --> PSP
+CANCEL --> PSP
+BUY --> MAIL
+FOLLOW --> MAIL
+@enduml

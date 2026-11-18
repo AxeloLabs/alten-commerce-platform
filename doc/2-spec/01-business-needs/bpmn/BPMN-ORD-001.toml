@@ -1,0 +1,50 @@
+# BPMN-ORD-001: a cart becomes a confirmed order, or is rejected with nothing owed.
+id = "BPMN-ORD-001"
+name = "Order placement"
+pool = "Alten Commerce Platform"
+
+lanes = [
+  { id = "customer", name = "Customer" },
+  { id = "order", name = "Order" },
+  { id = "inventory", name = "Inventory" },
+  { id = "payment", name = "Payment" },
+  { id = "notification", name = "Notification" },
+]
+
+nodes = [
+  { id = "start", type = "startEvent", lane = "customer", col = 0, name = "Checkout submitted" },
+  { id = "create", type = "serviceTask", lane = "order", col = 1, name = "Check the cart, create the order PENDING" },
+  { id = "valid", type = "exclusiveGateway", lane = "order", col = 2, name = "Cart unchanged?" },
+  { id = "review", type = "endEvent", lane = "customer", col = 3, name = "Back to the cart" },
+  { id = "reserve", type = "serviceTask", lane = "inventory", col = 3, name = "Reserve the stock of every line" },
+  { id = "reserved", type = "exclusiveGateway", lane = "order", col = 4, name = "Reserved?" },
+  { id = "charge", type = "serviceTask", lane = "payment", col = 5, name = "Charge the order total" },
+  { id = "paid", type = "exclusiveGateway", lane = "order", col = 6, name = "Captured?" },
+  { id = "confirm_stock", type = "serviceTask", lane = "inventory", col = 7, name = "Confirm the reservation" },
+  { id = "release", type = "serviceTask", lane = "inventory", col = 7, row = 1, name = "Release the reservation" },
+  { id = "confirm", type = "serviceTask", lane = "order", col = 8, name = "Set CONFIRMED, empty the cart" },
+  { id = "reject", type = "serviceTask", lane = "order", col = 8, row = 1, name = "Set REJECTED with its reason" },
+  { id = "mail_ok", type = "sendTask", lane = "notification", col = 9, name = "Send the confirmation e-mail" },
+  { id = "mail_ko", type = "sendTask", lane = "notification", col = 10, row = 1, name = "Send the rejection e-mail" },
+  { id = "end_ok", type = "endEvent", lane = "customer", col = 10, name = "Order confirmed" },
+  { id = "end_ko", type = "endEvent", lane = "customer", col = 11, row = 1, name = "Order rejected, nothing owed" },
+]
+
+flows = [
+  { from = "start", to = "create" },
+  { from = "create", to = "valid" },
+  { from = "valid", to = "review", name = "no", exit = "top", enter = "left" },
+  { from = "valid", to = "reserve", name = "yes" },
+  { from = "reserve", to = "reserved" },
+  { from = "reserved", to = "charge", name = "yes" },
+  { from = "reserved", to = "reject", name = "no", exit = "bottom", enter = "left" },
+  { from = "charge", to = "paid" },
+  { from = "paid", to = "confirm_stock", name = "captured" },
+  { from = "paid", to = "release", name = "refused", exit = "bottom", enter = "left" },
+  { from = "confirm_stock", to = "confirm", exit = "top", enter = "left" },
+  { from = "release", to = "reject" },
+  { from = "confirm", to = "mail_ok" },
+  { from = "reject", to = "mail_ko", exit = "bottom", enter = "left" },
+  { from = "mail_ok", to = "end_ok" },
+  { from = "mail_ko", to = "end_ko" },
+]

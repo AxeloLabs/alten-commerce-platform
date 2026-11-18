@@ -1,0 +1,209 @@
+= Non-Functional Requirements: How Well the System Shall Do It
+:doc-id: 01-07
+:revnumber: 0.1
+:revdate: 2026-11-18
+:revremark: Draft
+:description: Measurable quality attributes: performance, availability, reliability, security, observability, maintainability, scalability, usability and cost.
+include::../_shared/attributes.adoc[]
+
+== How quality attributes are written
+
+.Strategy question
+****
+What strategy turns "fast", "reliable" and "secure" into numbers a test or a dashboard can check?
+****
+
+A non-functional requirement is useless until it can be measured.
+Each one below states a *measure*, a *target* and the *way it is verified*: a test, a quality gate in the pipeline, or a service level objective watched in production.
+A requirement with no verification is a wish and is not accepted in this document.
+
+The attributes follow the ISO/IEC 25010 quality model, limited to those that matter for an order-management platform.
+Targets are deliberately modest: they describe a small store that must be correct before it is fast.
+They are the starting service level objectives; the Observability Strategy (05-03) turns them into indicators, dashboards and alerts.
+
+.Categories
+[%unbreakable, cols="2,4,9", options="header"]
+|===
+| Code | Category | Question
+| `PERF` | Performance | Is it fast enough for the customer?
+| `AVAIL` | Availability | Is it there when the customer comes?
+| `REL` | Reliability and consistency | Does it stay correct when something fails?
+| `SEC` | Security | Is it protected against misuse?
+| `OBS` | Observability | Can we see what it does and why it failed?
+| `MAINT` | Maintainability | Can we change it safely?
+| `SCAL` | Scalability | Does it follow the load?
+| `USAB` | Usability | Can people use it without help?
+| `COST` | Cost | Does it stay within budget?
+|===
+
+Load assumption for every performance target: 100 customers browsing at the same time, 50 catalog requests per second, 2 orders per second at peak.
+
+Owner: {role-sol} {role-sre}
+
+== Performance
+
+.Strategy question
+****
+What strategy keeps the customer from waiting, when placing an order takes several services and an external provider?
+****
+
+The customer never waits for the whole order to be processed.
+Placing an order is acknowledged at once; the outcome arrives a few seconds later.
+The two are measured separately.
+
+[cols="3,6,4,5", options="header"]
+|===
+| ID | Requirement | Target | Verified by
+| [[NFR-PERF-001]]NFR-PERF-001 | Response time of catalog and order reads (list, search, product, order history, order detail) | 95th percentile below 300 ms | Load test; latency objective per service
+| [[NFR-PERF-002]]NFR-PERF-002 | Time to acknowledge an order placement | 95th percentile below 500 ms | Load test on the checkout
+| [[NFR-PERF-003]]NFR-PERF-003 | Time from order placement to its outcome, when every service is healthy | 95th percentile below 5 s, 99th below 15 s | Load test; saga duration metric
+| [[NFR-PERF-004]]NFR-PERF-004 | Response time of cart and favorites operations | 95th percentile below 200 ms | Load test
+|===
+
+Owner: {role-swe} {role-sre}
+
+== Availability
+
+.Strategy question
+****
+What strategy keeps the store open when one of its parts is down?
+****
+
+[cols="3,6,4,5", options="header"]
+|===
+| ID | Requirement | Target | Verified by
+| [[NFR-AVAIL-001]]NFR-AVAIL-001 | Availability of the storefront read functions (catalog, product, cart) in production | 99.5 % per month | Availability objective on the entry point
+| [[NFR-AVAIL-002]]NFR-AVAIL-002 | No single point of failure: losing one instance or one zone stops no function | Every service runs at least 2 replicas in production, spread over zones | Deployment review; instance-kill test
+| [[NFR-AVAIL-003]]NFR-AVAIL-003 | Degraded mode: browsing, cart and favorites keep working when the order, payment or notification service is down | No error on those functions during the outage | Resilience test: stop each service in turn
+| [[NFR-AVAIL-004]]NFR-AVAIL-004 | Recovery after the loss of the database | At most 5 minutes of data lost, service back within 60 minutes | Restore drill
+|===
+
+Owner: {role-sre} {role-cloud}
+
+== Reliability and consistency
+
+.Strategy question
+****
+What strategy keeps orders, stock and payments consistent when messages are duplicated, delayed or lost and services restart?
+****
+
+These requirements are the technical face of the critical path {CP-ORD-004}.
+They are verified by the saga and resilience test scenarios of document 07-03.
+
+[cols="3,6,4,5", options="header"]
+|===
+| ID | Requirement | Target | Verified by
+| [[NFR-REL-001]]NFR-REL-001 | No business operation is lost: a state change and the message that announces it are saved together, and the message is eventually published even if the service stops in between | 100 % of committed changes published | Crash test between commit and publish
+| [[NFR-REL-002]]NFR-REL-002 | Duplicate, late and out-of-order messages are harmless | No double charge, no double refund, no double stock movement, no double e-mail | Duplicate-delivery and concurrency tests
+| [[NFR-REL-003]]NFR-REL-003 | No order stays without an outcome | Every order final or under review within 5 minutes; an alert otherwise | Deadline tests; alert on stuck orders
+| [[NFR-REL-004]]NFR-REL-004 | A new version is deployed without interrupting orders in progress | Zero failed order caused by a deployment | Rolling-update test under load
+| [[NFR-REL-005]]NFR-REL-005 | A committed change is published promptly | 99th percentile of publication delay below 5 s | Delay metric between commit and publish
+|===
+
+Owner: {role-arch} {role-sre}
+
+== Security
+
+.Strategy question
+****
+What strategy protects customers' data and the store's integrity at every layer?
+****
+
+[cols="3,6,4,5", options="header"]
+|===
+| ID | Requirement | Target | Verified by
+| [[NFR-SEC-001]]NFR-SEC-001 | Authentication through the identity provider with a standard protocol; every service validates the proof of identity itself | No request trusted on the word of another service | Security tests; architecture rule
+| [[NFR-SEC-002]]NFR-SEC-002 | Authorization checked on the server for every request, deny by default | Every cell of the authorization matrix has a test | Authorization test suite
+| [[NFR-SEC-003]]NFR-SEC-003 | Encryption in transit and at rest | TLS 1.2 or later on every external exchange; managed encryption on every data store | Configuration scan
+| [[NFR-SEC-004]]NFR-SEC-004 | Secrets kept in the secret manager only | No secret in the repository, in an image or in a log | Secret scan in the pipeline
+| [[NFR-SEC-005]]NFR-SEC-005 | No known serious vulnerability shipped | No critical or high vulnerability in dependencies or images at release | Dependency and image scans as quality gates
+| [[NFR-SEC-006]]NFR-SEC-006 | Administration actions are audited | Who, what, when for every change to catalog, stock and orders | Audit record tests
+| [[NFR-SEC-007]]NFR-SEC-007 | Personal data is minimized; logs and e-mails carry no password, token or payment data | Zero occurrence | Log review test; code review rule
+| [[NFR-SEC-008]]NFR-SEC-008 | Common web attacks are mitigated | No finding of high severity in the dynamic scan | Dynamic security scan of the test environment
+|===
+
+Owner: {role-sec}
+
+== Observability
+
+.Strategy question
+****
+What strategy lets an engineer follow one order through every service, and know within minutes that something is wrong?
+****
+
+[cols="3,6,4,5", options="header"]
+|===
+| ID | Requirement | Target | Verified by
+| [[NFR-OBS-001]]NFR-OBS-001 | Every request and every message carries a trace identifier; everything done for an order carries its saga identifier | An order can be followed end to end from one identifier | Trace continuity test across services
+| [[NFR-OBS-002]]NFR-OBS-002 | Logs are structured, centralized and searchable by trace, saga and order identifier | 100 % of log lines structured | Log format check
+| [[NFR-OBS-003]]NFR-OBS-003 | Each service exposes its rate, errors and durations, and the business exposes orders by outcome and reason | Dashboards per service and for the order flow | Dashboard review
+| [[NFR-OBS-004]]NFR-OBS-004 | Alerts are raised on objectives at risk, on messages set aside and on orders stuck or under review | Alert within 5 minutes | Alert tests in the test environment
+|===
+
+Owner: {role-sre} {role-platform}
+
+== Maintainability
+
+.Strategy question
+****
+What strategy keeps the code changeable after the tenth feature as easily as after the first?
+****
+
+[cols="3,6,4,5", options="header"]
+|===
+| ID | Requirement | Target | Verified by
+| [[NFR-MAINT-001]]NFR-MAINT-001 | Domain code is fully covered by unit tests that need no framework and no database, and those tests detect regressions | 100 % line and branch coverage; mutation score of 80 % or more | Coverage and mutation gates
+| [[NFR-MAINT-002]]NFR-MAINT-002 | The architecture rules are checked at every build | Zero violation | Architecture tests
+| [[NFR-MAINT-003]]NFR-MAINT-003 | Contracts between services are versioned; a breaking change is detected before it is merged | Zero undetected breaking change | Contract comparison in the pipeline
+| [[NFR-MAINT-004]]NFR-MAINT-004 | The persistence of the catalog and of the cart can be PostgreSQL, a document database or a file without changing domain or application code | One contract test suite passes on the three adapters | Adapter contract tests
+| [[NFR-MAINT-005]]NFR-MAINT-005 | The code follows one style, enforced automatically | Zero formatting or static-analysis violation at merge | Formatting and analysis gates
+|===
+
+Owner: {role-arch} {role-swe} {role-qa}
+
+== Scalability
+
+.Strategy question
+****
+What strategy lets the store absorb a peak without being sized for it all year?
+****
+
+[cols="3,6,4,5", options="header"]
+|===
+| ID | Requirement | Target | Verified by
+| [[NFR-SCAL-001]]NFR-SCAL-001 | Services keep no state in memory between requests and scale by adding instances | From 2 to 6 replicas automatically, performance targets held at twice the nominal load | Load test with autoscaling
+|===
+
+Owner: {role-platform} {role-sre}
+
+== Usability
+
+.Strategy question
+****
+What strategy makes the storefront usable by everyone, including when something goes wrong?
+****
+
+[cols="3,6,4,5", options="header"]
+|===
+| ID | Requirement | Target | Verified by
+| [[NFR-USAB-001]]NFR-USAB-001 | The storefront adapts to phone, tablet and desktop, and meets accessibility guidelines | WCAG 2.1 level AA on the customer journeys | Automated accessibility checks in end-to-end tests
+| [[NFR-USAB-002]]NFR-USAB-002 | Every error shown to a person says what happened, what to do, and carries a reference that support can look up | 100 % of error messages | Error catalog review; end-to-end tests of error paths
+|===
+
+Owner: {role-swe} {role-qa}
+
+== Cost
+
+.Strategy question
+****
+What strategy prevents a demonstration platform from producing a surprising cloud bill?
+****
+
+[cols="3,6,4,5", options="header"]
+|===
+| ID | Requirement | Target | Verified by
+| [[NFR-COST-001]]NFR-COST-001 | Spending is watched against a monthly budget | Alerts at 50 %, 90 % and 100 % of the budget, and on the forecast | Budget configuration review
+| [[NFR-COST-002]]NFR-COST-002 | Environments that are not production consume nothing when unused | Scaled to zero outside working sessions | Scheduled scale-down check
+|===
+
+Owner: {role-cloud} {role-devops}

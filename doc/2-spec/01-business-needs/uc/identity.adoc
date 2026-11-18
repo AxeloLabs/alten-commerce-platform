@@ -1,0 +1,79 @@
+// ids:end
+== Identity and access
+
+Accounts and credentials belong to the identity provider; the platform decides what each role may do.
+
+[[UC-IAM-001]]
+=== UC-IAM-001 — Register an account
+
+[cols="3,11"]
+|===
+| Overview | A visitor creates an account with an e-mail address and a password, and becomes a customer. Credentials are entered on the identity provider's pages, never on the storefront.
+| Primary actor | Visitor
+| Supporting actors | Identity provider
+| Goal | Own an account with the role `CUSTOMER`.
+| Priority and status | {must} · {st-draft}
+| Trigger | The visitor chooses "Create an account", or tries to use the cart.
+| Preconditions | The visitor is not signed in.
+| Success guarantees | An account exists for the e-mail address, with the role `CUSTOMER` and no other. The customer has an empty cart and no favorites.
+| Minimal guarantees | No account is created unless every check passed. No password is stored or logged by the platform.
+| Authorization | {allowed} Visitor. {denied} A signed-in actor: registration is not offered.
+| Business rules | {FR-IAM-001} {FR-IAM-002} {FR-IAM-006}
+| Quality attributes | {NFR-SEC-001} {NFR-SEC-007}
+| Stories | {US-IAM-001}
+| Acceptance | {BDD-IAM-001} {BDD-IAM-002}
+|===
+
+.Main success scenario
+. The visitor asks to create an account.
+. The system hands over to the identity provider, which shows the registration form.
+. The visitor enters an e-mail address and a password.
+. The identity provider checks the e-mail format, that the address is not registered, and the password policy.
+. The identity provider creates the account with the role `CUSTOMER`.
+. The system welcomes the customer, who can sign in at once.
+
+.Exception flows
+4a. The e-mail address is already registered:: The account is not created. The visitor is told the address cannot be used and is offered to sign in.
+4b. The password does not meet the policy:: The account is not created. The policy is shown.
+4c. The identity provider is unavailable:: The storefront says registration is temporarily unavailable. Catalog browsing keeps working.
+
+[[UC-IAM-002]]
+=== UC-IAM-002 — Sign in and access protected functions
+
+{critical}
+
+[cols="3,11"]
+|===
+| Overview | An actor proves who they are; from then on, every request carries their identity and role, and the system allows or refuses each function accordingly.
+| Primary actor | Customer or administrator
+| Supporting actors | Identity provider
+| Goal | Be recognized, and reach exactly what the role allows.
+| Priority and status | {must} · {st-draft}
+| Trigger | The actor chooses "Sign in", or opens a protected function.
+| Preconditions | The actor has an account.
+| Success guarantees | The actor is signed in. Each later request is authorized against the authorization matrix.
+| Minimal guarantees | No protected function runs for an unauthenticated or unauthorized request. A refusal reveals nothing about data the actor may not see.
+| Authorization | {allowed} Any account holder. {denied} Any function outside the actor's row of the authorization matrix.
+| Business rules | {FR-IAM-003} {FR-IAM-004} {FR-IAM-005} {FR-IAM-006}
+| Quality attributes | {NFR-SEC-001} {NFR-SEC-002} {NFR-SEC-006}
+| Stories | {US-IAM-002} {US-IAM-003}
+| Acceptance | {BDD-IAM-003} {BDD-IAM-004} {BDD-IAM-005} {BDD-IAM-006} {BDD-IAM-007}
+|===
+
+.Main success scenario
+. The actor asks to sign in.
+. The system hands over to the identity provider, which asks for the credentials.
+. The actor enters an e-mail address and a password.
+. The identity provider verifies them and returns a proof of identity carrying the role.
+. The system shows who is signed in and the functions of the role.
+. The actor uses a protected function; the system checks the role and, for customer data, the ownership, then performs it.
+. The actor signs out; the system ends the session.
+
+.Alternative flows
+1a. The actor opens a protected function without being signed in:: The system starts the sign-in and, once done, returns to the function requested.
+6a. The session expired:: The system renews it silently if it can, otherwise starts the sign-in again.
+
+.Exception flows
+4a. The credentials are wrong:: The actor is told sign-in failed, without saying whether the address or the password is wrong. Repeated failures slow further attempts.
+6b. The role does not allow the function:: The function is refused. The refusal is recorded.
+6c. The data belongs to another customer:: The system answers "not found".
