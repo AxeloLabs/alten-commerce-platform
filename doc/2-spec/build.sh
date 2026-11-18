@@ -56,5 +56,22 @@ if grep -l -i -E 'deprecated|Syntax(&#160;| )Error|Cannot(&#160;| )(include|open
 fi
 echo "diagrams: no PlantUML warning or error"
 
+step "Document check"
+# A version attribute quoted inside a listing block is not substituted unless the block asks for it.
+if command -v pdftotext >/dev/null; then
+  leftovers=0
+  for source in "${sources[@]}"; do
+    pdf="$GEN/pdf/${source#2-spec/}"; pdf="${pdf%.adoc}.pdf"
+    if pdftotext "$pdf" - | grep -n -E '\{v-[a-z0-9-]+\}'; then
+      echo "  ^ unresolved version attribute in $pdf" >&2
+      leftovers=1
+    fi
+  done
+  [[ $leftovers -eq 0 ]] || exit 1
+  echo "documents: no unresolved version attribute"
+else
+  echo "documents: pdftotext not found, check skipped"
+fi
+
 step "Done"
 printf '%s document(s) in %s\n' "${#sources[@]}" "$GEN/pdf"

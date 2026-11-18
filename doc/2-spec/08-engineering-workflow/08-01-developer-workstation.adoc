@@ -133,7 +133,7 @@ Where the HTTP client is missing, requests are kept as shell scripts in the repo
 Code style, inspections and run configurations that must be shared are committed with the repository; personal settings are not.
 
 .Installation without administrator rights
-[source,shell]
+[source,shell,subs="+attributes"]
 ----
 # 1. Download the archive and its checksum from the publisher
 curl -fLO https://download.jetbrains.com/idea/idea-{v-intellij}.tar.gz
