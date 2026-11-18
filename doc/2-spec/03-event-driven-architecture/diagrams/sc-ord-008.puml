@@ -1,0 +1,20 @@
+@startuml
+title SC-ORD-008 — The same message is delivered twice
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+
+O ->> P : ChargePayment
+P -> PSP : charge
+PSP --> P : captured
+P ->> O : PaymentCaptured
+note over O : one transaction: message recorded,\nsaga CONFIRMING_STOCK,\nConfirmReservation to send
+O ->> I : ConfirmReservation
+P ->> O : PaymentCaptured (duplicate)
+note over O : message already recorded:\nacknowledged, nothing done
+O ->> P : ChargePayment (duplicate)
+note over P : a payment exists for this order:\nthe provider is not called
+P ->> O : PaymentCaptured (same answer)
+note over O : recorded as a new message,\nbut the saga no longer expects it: ignored
+@enduml

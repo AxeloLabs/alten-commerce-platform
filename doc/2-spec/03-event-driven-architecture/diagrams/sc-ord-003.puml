@@ -1,0 +1,19 @@
+@startuml
+title SC-ORD-003 — Stock not available: no payment is ever requested
+actor Customer as C
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+participant "Notification" as N
+
+C -> O : PlaceOrder
+O --> C : accepted, order PENDING
+O ->> I : ReserveStock
+note over I : one line cannot be reserved:\nnothing is reserved at all
+I ->> O : StockReservationRejected
+note over O #FFCDD2 : COMPENSATED\norder REJECTED, OUT_OF_STOCK
+note over P : never called
+O ->> N : OrderRejected
+N ->> C : rejection e-mail
+@enduml

@@ -1,0 +1,23 @@
+@startuml
+title SC-ORD-012 — Paid, then the stock is gone: refunded, then rejected
+actor Administrator as A
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+participant "Notification" as N
+
+note over O #FFF8E1 : SUSPENDED\norder UNDER_REVIEW\npayment captured
+note over I : was down longer than\nthe reservation lifetime
+A -> O : RetryOrderUnderReview, with a comment
+O ->> I : ConfirmReservation
+note over I : reservation expired;\ntries to reserve again:\nthe stock is gone
+I ->> O : ReservationConfirmationFailed
+note over O : REFUNDING_PAYMENT
+O ->> P : RefundPayment
+P -> PSP : refund
+PSP --> P : refunded
+P ->> O : PaymentRefunded
+note over O #FFCDD2 : COMPENSATED\norder REJECTED, OUT_OF_STOCK
+O ->> N : OrderRejected (payment refunded)
+@enduml

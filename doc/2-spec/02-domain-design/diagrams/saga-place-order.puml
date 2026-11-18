@@ -19,7 +19,7 @@ CONFIRMING_STOCK --> COMPLETED : ReservationConfirmed
 
 RESERVING_STOCK -right-> COMPENSATED : rejected,\nor order deadline
 CHARGING_PAYMENT -right-> COMPENSATED : PaymentRefused
-CHARGING_PAYMENT -left-> CANCELING_PAYMENT : order deadline
+CHARGING_PAYMENT -left-> CANCELING_PAYMENT : outcome unknown,\nor order deadline
 CANCELING_PAYMENT --> CONFIRMING_STOCK : PaymentCaptured
 CANCELING_PAYMENT --> COMPENSATED : PaymentCanceled
 CONFIRMING_STOCK -left-> REFUNDING_PAYMENT : confirmation\nfailed

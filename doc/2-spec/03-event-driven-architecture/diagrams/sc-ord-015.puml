@@ -1,0 +1,30 @@
+@startuml
+title SC-ORD-015 — Nobody can tell whether the payment was captured
+actor Administrator as A
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+participant "Notification" as N
+
+O ->> P : ChargePayment
+P -> PSP : charge
+note over PSP #ECEFF1 : unreachable
+P ->> O : PaymentOutcomeUnknown
+note over O : CANCELING_PAYMENT
+O ->> P : CancelPayment
+P -> PSP : cancel (retries)
+... review deadline ...
+O -> O : review deadline reached
+note over O #FFF8E1 : SUSPENDED\norder UNDER_REVIEW\npayment UNKNOWN, stock reserved
+O ->> N : OrderPutUnderReview
+== the provider is reachable again ==
+A -> O : RejectOrderUnderReview, with a comment
+O ->> P : CancelPayment
+P -> PSP : cancel
+PSP --> P : canceled
+P ->> O : PaymentCanceled
+O ->> I : ReleaseReservation
+note over O #FFCDD2 : COMPENSATED\norder REJECTED, ADMIN_DECISION
+O ->> N : OrderRejected
+@enduml

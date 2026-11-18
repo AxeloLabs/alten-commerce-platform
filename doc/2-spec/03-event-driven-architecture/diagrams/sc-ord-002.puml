@@ -1,0 +1,24 @@
+@startuml
+title SC-ORD-002 — Payment refused: the stock is released
+actor Customer as C
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+participant "Notification" as N
+
+C -> O : PlaceOrder
+O --> C : accepted, order PENDING
+O ->> I : ReserveStock
+I ->> O : StockReserved
+O ->> P : ChargePayment
+P -> PSP : charge
+PSP --> P : declined
+P ->> O : PaymentRefused
+O ->> I : ReleaseReservation
+note over O #FFCDD2 : COMPENSATED\norder REJECTED, PAYMENT_REFUSED
+O ->> N : OrderRejected
+N ->> C : rejection e-mail
+I ->> O : ReservationReleased
+note right of O : recorded; the saga\ndid not wait for it
+@enduml

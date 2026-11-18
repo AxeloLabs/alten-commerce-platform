@@ -1,0 +1,180 @@
+= Command and Event Catalog: Everything That Is Asked and Everything That Is Announced
+:doc-id: 03-02
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The complete list of commands and events of the platform, with their sender, receiver, transport, key and content.
+include::../_shared/attributes.adoc[]
+
+== How to read the catalog
+
+.Strategy question
+****
+What strategy lets anyone find, in one place, every message the platform exchanges and what it means?
+****
+
+The catalog has three parts: the commands people send over REST, the commands services send each other as messages, and the events.
+Each entry has an identifier; contracts, sagas, tests and dashboards refer to it.
+
+Names follow three conventions.
+
+* A command is an imperative verb and an object: `ReserveStock`.
+* An event is the object and a past participle: `StockReserved`.
+* A name never contains the name of a technology, of a service or of a version.
+
+Every message carries the envelope described in document 03-04: its own identifier, its type, the saga it belongs to, and the trace it is part of.
+The tables below list the business content only.
+*Key* is the value that keeps messages about the same thing in order: all messages with the same key are delivered to a subscriber in the order they were published.
+
+Owner: {role-sol} {role-data}
+
+== Commands from people
+
+.Strategy question
+****
+What strategy maps every action of an actor to one command handled by one service?
+****
+
+These commands arrive synchronously, on the REST interface of the service that handles them, and are answered at once.
+Their interfaces are specified in document 04-05.
+
+[cols="3,5,3,3,6", options="header"]
+|===
+| ID | Command | Sent by | Handled by | Use case and outcome
+| [[CMD-CAT-001]]CMD-CAT-001 | `CreateProduct` | Administrator | Catalog | {UC-CAT-003}. A draft exists.
+| [[CMD-CAT-002]]CMD-CAT-002 | `UpdateProduct` | Administrator | Catalog | {UC-CAT-004}. Refused on an outdated version.
+| [[CMD-CAT-003]]CMD-CAT-003 | `ChangeProductPrice` | Administrator | Catalog | {UC-CAT-005}. The price history gains an entry.
+| [[CMD-CAT-004]]CMD-CAT-004 | `PublishProduct` | Administrator | Catalog | {UC-CAT-006}. Refused if the draft is incomplete.
+| [[CMD-CAT-005]]CMD-CAT-005 | `RetireProduct` | Administrator | Catalog | {UC-CAT-006}. Final.
+| [[CMD-INV-001]]CMD-INV-001 | `AdjustStock` | Administrator | Inventory | {UC-INV-001}. Publishes {EVT-INV-007}.
+| [[CMD-CART-001]]CMD-CART-001 | `AddCartLine` | Customer | Cart | {UC-CART-001}. Reads the catalog first.
+| [[CMD-CART-002]]CMD-CART-002 | `SetCartLineQuantity` | Customer | Cart | {UC-CART-003}. Zero removes the line.
+| [[CMD-CART-003]]CMD-CART-003 | `RemoveCartLine` | Customer | Cart | {UC-CART-003}.
+| [[CMD-CART-004]]CMD-CART-004 | `MarkFavorite` | Customer | Cart | {UC-CART-004}. Repeating it changes nothing.
+| [[CMD-CART-005]]CMD-CART-005 | `UnmarkFavorite` | Customer | Cart | {UC-CART-004}.
+| [[CMD-ORD-001]]CMD-ORD-001 | `PlaceOrder` | Customer | Order | {UC-ORD-001}. Acknowledged with the order `PENDING`; starts the place-order saga.
+| [[CMD-ORD-002]]CMD-ORD-002 | `CancelOrder` | Customer | Order | {UC-ORD-004}. The order becomes `CANCELING`; starts the cancel-order saga.
+| [[CMD-ORD-003]]CMD-ORD-003 | `ShipOrder` | Administrator | Order | {UC-ORD-006}. Publishes {EVT-ORD-005}.
+| [[CMD-ORD-004]]CMD-ORD-004 | `DeliverOrder` | Administrator | Order | {UC-ORD-006}. Publishes {EVT-ORD-006}.
+| [[CMD-ORD-005]]CMD-ORD-005 | `RetryOrderUnderReview` | Administrator | Order | {UC-ORD-007}. The suspended step is requested again.
+| [[CMD-ORD-006]]CMD-ORD-006 | `ConfirmOrderUnderReview` | Administrator | Order | {UC-ORD-007}. Refused unless the payment is captured.
+| [[CMD-ORD-007]]CMD-ORD-007 | `RejectOrderUnderReview` | Administrator | Order | {UC-ORD-007}. The payment is refunded or canceled first.
+|===
+
+`PlaceOrder` carries the checkout identifier, the shipping address, the payment token and the lines and prices the customer reviewed.
+The order service compares them with the cart and the catalog before creating anything ({FR-ORD-003}).
+
+== Commands between services
+
+.Strategy question
+****
+What strategy lets the order service ask another service to act, and be sure the request is not lost if that service is down?
+****
+
+These commands are messages.
+They are sent only by the sagas of the order service, each to one service, on that service's command topic.
+A command that is delivered twice has its effect once: the receiver recognizes the order it concerns and answers what it answered the first time.
+
+[cols="3,4,3,5,5", options="header"]
+|===
+| ID | Command | To | Content | Answered by
+| [[CMD-INV-002]]CMD-INV-002 | `ReserveStock` | Inventory | Order identifier, lines (SKU, quantity), expiry time | {EVT-INV-001} or {EVT-INV-002}
+| [[CMD-INV-003]]CMD-INV-003 | `ConfirmReservation` | Inventory | Order identifier | {EVT-INV-003} or {EVT-INV-004}
+| [[CMD-INV-004]]CMD-INV-004 | `ReleaseReservation` | Inventory | Order identifier, reason | {EVT-INV-005}
+| [[CMD-INV-005]]CMD-INV-005 | `ReturnStock` | Inventory | Order identifier, lines | {EVT-INV-006}
+| [[CMD-PAY-001]]CMD-PAY-001 | `ChargePayment` | Payment | Order identifier, amount, currency, payment token | {EVT-PAY-001}, {EVT-PAY-002} or {EVT-PAY-003}
+| [[CMD-PAY-002]]CMD-PAY-002 | `CancelPayment` | Payment | Order identifier | {EVT-PAY-004} or {EVT-PAY-001}
+| [[CMD-PAY-003]]CMD-PAY-003 | `RefundPayment` | Payment | Order identifier | {EVT-PAY-005} or {EVT-PAY-006}
+|===
+
+The key of every command is the order identifier.
+The payment token travels in `ChargePayment` only; it is used once by the payment service and never stored or logged ({FR-PAY-003}).
+
+== Events of the inventory
+
+.Strategy question
+****
+What strategy tells the order what happened to its stock, and the catalog what can be sold?
+****
+
+Published by the inventory service on its event topic.
+
+[cols="3,5,5,3,4", options="header"]
+|===
+| ID | Event | Content | Key | Consumed by
+| [[EVT-INV-001]]EVT-INV-001 | `StockReserved` | Order identifier, reservation identifier, expiry time | Order | Order saga
+| [[EVT-INV-002]]EVT-INV-002 | `StockReservationRejected` | Order identifier, the lines that could not be reserved | Order | Order saga
+| [[EVT-INV-003]]EVT-INV-003 | `ReservationConfirmed` | Order identifier | Order | Order saga
+| [[EVT-INV-004]]EVT-INV-004 | `ReservationConfirmationFailed` | Order identifier, the lines no longer available | Order | Order saga
+| [[EVT-INV-005]]EVT-INV-005 | `ReservationReleased` | Order identifier | Order | Order saga, for the record
+| [[EVT-INV-006]]EVT-INV-006 | `StockReturned` | Order identifier | Order | Cancel saga
+| [[EVT-INV-007]]EVT-INV-007 | `StockAvailabilityChanged` | SKU, available quantity, sequence number | SKU | Catalog
+|===
+
+`StockAvailabilityChanged` carries a sequence number that grows with each change of a SKU.
+A consumer that receives an older number than the one it already applied ignores the event ({FR-INV-007}, {FR-CAT-008}).
+
+== Events of the payment
+
+.Strategy question
+****
+What strategy tells the order where its money stands, without ever leaving it guessing?
+****
+
+Published by the payment service on its event topic.
+
+[cols="3,5,5,3,4", options="header"]
+|===
+| ID | Event | Content | Key | Consumed by
+| [[EVT-PAY-001]]EVT-PAY-001 | `PaymentCaptured` | Order identifier, payment identifier, amount | Order | Order saga
+| [[EVT-PAY-002]]EVT-PAY-002 | `PaymentRefused` | Order identifier, general reason | Order | Order saga
+| [[EVT-PAY-003]]EVT-PAY-003 | `PaymentOutcomeUnknown` | Order identifier | Order | Order saga
+| [[EVT-PAY-004]]EVT-PAY-004 | `PaymentCanceled` | Order identifier | Order | Order saga
+| [[EVT-PAY-005]]EVT-PAY-005 | `PaymentRefunded` | Order identifier, amount | Order | Order sagas
+| [[EVT-PAY-006]]EVT-PAY-006 | `PaymentRefundFailed` | Order identifier, general reason | Order | Order sagas
+|===
+
+`PaymentCaptured` answers `ChargePayment`, and also answers `CancelPayment` when the payment turned out to be captured ({FR-PAY-005}).
+No payment event carries the token, the provider's reference or any card data.
+
+== Events of the order
+
+.Strategy question
+****
+What strategy lets the rest of the platform follow orders without the order service depending on anyone?
+****
+
+Published by the order service on its event topic, for whoever listens.
+
+[cols="3,4,6,3,4", options="header"]
+|===
+| ID | Event | Content | Key | Consumed by
+| [[EVT-ORD-001]]EVT-ORD-001 | `OrderConfirmed` | Order identifier and number, customer identifier and e-mail, lines, total | Order | Cart, notification
+| [[EVT-ORD-002]]EVT-ORD-002 | `OrderRejected` | Order identifier and number, customer e-mail, reason, whether a payment was refunded | Order | Notification
+| [[EVT-ORD-003]]EVT-ORD-003 | `OrderPutUnderReview` | Order identifier and number, customer e-mail | Order | Notification
+| [[EVT-ORD-004]]EVT-ORD-004 | `OrderCanceled` | Order identifier and number, customer e-mail, amount refunded | Order | Notification
+| [[EVT-ORD-005]]EVT-ORD-005 | `OrderShipped` | Order identifier and number, customer e-mail | Order | Notification
+| [[EVT-ORD-006]]EVT-ORD-006 | `OrderDelivered` | Order identifier and number, customer e-mail | Order | Notification
+|===
+
+Order events are self-sufficient: they carry what a listener needs, so that no listener has to call the order service back.
+The customer's e-mail address is the only personal data they contain; it is not logged ({NFR-SEC-007}).
+
+== Summary
+
+.Strategy question
+****
+What strategy shows at a glance who talks to whom?
+****
+
+.Who sends, who receives
+[%unbreakable, cols="4,5,5,5", options="header"]
+|===
+| Service | Receives commands | Publishes events | Listens to events
+| Catalog | From the administrator | – | {EVT-INV-007}
+| Inventory | From the administrator; from the order sagas | {EVT-INV-001} to {EVT-INV-007} | –
+| Cart | From the customer | – | {EVT-ORD-001}
+| Order | From the customer and the administrator | {EVT-ORD-001} to {EVT-ORD-006} | Inventory and payment events
+| Payment | From the order sagas | {EVT-PAY-001} to {EVT-PAY-006} | –
+| Notification | – | – | Order events
+|===

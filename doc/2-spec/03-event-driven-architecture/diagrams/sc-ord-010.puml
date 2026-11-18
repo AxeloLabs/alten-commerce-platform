@@ -1,0 +1,18 @@
+@startuml
+title SC-ORD-010 — Two things happen to the same order at the same instant
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+
+O ->> I : ReserveStock
+note over I : slow
+I ->> O : StockReserved
+O -> O : order deadline reached
+note over O : two handlers load the saga\nat version 3, at the same time
+note over O : deadline handler saves first:\nCOMPENSATED, version 4,\nReleaseReservation to send
+O ->> I : ReleaseReservation
+note over O : StockReserved handler tries to save:\nversion conflict, nothing is saved,\nthe message is not acknowledged
+I ->> O : StockReserved (delivered again)
+note over O : saga is COMPENSATED:\nReleaseReservation is sent again
+note over P : never called
+@enduml

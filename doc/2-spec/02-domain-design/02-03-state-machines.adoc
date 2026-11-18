@@ -116,8 +116,8 @@ plantuml::diagrams/saga-place-order-review.puml[format=svg, align=center]
 | Sends `ReleaseReservation`. Rejects the order: `PAYMENT_REFUSED`.
 | `COMPENSATED`
 
-| Order deadline
-| Sends `CancelPayment`.
+| `PaymentOutcomeUnknown`, or the order deadline
+| Sends `CancelPayment`. When the payment service itself reports that nothing is established, the saga does not wait for the deadline.
 | `CANCELING_PAYMENT`
 
 .2+| `CANCELING_PAYMENT`

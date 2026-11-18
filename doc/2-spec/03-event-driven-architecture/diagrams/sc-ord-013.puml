@@ -1,0 +1,27 @@
+@startuml
+title SC-ORD-013 — A refund keeps failing: never recorded as done
+actor Administrator as A
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+participant "Notification" as N
+
+note over O : REFUNDING_PAYMENT
+O ->> P : RefundPayment
+P -> PSP : refund
+PSP --> P : error
+P -> PSP : refund (retries)
+PSP --> P : error
+P ->> O : PaymentRefundFailed
+note over P : payment still CAPTURED
+note over O #FFF8E1 : SUSPENDED\norder UNDER_REVIEW\nalert raised
+== the provider works again ==
+A -> O : RetryOrderUnderReview, with a comment
+O ->> P : RefundPayment
+P -> PSP : refund
+PSP --> P : refunded
+P ->> O : PaymentRefunded
+note over O #FFCDD2 : COMPENSATED\norder REJECTED
+O ->> N : OrderRejected (payment refunded)
+@enduml

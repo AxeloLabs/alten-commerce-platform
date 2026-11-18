@@ -1,0 +1,25 @@
+@startuml
+title SC-ORD-004 — The inventory does not answer
+actor Customer as C
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+participant "Notification" as N
+
+C -> O : PlaceOrder
+O --> C : accepted, order PENDING
+O ->> I : ReserveStock
+note over I #ECEFF1 : down: the message waits\nin its subscription
+... order deadline ...
+O -> O : order deadline reached
+O ->> I : ReleaseReservation
+note over O #FFCDD2 : COMPENSATED\norder REJECTED, TIMED_OUT
+note over P : never called
+O ->> N : OrderRejected
+== the inventory is back ==
+note over I : handles ReserveStock,\nthen ReleaseReservation,\nin the order they were sent
+I ->> O : StockReserved
+note right of O : saga already ended:\nReleaseReservation is sent again
+I ->> O : ReservationReleased
+@enduml

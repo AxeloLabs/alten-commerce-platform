@@ -1,0 +1,14 @@
+@startuml
+title Events and those who react to them
+
+rectangle "Inventory" as I
+rectangle "Order" as O #FFE0B2
+rectangle "Catalog" as CAT
+rectangle "Cart" as C
+rectangle "Notification" as N
+
+I .right.> CAT : StockAvailabilityChanged
+O .left.> C : OrderConfirmed
+O .right.> N : OrderConfirmed, OrderRejected,\nOrderPutUnderReview, OrderCanceled,\nOrderShipped, OrderDelivered
+I -[hidden]down-> O
+@enduml

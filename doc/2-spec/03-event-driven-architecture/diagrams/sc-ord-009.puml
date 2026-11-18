@@ -1,0 +1,16 @@
+@startuml
+title SC-ORD-009 — A service stops after saving and before publishing
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+
+O ->> I : ReserveStock
+note over I : one transaction:\nreservation HELD,\nStockReserved in the outbox,\nmessage recorded
+note over I #ECEFF1 : stops before\npublishing anything
+== the inventory restarts ==
+note over I : the relay finds StockReserved\nstill unpublished
+I ->> O : StockReserved
+note over I : marked as published
+O ->> P : ChargePayment
+note right of O : had it stopped after publishing\nand before marking, StockReserved\nwould be published twice:\nsee SC-ORD-008
+@enduml

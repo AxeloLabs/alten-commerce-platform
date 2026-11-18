@@ -1,0 +1,25 @@
+@startuml
+title Order placement: commands and events
+
+skinparam rectangle {
+  roundCorner 10
+}
+
+rectangle "Order\n(saga)" as O #FFE0B2
+rectangle "Inventory" as I
+rectangle "Payment" as P
+rectangle "Cart" as C
+rectangle "Notification" as N
+
+O -right-> I : 1. ReserveStock\n4. ConfirmReservation
+I -left-> O : 2. StockReserved\n5. ReservationConfirmed
+O -down-> P : 3. ChargePayment
+P -up-> O : 3'. PaymentCaptured
+O .left.> C : 6. OrderConfirmed
+O .up.> N : 6. OrderConfirmed
+
+legend right
+  Solid arrow: command, and the event that answers it
+  Dotted arrow: event published for whoever listens
+endlegend
+@enduml

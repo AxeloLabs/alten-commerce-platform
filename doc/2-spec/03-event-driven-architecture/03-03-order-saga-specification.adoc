@@ -1,0 +1,362 @@
+= Order Saga Specification: Steps, Compensations and Every Way It Can Go Wrong
+:doc-id: 03-03
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The orchestrated sagas of the order service, the saga identifier, the deadlines, and one sequence diagram per scenario, failures included.
+include::../_shared/attributes.adoc[]
+
+== Why a saga
+
+.Strategy question
+****
+What strategy keeps an order, its stock and its payment consistent when no single transaction can cover the three?
+****
+
+Placing an order changes data in three services: the order, the stock, the payment.
+Each has its own database; a database transaction cannot span them, and a distributed transaction would stop every order whenever one participant is slow or down (document 04-06 explains why two-phase commit is not used).
+
+A *saga* replaces the one big transaction with a sequence of local ones.
+Each step commits in its own service.
+If a later step fails, the steps already done are undone by *compensations*: explicit actions that reverse them, such as releasing a reservation or refunding a payment.
+A saga does not make the system consistent at every instant; it guarantees that it *becomes* consistent, and that nobody is left in between forever.
+
+The sagas of the platform are *orchestrated*: the order service holds the sequence, sends each command and decides on each answer (document 03-01).
+The orchestrator is not a separate service; it is the saga module of the order service, and its state is saved with the order.
+
+Owner: {role-sol} {role-arch} {role-sre}
+
+== The place-order saga at a glance
+
+.Strategy question
+****
+What strategy orders the steps so that the costly ones are never undone?
+****
+
+Steps are of three kinds.
+A *compensable* step can be undone.
+The *pivot* is the step after which the saga goes forward: nothing after it may fail for a business reason.
+A *retriable* step comes after the pivot and is repeated until it succeeds.
+
+.Steps of the place-order saga
+[cols="1,4,3,3,5,5", options="header"]
+|===
+| # | Step | Service | Kind | Command and answers | Compensation
+| 1 | Create the order `PENDING` | Order | Compensable | {CMD-ORD-001} | Reject the order
+| 2 | Reserve the stock | Inventory | Compensable | {CMD-INV-002} → {EVT-INV-001} or {EVT-INV-002} | {CMD-INV-004}; and the reservation expires by itself
+| 3 | Charge the payment | Payment | *Pivot* | {CMD-PAY-001} → {EVT-PAY-001}, {EVT-PAY-002} or {EVT-PAY-003} | Before capture: {CMD-PAY-002}. After capture: {CMD-PAY-003}
+| 4 | Confirm the reservation | Inventory | Retriable | {CMD-INV-003} → {EVT-INV-003} | –
+| 5 | Confirm the order | Order | Retriable | Publishes {EVT-ORD-001} | –
+|===
+
+The order of steps 2 and 3 is the main design decision.
+Reserving first means that the two frequent business refusals — no stock, payment declined — cost at most one release, which is cheap, idempotent and backed by the expiry of the reservation.
+Charging first would turn every stock shortage into a refund: slower, visible on the customer's bank statement, and able to fail.
+
+After the pivot the saga never gives up for a business reason.
+One technical exception remains: if the reservation expired during an outage longer than its lifetime and the stock was sold meanwhile, step 4 cannot succeed and the payment is refunded ({SC-ORD-012}).
+With the default delays this can only follow a decision of an administrator, because an order is handed to a person long before a reservation can expire.
+
+The states and transitions of the saga are specified in document 02-03.
+
+== Saga identifier
+
+.Strategy question
+****
+What strategy lets an engineer follow one order through every service, log and trace with a single value?
+****
+
+Each saga has a *saga identifier*, a universally unique identifier created with the saga.
+An order has one for its placement and, if it is canceled, another for its cancellation; both are tied to the order identifier.
+
+.Where the saga identifier travels
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Place | Form
+| Messages | The `sagaid` extension of the message envelope, on every command and every event of the saga (document 03-04)
+| Database | A column of the saga, and of the payment and the reservation it caused
+| Logs | The field `saga_id` of every log line written while handling a message of the saga
+| Traces | The attribute `saga.id` of every span; a saga is usually several traces, one per message exchange, and this attribute links them
+| Payment provider | The reference of the charge is derived from it, so that the provider itself refuses to charge twice
+| Administration | Shown with an order under review, so that support and engineering talk about the same thing
+|===
+
+The saga identifier is not the trace identifier.
+A trace follows one request or one message through the services and ends in seconds; a saga may last minutes, wait for a person, and span many traces.
+Both travel together: the trace context for "what happened during this exchange", the saga identifier for "what happened to this order".
+
+== Deadlines
+
+.Strategy question
+****
+What strategy guarantees an outcome when the answer that would give it never comes?
+****
+
+Pub/Sub delivers messages as soon as it can and has no delayed delivery, so waiting is the saga's own business.
+Each saga row holds two instants, set when the saga starts.
+
+[%unbreakable, cols="3,3,9", options="header"]
+|===
+| Deadline | Default | When it is reached
+| Order deadline | 2 minutes | A saga still waiting for the stock rejects the order. A saga still waiting for the payment cancels it first ({FR-ORD-015}).
+| Review deadline | 5 minutes | A saga still working stops, and the order goes under review ({FR-ORD-016}).
+|===
+
+A scheduled task in the order service looks, every few seconds, for sagas whose deadline has passed, and hands each one the event "deadline reached" exactly as if a message had arrived.
+A deadline is therefore an event like any other for the saga: same code path, same tests.
+Several replicas of the order service may run the task at once; each claims the sagas it handles so that no saga is handled twice, and a deadline handled twice would be harmless anyway, since the saga would no longer be in a state that reacts to it.
+
+The delays are ordered on purpose: 2 minutes, then 5, then the 15 minutes of a reservation.
+An order is decided, or in the hands of a person, long before the stock held for it can be freed.
+
+== Watching the sagas
+
+.Strategy question
+****
+What strategy tells us, in production, that sagas are healthy without reading a single log?
+****
+
+.What is measured
+[cols="5,10", options="header"]
+|===
+| Measure | What it answers
+| Sagas started, by kind | How many orders and cancellations are being processed?
+| Sagas ended, by kind, outcome and reason | How many orders are confirmed, rejected and why? A rising share of `TIMED_OUT` means a participant is failing.
+| Saga duration, by outcome | How long does a customer wait? This is the measure behind {NFR-PERF-003}.
+| Sagas in progress, by state | Where do orders wait? A growing count in one state points at one service.
+| Sagas suspended | How many orders wait for a person? Any value above zero raises an alert ({NFR-OBS-004}).
+| Compensations sent and completed | Do releases and refunds actually finish?
+| Messages waiting to be published, and the age of the oldest | Is a service saving work it does not announce ({NFR-REL-005})?
+| Messages set aside after repeated failures | Is a consumer unable to handle something? Any value above zero raises an alert.
+|===
+
+Every transition of a saga writes one structured log line with the saga identifier, the order identifier, the state left, the state entered and the event that caused it.
+The history of a saga can be read from these lines alone.
+Dashboards, alerts and service level objectives are specified in document 05-03.
+
+== Scenarios
+
+.Strategy question
+****
+What strategy proves that the saga behaves in every situation, not only when all goes well?
+****
+
+Each scenario is one path through the saga.
+It states what triggers it, where it ends, and — the point of the exercise — *which mechanism guarantees the outcome*.
+Each one becomes at least one integration test in document 07-03.
+
+.Scenarios and the situations of the brief
+[cols="3,7,6", options="header"]
+|===
+| Scenario | Situation | Requested as
+| {SC-ORD-001} | Order confirmed | "Everything works"
+| {SC-ORD-002} | Payment refused | "Payment refused"
+| {SC-ORD-003} | Stock not available | "Stock unavailable", with the stock checked first
+| {SC-ORD-004} | The inventory does not answer | "A service no longer answers"
+| {SC-ORD-005} | The payment does not answer, not captured | "A service no longer answers"
+| {SC-ORD-006} | The payment does not answer, but captured | "A service no longer answers"
+| {SC-ORD-007} | The order service restarts after the debit | "The orchestrator stops after the debit, then restarts"
+| {SC-ORD-008} | The same message is delivered twice | "Duplicate messages"
+| {SC-ORD-009} | A service stops after saving, before publishing | "Stop after the database transaction, before the publication"
+| {SC-ORD-010} | Two things happen to one order at once | "Several events arrive at the same time"
+| {SC-ORD-011} | Paid, stock not confirmed in time | –
+| {SC-ORD-012} | Paid, then the stock is gone | "Payment succeeds but the stock is unavailable: refund"
+| {SC-ORD-013} | A refund keeps failing | "A compensation fails"
+| {SC-ORD-014} | Order canceled by the customer | –
+| {SC-ORD-015} | Nobody can tell whether the payment was captured | –
+|===
+
+[[SC-ORD-001]]
+=== SC-ORD-001 — Order confirmed
+
+[cols="3,11"]
+|===
+| Trigger | A customer places an order; every service answers.
+| Ends | Saga `COMPLETED`, order `CONFIRMED`.
+| Guarantee | Each transition of the saga is saved in the same transaction as the command it sends: a command is never sent for a state that was not saved, nor a state saved without its command.
+| Acceptance | {BDD-ORD-001}
+|===
+
+plantuml::diagrams/sc-ord-001.puml[format=svg, align=center]
+
+[[SC-ORD-002]]
+=== SC-ORD-002 — Payment refused
+
+[cols="3,11"]
+|===
+| Trigger | The payment provider declines the payment.
+| Ends | Saga `COMPENSATED`, order `REJECTED` with `PAYMENT_REFUSED`.
+| Guarantee | The compensation of step 2 is sent with the rejection. The saga does not wait for the release to finish: if the release is lost or the inventory is down, the reservation expires by itself.
+| Acceptance | {BDD-ORD-002}
+|===
+
+plantuml::diagrams/sc-ord-002.puml[format=svg, align=center]
+
+[[SC-ORD-003]]
+=== SC-ORD-003 — Stock not available
+
+[cols="3,11"]
+|===
+| Trigger | One line cannot be reserved in full, typically because another customer bought the last units a moment before.
+| Ends | Saga `COMPENSATED`, order `REJECTED` with `OUT_OF_STOCK`.
+| Guarantee | The reservation is all-or-nothing in one transaction of the inventory, with the stock rows locked: two orders can never both obtain the last unit. The payment service is never called, so there is nothing to refund.
+| Acceptance | {BDD-ORD-003} {BDD-ORD-004}
+|===
+
+plantuml::diagrams/sc-ord-003.puml[format=svg, align=center]
+
+[[SC-ORD-004]]
+=== SC-ORD-004 — The inventory does not answer
+
+[cols="3,11"]
+|===
+| Trigger | The inventory service is down or too slow when the stock is requested.
+| Ends | Saga `COMPENSATED`, order `REJECTED` with `TIMED_OUT`. No payment was requested.
+| Guarantee | The request waits in the subscription of the inventory instead of failing. The order deadline decides. Requests about one order are delivered in the order they were sent, so the inventory reserves and then releases; and whatever the order, releasing is harmless when repeated.
+| Acceptance | {BDD-ORD-028}
+|===
+
+plantuml::diagrams/sc-ord-004.puml[format=svg, align=center]
+
+[[SC-ORD-005]]
+=== SC-ORD-005 — The payment does not answer and was not captured
+
+[cols="3,11"]
+|===
+| Trigger | The payment provider does not answer the charge.
+| Ends | Saga `COMPENSATED`, order `REJECTED` with `TIMED_OUT`. Nothing was charged and nothing can be charged later.
+| Guarantee | The order is not rejected while the payment could still be captured. The payment is first *canceled* at the provider, with the same reference as the charge; only the provider's "canceled" allows the rejection.
+| Acceptance | {BDD-ORD-009} {BDD-PAY-009}
+|===
+
+plantuml::diagrams/sc-ord-005.puml[format=svg, align=center]
+
+[[SC-ORD-006]]
+=== SC-ORD-006 — The payment does not answer but was captured
+
+[cols="3,11"]
+|===
+| Trigger | The provider captured the payment but its answer was lost.
+| Ends | Saga `COMPLETED`, order `CONFIRMED`.
+| Guarantee | The cancellation cannot succeed on a captured payment: the provider answers "already captured", and the saga carries the order through instead of rejecting it. The customer who paid gets the order.
+| Acceptance | {BDD-ORD-010} {BDD-PAY-010}
+|===
+
+plantuml::diagrams/sc-ord-006.puml[format=svg, align=center]
+
+[[SC-ORD-007]]
+=== SC-ORD-007 — The order service restarts after the debit
+
+[cols="3,11"]
+|===
+| Trigger | The order service stops between the capture of the payment and the handling of its answer.
+| Ends | Saga `COMPLETED`, order `CONFIRMED`, charged once.
+| Guarantee | The saga state is in the database, not in memory. A message is acknowledged only after the transaction that handles it has committed, so a message that was not handled is delivered again. Had the service stopped before sending `ChargePayment`, the command would be sent on restart; had it sent it twice, the payment service would charge once ({SC-ORD-008}).
+| Acceptance | {BDD-ORD-011}
+|===
+
+plantuml::diagrams/sc-ord-007.puml[format=svg, align=center]
+
+[[SC-ORD-008]]
+=== SC-ORD-008 — The same message is delivered twice
+
+[cols="3,11"]
+|===
+| Trigger | Pub/Sub delivers a message more than once, which it is allowed to do, or a sender publishes it twice after a restart.
+| Ends | Exactly as if it had been delivered once.
+| Guarantee | Three layers. Each consumer records the identifier of every message it handles, in the same transaction as the handling: a second delivery finds it and does nothing. A command about an order that was already served is answered from the recorded outcome. And a saga ignores an event that its current state does not expect.
+| Acceptance | {BDD-PAY-002} {BDD-PAY-006} {BDD-NOT-002} {BDD-ORD-007}
+|===
+
+plantuml::diagrams/sc-ord-008.puml[format=svg, align=center]
+
+[[SC-ORD-009]]
+=== SC-ORD-009 — A service stops after saving and before publishing
+
+[cols="3,11"]
+|===
+| Trigger | A service commits its work and stops before the message that announces it has left.
+| Ends | The message is published after the restart; the saga continues.
+| Guarantee | The *transactional outbox*. The message is not published by the code that does the work: it is written into a table of the same database, in the same transaction. A separate relay publishes what the table holds and marks it. Work and message are saved together or not at all ({NFR-REL-001}).
+| Acceptance | Verified by a technical test: the service is stopped between commit and publication (document 07-03).
+|===
+
+plantuml::diagrams/sc-ord-009.puml[format=svg, align=center]
+
+[[SC-ORD-010]]
+=== SC-ORD-010 — Two things happen to the same order at the same instant
+
+[cols="3,11"]
+|===
+| Trigger | A late answer and a deadline, or two answers, are handled at the same time by two replicas of the order service.
+| Ends | One of them is applied; the other is evaluated again on the new state.
+| Guarantee | Every saga carries a version. Both handlers read version _n_; the first to save writes version _n+1_; the second fails to save, changes nothing and does not acknowledge its message, which is delivered again and handled against the fresh state. Messages about one order are also delivered in order to one subscriber at a time, which makes the collision rare; the version makes it harmless.
+| Acceptance | {BDD-ORD-022}
+|===
+
+plantuml::diagrams/sc-ord-010.puml[format=svg, align=center]
+
+[[SC-ORD-011]]
+=== SC-ORD-011 — Paid, but the stock is not confirmed in time
+
+[cols="3,11"]
+|===
+| Trigger | The payment is captured and the inventory stops answering.
+| Ends | Saga `SUSPENDED`, order `UNDER_REVIEW`; then whatever the administrator decides.
+| Guarantee | After the pivot the saga does not reject by itself. At the review deadline it stops and asks for a person, instead of leaving the customer with a charge and an order that is still pending. The stock is still held: the review deadline comes long before the reservation expires.
+| Acceptance | {BDD-ORD-023} {BDD-ORD-032}
+|===
+
+plantuml::diagrams/sc-ord-011.puml[format=svg, align=center]
+
+[[SC-ORD-012]]
+=== SC-ORD-012 — Paid, then the stock is gone
+
+[cols="3,11"]
+|===
+| Trigger | An administrator retries the confirmation of an order under review, after an outage longer than the reservation lifetime; the units were sold meanwhile.
+| Ends | Saga `COMPENSATED`, order `REJECTED` with `OUT_OF_STOCK`, payment refunded.
+| Guarantee | The order is rejected only after `PaymentRefunded`: a rejected order never holds a payment ({FR-ORD-008}). This is the only path where a paid order is rejected, and it is the brief's third scenario put back in the one place where it can still occur.
+| Acceptance | {BDD-ORD-029}
+|===
+
+plantuml::diagrams/sc-ord-012.puml[format=svg, align=center]
+
+[[SC-ORD-013]]
+=== SC-ORD-013 — A refund keeps failing
+
+[cols="3,11"]
+|===
+| Trigger | The payment provider refuses or fails every refund attempt.
+| Ends | Saga `SUSPENDED`, order `UNDER_REVIEW`, payment still `CAPTURED`; later `COMPENSATED` when a retry succeeds.
+| Guarantee | A compensation that fails is never recorded as done. The payment keeps the status that says where the money is, the order says that a person must act, and an alert is raised. Retrying is safe: a refund that already succeeded answers "refunded".
+| Acceptance | {BDD-ORD-012} {BDD-ORD-020}
+|===
+
+plantuml::diagrams/sc-ord-013.puml[format=svg, align=center]
+
+[[SC-ORD-014]]
+=== SC-ORD-014 — Order canceled by the customer
+
+[cols="3,11"]
+|===
+| Trigger | A customer cancels a confirmed order that has not shipped.
+| Ends | Cancel saga `COMPLETED`, order `CANCELED`, stock returned, payment refunded.
+| Guarantee | The order becomes `CANCELING` in the same transaction that starts the saga, so it can no longer ship. It becomes `CANCELED` only on `PaymentRefunded`. A refund that keeps failing follows {SC-ORD-013}.
+| Acceptance | {BDD-ORD-015} {BDD-ORD-030}
+|===
+
+plantuml::diagrams/sc-ord-014.puml[format=svg, align=center]
+
+[[SC-ORD-015]]
+=== SC-ORD-015 — Nobody can tell whether the payment was captured
+
+[cols="3,11"]
+|===
+| Trigger | The payment provider answers nothing: neither the charge nor its cancellation.
+| Ends | Saga `SUSPENDED`, order `UNDER_REVIEW`; then, here, `REJECTED` with `ADMIN_DECISION` once the cancellation gets through.
+| Guarantee | The saga never guesses. Without a "captured" or a "canceled" from the provider it neither confirms nor rejects; at the review deadline a person takes over, and even that person's rejection goes through the cancellation of the payment first.
+| Acceptance | {BDD-ORD-027} {BDD-ORD-033}
+|===
+
+plantuml::diagrams/sc-ord-015.puml[format=svg, align=center]

@@ -1,0 +1,180 @@
+= Business Workflows to Commands and Events: From What Happens to What Is Exchanged
+:doc-id: 03-01
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: How each business workflow becomes commands, events and reactions between services, and where orchestration or choreography applies.
+include::../_shared/attributes.adoc[]
+
+== Vocabulary
+
+.Strategy question
+****
+What strategy makes "who asks whom, and who merely listens" unambiguous before a single message is designed?
+****
+
+An event-driven architecture stands on three words, used here with one meaning each.
+
+[%unbreakable, cols="3,6,6", options="header"]
+|===
+| Word | What it is | How to recognize it
+| Command | A request to do something, addressed to exactly one service, which may refuse | Imperative: `ReserveStock`, `ChargePayment`. It has one receiver and always gets an answer.
+| Event | A fact that happened, published by the service where it happened, for whoever is interested | Past tense: `StockReserved`, `OrderConfirmed`. It cannot be refused and its publisher does not know its listeners.
+| Reaction | A rule of the form "whenever this event, then that command" | It belongs to exactly one service: the one that listens.
+|===
+
+Two rules keep the three apart.
+
+. *A command never travels as an event, and an event is never a disguised command.* A service that publishes `OrderConfirmed` expects nothing from anybody. A service that needs stock to be reserved sends `ReserveStock` and waits for the answer.
+. *The answer to a command is an event.* `ReserveStock` is answered by `StockReserved` or `StockReservationRejected`. The sender listens for it; so may others.
+
+Commands from people — a customer placing an order, an administrator publishing a product — arrive synchronously, over the REST interfaces, and are answered at once.
+Commands between services are messages.
+Both kinds are listed, with every event, in document 03-02.
+
+Owner: {role-sol} {role-arch}
+
+== Orchestration and choreography
+
+.Strategy question
+****
+What strategy decides whether a workflow needs a conductor or can be left to reactions?
+****
+
+There are two ways to make several services cooperate.
+
+Orchestration:: One service holds the workflow. It sends commands, receives the answers and decides the next step. The whole workflow can be read in one place, has an owner, a state and deadlines.
+Choreography:: No one holds the workflow. Each service reacts to the events of the others. Nothing needs to know the whole; nothing can tell where the whole stands either.
+
+The choice follows one question: *is somebody waiting for the outcome, and must what was done be undone if a later step fails?*
+
+.Where each style is used
+[cols="5,3,8", options="header"]
+|===
+| Workflow | Style | Why
+| Placing an order | Orchestration | A customer waits for one outcome; three steps in two services must all succeed or be undone; deadlines apply. The order service conducts.
+| Canceling an order | Orchestration | Same: stock returned and payment refunded, or a person takes over.
+| Showing availability in the catalog | Choreography | The catalog reacts to stock changes. Nobody waits; a late update corrects itself with the next one.
+| Updating the cart after a confirmation | Choreography | The cart reacts to `OrderConfirmed`. The order does not depend on it.
+| Notifying the customer | Choreography | Notification reacts to order events. An e-mail must never be a step that can fail an order.
+| Fulfillment | Neither | A status change inside the order service, followed by an event.
+| Catalog and stock administration | Neither | Commands from the administrator to one service.
+|===
+
+Orchestration is used where a business transaction needs an owner; choreography where a consumer merely reacts and nobody waits for it.
+The two orchestrated workflows are specified as sagas in document 03-03.
+
+== Order placement
+
+.Strategy question
+****
+What strategy turns the steps of the business process into exchanges that each service can perform alone?
+****
+
+The workflow is the business process {BPMN-ORD-001}, seen as messages.
+The order service conducts: it is the only one that knows the sequence.
+
+plantuml::diagrams/flow-order-placement.puml[format=svg, align=center]
+
+.Order placement as commands, events and reactions
+[cols="1,4,4,3,5", options="header"]
+|===
+| # | Who decides | Command | Handled by | Event that answers
+| 1 | Customer | `PlaceOrder` (REST) | Order | The order is created `PENDING` and acknowledged
+| 2 | Order saga | `ReserveStock` | Inventory | `StockReserved` or `StockReservationRejected`
+| 3 | Order saga, on `StockReserved` | `ChargePayment` | Payment | `PaymentCaptured`, `PaymentRefused` or `PaymentOutcomeUnknown`
+| 4 | Order saga, on `PaymentCaptured` | `ConfirmReservation` | Inventory | `ReservationConfirmed` or `ReservationConfirmationFailed`
+| 5 | Order saga, on `ReservationConfirmed` | – | Order | `OrderConfirmed`
+| 6 | Cart, on `OrderConfirmed` | – | Cart | The ordered quantities leave the cart
+| 7 | Notification, on `OrderConfirmed` | – | Notification | The confirmation e-mail is sent
+|===
+
+.What the saga sends when a step fails
+[%unbreakable, cols="5,5,5", options="header"]
+|===
+| On | The saga sends | The order ends
+| `StockReservationRejected` | Nothing | `REJECTED`, then `OrderRejected` is published
+| `PaymentRefused` | `ReleaseReservation` | `REJECTED`, then `OrderRejected`
+| `PaymentOutcomeUnknown`, or the order deadline | `CancelPayment`, then `ReleaseReservation` on `PaymentCanceled` | `REJECTED`, then `OrderRejected`
+| `ReservationConfirmationFailed` | `RefundPayment` | `REJECTED` on `PaymentRefunded`, then `OrderRejected`
+| `PaymentRefundFailed`, or the review deadline | Nothing | `UNDER_REVIEW`, then `OrderPutUnderReview`
+|===
+
+== Order cancellation and fulfillment
+
+.Strategy question
+****
+What strategy handles what happens to an order after it is confirmed?
+****
+
+.Order cancellation ({BPMN-ORD-002})
+[%unbreakable, cols="1,4,4,3,5", options="header"]
+|===
+| # | Who decides | Command | Handled by | Event that answers
+| 1 | Customer | `CancelOrder` (REST) | Order | The order becomes `CANCELING`
+| 2 | Cancel saga | `ReturnStock` | Inventory | `StockReturned`
+| 3 | Cancel saga, on `StockReturned` | `RefundPayment` | Payment | `PaymentRefunded` or `PaymentRefundFailed`
+| 4 | Cancel saga, on `PaymentRefunded` | – | Order | `OrderCanceled`
+| 5 | Notification, on `OrderCanceled` | – | Notification | The cancellation e-mail is sent
+|===
+
+.Order fulfillment ({BPMN-ORD-003})
+[%unbreakable, cols="1,4,4,3,5", options="header"]
+|===
+| # | Who decides | Command | Handled by | Event
+| 1 | Administrator | `ShipOrder` (REST) | Order | `OrderShipped`
+| 2 | Administrator | `DeliverOrder` (REST) | Order | `OrderDelivered`
+| 3 | Notification, on each | – | Notification | The matching e-mail is sent
+|===
+
+.Decision on an order under review
+[%unbreakable, cols="1,4,5,3,4", options="header"]
+|===
+| # | Who decides | Command | Handled by | What follows
+| 1 | Administrator | `RetryOrderUnderReview` (REST) | Order | The saga sends again the request of the suspended step
+| 2 | Administrator | `ConfirmOrderUnderReview` (REST) | Order | The saga sends `ConfirmReservation`, if the payment is captured
+| 3 | Administrator | `RejectOrderUnderReview` (REST) | Order | The saga sends `RefundPayment` or `CancelPayment`, and `ReleaseReservation`
+|===
+
+== Reactions around the order
+
+.Strategy question
+****
+What strategy lets other services follow what happens without the order service knowing they exist?
+****
+
+plantuml::diagrams/flow-reactions.puml[format=svg, align=center]
+
+.Reactions
+[cols="4,4,7", options="header"]
+|===
+| Whenever | The listener | Does
+| `StockAvailabilityChanged` | Catalog | Stores the new available quantity of the product, unless it already holds a more recent one.
+| `OrderConfirmed` | Cart | Removes the ordered quantities from the customer's cart.
+| `OrderConfirmed`, `OrderRejected`, `OrderPutUnderReview`, `OrderCanceled`, `OrderShipped`, `OrderDelivered` | Notification | Sends the matching e-mail, once.
+|===
+
+The inventory publishes `StockAvailabilityChanged` after every operation that changes what can be sold: a reservation held, released, expired or returned, a confirmation after an expiry, an adjustment.
+It is the only event of the platform that is not about an order.
+
+== What is deliberately not an event
+
+.Strategy question
+****
+What strategy keeps the number of topics, schemas and subscriptions proportionate to the need?
+****
+
+An event that nobody consumes is a contract to maintain for nothing.
+The rule is strict: *an event is published when a consumer exists, and added the day one appears*.
+
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Not published | Reason
+| Catalog events: product created, updated, priced, published, retired | The cart and the order read the catalog when they need it. Nothing has to be told.
+| Cart events | Nobody reacts to a cart.
+| `OrderPlaced`, and the start of a cancellation | No service acts on an order that is not yet decided. The storefront asks the order service.
+| Reservation expired | An internal fact of the inventory. Its effect is announced by `StockAvailabilityChanged`.
+| Notification events | An e-mail sent or failed is recorded and measured, not announced.
+|===
+
+Owner: {role-sol}

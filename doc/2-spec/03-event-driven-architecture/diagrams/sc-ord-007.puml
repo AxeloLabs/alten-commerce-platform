@@ -1,0 +1,23 @@
+@startuml
+title SC-ORD-007 — The order service restarts right after the debit
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+
+O ->> I : ReserveStock
+I ->> O : StockReserved
+note over O : CHARGING_PAYMENT, saved with\nthe ChargePayment to send
+O ->> P : ChargePayment
+P -> PSP : charge
+PSP --> P : captured
+P ->> O : PaymentCaptured
+note over O #ECEFF1 : stops before handling it:\nthe message is not acknowledged
+== the order service restarts ==
+note over O : reads the saga:\nCHARGING_PAYMENT
+P ->> O : PaymentCaptured (delivered again)
+note over O : CONFIRMING_STOCK
+O ->> I : ConfirmReservation
+I ->> O : ReservationConfirmed
+note over O #C8E6C9 : COMPLETED\norder CONFIRMED, charged once
+@enduml

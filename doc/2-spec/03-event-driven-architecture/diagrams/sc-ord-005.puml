@@ -1,0 +1,23 @@
+@startuml
+title SC-ORD-005 — The payment does not answer and was not captured
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+participant "Notification" as N
+
+O ->> I : ReserveStock
+I ->> O : StockReserved
+O ->> P : ChargePayment
+P -> PSP : charge
+note over PSP #ECEFF1 : no answer
+P ->> O : PaymentOutcomeUnknown
+note over O : CANCELING_PAYMENT
+O ->> P : CancelPayment
+P -> PSP : cancel, same reference
+PSP --> P : canceled
+P ->> O : PaymentCanceled
+O ->> I : ReleaseReservation
+note over O #FFCDD2 : COMPENSATED\norder REJECTED, TIMED_OUT
+O ->> N : OrderRejected
+@enduml
