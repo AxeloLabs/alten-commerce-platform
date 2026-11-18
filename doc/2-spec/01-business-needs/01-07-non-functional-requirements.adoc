@@ -1,6 +1,6 @@
 = Non-Functional Requirements: How Well the System Shall Do It
 :doc-id: 01-07
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Measurable quality attributes: performance, availability, reliability, security, observability, maintainability, scalability, usability and cost.

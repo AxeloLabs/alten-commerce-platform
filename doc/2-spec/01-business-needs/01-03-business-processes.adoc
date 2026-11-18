@@ -1,6 +1,6 @@
 = Business Processes: Who Does What, in Which Order
 :doc-id: 01-03
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: BPMN 2.0 diagrams of the business processes behind the critical journeys.
@@ -43,8 +43,8 @@ The diagrams are generated from text and are valid BPMN 2.0 files: they open in 
 | ID | Process | Journey | Status
 | {BPMN-ORD-001} | Order placement | {JRN-ORD-001} | {st-draft} {critical}
 | {BPMN-CAT-001} | Product publication | {JRN-CAT-002} | {st-draft} {critical}
-| {BPMN-ORD-002} | Order cancellation and refund | {JRN-ORD-003} | {st-proposed}
-| {BPMN-ORD-003} | Order fulfillment | {JRN-ORD-004} | {st-proposed}
+| {BPMN-ORD-002} | Order cancellation and refund | {JRN-ORD-003} | {st-draft}
+| {BPMN-ORD-003} | Order fulfillment | {JRN-ORD-004} | {st-draft}
 |===
 
 Owner: {role-sol}
@@ -127,8 +127,6 @@ What strategy undoes a confirmed order without ever telling the customer they we
 [[BPMN-ORD-002]]
 === BPMN-ORD-002 — Order cancellation and refund
 
-{st-proposed}
-
 The process realizes the journey {JRN-ORD-003} and the use case {UC-ORD-004}.
 The order is `CANCELING` from the moment the cancellation is accepted, so that it can no longer ship, and becomes `CANCELED` only after the refund is made ({FR-ORD-012}).
 A refund that keeps failing does not end the process silently: the order goes under review and a person takes over ({FR-ORD-014}, {UC-ORD-007}).
@@ -152,8 +150,6 @@ What strategy closes the lifecycle of an order once it is paid?
 
 [[BPMN-ORD-003]]
 === BPMN-ORD-003 — Order fulfillment
-
-{st-proposed}
 
 The process realizes the journey {JRN-ORD-004} and the use case {UC-ORD-006}.
 Each status is set by an administrator, in order, and each change is told to the customer ({FR-ORD-013}, {FR-NOT-001}).

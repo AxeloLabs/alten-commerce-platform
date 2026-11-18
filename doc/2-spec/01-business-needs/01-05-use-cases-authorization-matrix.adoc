@@ -1,6 +1,6 @@
 = Use Cases and Authorization Matrix: Every Interaction, Every Flow, Every Refusal
 :doc-id: 01-05
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Fully dressed use cases, UML use case diagrams and the authorization matrix.
@@ -56,9 +56,9 @@ What strategy shows at a glance everything the system lets each actor do?
 | {UC-ORD-001} | Place an order | Customer | {must} {critical} {st-draft}
 | {UC-ORD-002} | View order history | Customer | {must} {st-draft}
 | {UC-ORD-003} | Track an order | Customer | {must} {critical} {st-draft}
-| {UC-ORD-004} | Cancel an order | Customer | {should} {st-proposed}
+| {UC-ORD-004} | Cancel an order | Customer | {should} {st-draft}
 | {UC-ORD-005} | Search orders | Administrator | {must} {st-draft}
-| {UC-ORD-006} | Update the fulfillment of an order | Administrator | {should} {st-proposed}
+| {UC-ORD-006} | Update the fulfillment of an order | Administrator | {should} {st-draft}
 | {UC-ORD-007} | Resolve an order under review | Administrator | {must} {critical} {st-draft}
 | {UC-PAY-001} | Take a payment | Customer, indirectly | {must} {critical} {st-draft}
 | {UC-PAY-002} | Refund a payment | Customer, indirectly | {must} {critical} {st-draft}
@@ -97,11 +97,11 @@ Three principles apply everywhere:
 | Mark, unmark and list favorites | {denied} | {allowed} own | {denied}
 | Place an order | {denied} | {allowed} own cart | {denied}
 | View order history and track an order | {denied} | {allowed} own | {allowed} any
-| Cancel an order {st-proposed} | {denied} | {allowed} own | {denied}
+| Cancel an order | {denied} | {allowed} own | {denied}
 | Create, update, price, publish, retire a product | {denied} | {denied} | {allowed}
 | Adjust stock, review stock levels | {denied} | {denied} | {allowed}
 | Search all orders | {denied} | {denied} | {allowed}
-| Mark an order shipped or delivered {st-proposed} | {denied} | {denied} | {allowed}
+| Mark an order shipped or delivered | {denied} | {denied} | {allowed}
 | Resolve an order under review | {denied} | {denied} | {allowed}
 | Take a payment, refund a payment, send an e-mail | {denied} | {denied} | {denied}
 |===

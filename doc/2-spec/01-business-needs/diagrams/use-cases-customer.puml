@@ -19,7 +19,7 @@ rectangle "Alten Commerce Platform" {
   usecase "UC-ORD-001\nPlace an order" as ORD1 #FFE0B2
   usecase "UC-ORD-002\nView order history" as ORD2
   usecase "UC-ORD-003\nTrack an order" as ORD3
-  usecase "UC-ORD-004\nCancel an order" as ORD4 #ECEFF1
+  usecase "UC-ORD-004\nCancel an order" as ORD4
   usecase "UC-PAY-001\nTake a payment" as PAY1 #FFE0B2
   usecase "UC-PAY-002\nRefund a payment" as PAY2 #FFE0B2
   usecase "UC-NOT-001\nNotify the customer\nby e-mail" as NOT1
@@ -56,6 +56,5 @@ NOT1 --> MAIL
 
 legend right
   Orange: critical path
-  Gray: proposed, awaiting validation
 endlegend
 @enduml

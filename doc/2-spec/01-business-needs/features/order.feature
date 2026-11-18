@@ -279,7 +279,7 @@ Feature: Order
 
   Rule: A confirmed order can be canceled until it ships
 
-    @BDD-ORD-015 @UC-ORD-004 @FR-ORD-012 @FR-PAY-006 @nominal @proposed
+    @BDD-ORD-015 @UC-ORD-004 @FR-ORD-012 @FR-PAY-006 @nominal
     Scenario: Canceling a confirmed order
       Given the customer's order "ORD-1001" is "CONFIRMED" with 2 units of "KB-001", paid 179.80
       When the customer cancels the order "ORD-1001"
@@ -288,7 +288,7 @@ Feature: Order
       And the 2 units of "KB-001" are available again
       And one cancellation e-mail is sent to "alice@example.com"
 
-    @BDD-ORD-016 @UC-ORD-004 @FR-ORD-012 @FR-ORD-010 @error @proposed
+    @BDD-ORD-016 @UC-ORD-004 @FR-ORD-012 @FR-ORD-010 @error
     Scenario Outline: Canceling an order that cannot be canceled
       Given the customer's order "ORD-1001" is "<status>"
       When the customer cancels the order "ORD-1001"
@@ -302,7 +302,7 @@ Feature: Order
         | DELIVERED |
         | REJECTED  |
 
-    @BDD-ORD-030 @UC-ORD-004 @UC-ORD-007 @FR-ORD-012 @FR-ORD-014 @error @proposed
+    @BDD-ORD-030 @UC-ORD-004 @UC-ORD-007 @FR-ORD-012 @FR-ORD-014 @error
     Scenario: A cancellation whose refund keeps failing goes under review
       Given the customer's order "ORD-1001" is "CONFIRMED", paid with the token "tok_refund_fails"
       When the customer cancels the order "ORD-1001"
@@ -312,7 +312,7 @@ Feature: Order
 
   Rule: Only an administrator takes a confirmed order to delivery, one step at a time
 
-    @BDD-ORD-018 @UC-ORD-006 @FR-ORD-013 @nominal @proposed
+    @BDD-ORD-018 @UC-ORD-006 @FR-ORD-013 @nominal
     Scenario: Shipping a confirmed order
       Given a signed-in administrator
       And the order "ORD-1001" is "CONFIRMED"
@@ -321,7 +321,7 @@ Feature: Order
       And its timeline records the administrator and the date
       And one shipment e-mail is sent to the customer
 
-    @BDD-ORD-031 @UC-ORD-006 @FR-ORD-013 @nominal @proposed
+    @BDD-ORD-031 @UC-ORD-006 @FR-ORD-013 @nominal
     Scenario: Delivering a shipped order
       Given a signed-in administrator
       And the order "ORD-1001" is "SHIPPED"
@@ -329,7 +329,7 @@ Feature: Order
       Then the order is "DELIVERED"
       And one delivery e-mail is sent to the customer
 
-    @BDD-ORD-019 @UC-ORD-006 @FR-ORD-010 @FR-ORD-013 @error @proposed
+    @BDD-ORD-019 @UC-ORD-006 @FR-ORD-010 @FR-ORD-013 @error
     Scenario Outline: Fulfillment out of order is refused
       Given a signed-in administrator
       And the order "ORD-1001" is "<status>"

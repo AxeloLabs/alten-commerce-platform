@@ -1,6 +1,6 @@
 = Epics and User Stories: The Backlog of the First Release
 :doc-id: 01-04
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Epics, user stories with priority, estimate and acceptance criteria, and the story map.
@@ -57,8 +57,8 @@ What strategy shows the whole release on one page, so that scope can be traded a
 | {EPIC-ORD-002} | Order tracking | {JRN-ORD-002} | {must} | 2 | 5 | {st-draft}
 | {EPIC-NOT-001} | Customer notifications | {JRN-ORD-002} | {must} | 3 | 7 | {st-draft}
 | {EPIC-ORD-005} | Order supervision and recovery | {JRN-ORD-005} | {must} | 2 | 8 | {st-draft}
-| {EPIC-ORD-003} | Order cancellation | {JRN-ORD-003} | {should} | 2 | 8 | {st-proposed}
-| {EPIC-ORD-004} | Order fulfillment | {JRN-ORD-004} | {should} | 2 | 3 | {st-proposed}
+| {EPIC-ORD-003} | Order cancellation | {JRN-ORD-003} | {should} | 2 | 8 | {st-draft}
+| {EPIC-ORD-004} | Order fulfillment | {JRN-ORD-004} | {should} | 2 | 3 | {st-draft}
 | | *Total* | | | *39* | *120* |
 |===
 
@@ -668,7 +668,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 2+h| US-NOT-003 — Receive an e-mail when my order progresses
 | Epic | {EPIC-NOT-001}
 | Story | *As a* customer, *I want* an e-mail when my order is shipped, delivered or canceled *so that* I can follow it without signing in.
-| Priority | {should} · 2 points · {st-proposed}
+| Priority | {should} · 2 points
 | Acceptance criteria a|
 . Each of these changes produces one e-mail with the order number and the new status.
 . The same change announced twice produces one e-mail.
@@ -677,8 +677,6 @@ Each row is a slice that could be released on its own: the first row is the smal
 
 [[EPIC-ORD-003]]
 == EPIC-ORD-003 — Order cancellation
-
-{st-proposed}
 
 [cols="2,11"]
 |===
@@ -694,7 +692,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 2+h| US-ORD-008 — Cancel my order before it ships
 | Epic | {EPIC-ORD-003}
 | Story | *As a* customer, *I want* to cancel a confirmed order that has not shipped *so that* I can change my mind.
-| Priority | {should} · 5 points · {st-proposed}
+| Priority | {should} · 5 points
 | Acceptance criteria a|
 . A confirmed order that has not shipped can be canceled: it shows "canceling" until the refund is made, then "canceled".
 . The quantities of the order become available again.
@@ -708,7 +706,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 2+h| US-PAY-003 — Be refunded after a cancellation
 | Epic | {EPIC-ORD-003}
 | Story | *As a* customer, *I want* the full amount back when I cancel an order *so that* canceling costs me nothing.
-| Priority | {should} · 3 points · {st-proposed}
+| Priority | {should} · 3 points
 | Acceptance criteria a|
 . The cancellation triggers a refund of the full amount paid.
 . The refund is visible on the order and announced by e-mail.
@@ -717,8 +715,6 @@ Each row is a slice that could be released on its own: the first row is the smal
 
 [[EPIC-ORD-004]]
 == EPIC-ORD-004 — Order fulfillment
-
-{st-proposed}
 
 [cols="2,11"]
 |===
@@ -734,7 +730,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 2+h| US-ORD-010 — Mark an order as shipped
 | Epic | {EPIC-ORD-004}
 | Story | *As an* administrator, *I want* to mark a confirmed order as shipped *so that* the customer knows it is on its way.
-| Priority | {should} · 2 points · {st-proposed}
+| Priority | {should} · 2 points
 | Acceptance criteria a|
 . Only a confirmed order can be marked as shipped.
 . The change is recorded with its author and date, and the customer is told.
@@ -747,7 +743,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 2+h| US-ORD-011 — Mark an order as delivered
 | Epic | {EPIC-ORD-004}
 | Story | *As an* administrator, *I want* to mark a shipped order as delivered *so that* its lifecycle is closed.
-| Priority | {should} · 1 point · {st-proposed}
+| Priority | {should} · 1 point
 | Acceptance criteria a|
 . Only a shipped order can be marked as delivered.
 . The change is recorded with its author and date, and the customer is told.

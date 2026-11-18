@@ -135,15 +135,13 @@ When an order is put under review the customer is told that the store is checkin
 [[UC-ORD-004]]
 === UC-ORD-004 — Cancel an order
 
-{st-proposed}
-
 [cols="3,11"]
 |===
 | Overview | The customer cancels a confirmed order that has not shipped. The stock is returned and the payment refunded in full.
 | Primary actor | Customer
 | Supporting actors | Payment provider, e-mail provider
 | Goal | Undo a purchase at no cost.
-| Priority and status | {should} · {st-proposed}
+| Priority and status | {should} · {st-draft}
 | Trigger | The customer chooses "cancel" on an order.
 | Preconditions | The customer is signed in. The order is `CONFIRMED`.
 | Postconditions on success | The order is `CANCELED`. The quantities ordered are available again. The full amount is refunded and the customer is told.
@@ -199,15 +197,13 @@ When an order is put under review the customer is told that the store is checkin
 [[UC-ORD-006]]
 === UC-ORD-006 — Update the fulfillment of an order
 
-{st-proposed}
-
 [cols="3,11"]
 |===
 | Overview | The administrator records that an order has shipped, then that it was delivered.
 | Primary actor | Administrator
 | Supporting actors | E-mail provider
 | Goal | Take a confirmed order to delivery.
-| Priority and status | {should} · {st-proposed}
+| Priority and status | {should} · {st-draft}
 | Trigger | The parcel leaves, or arrives.
 | Preconditions | The administrator is signed in. The order is `CONFIRMED` (to ship) or `SHIPPED` (to deliver).
 | Postconditions on success | The order is `SHIPPED`, then `DELIVERED`. Each change is recorded with its author and date, and the customer is told.
@@ -259,7 +255,7 @@ When an order is put under review the customer is told that the store is checkin
 | A refund keeps failing | Captured | Released or lost
 | The payment outcome cannot be established before the review delay | Unknown | Reserved
 | The payment is captured but the stock is not confirmed before the review delay | Captured | Reserved
-| The refund of a cancellation keeps failing {st-proposed} | Captured | Returned
+| The refund of a cancellation keeps failing | Captured | Returned
 |===
 
 .Main success scenario

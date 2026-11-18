@@ -1,6 +1,6 @@
 = Business Journeys and Critical Paths: What Actors Achieve and What Must Never Break
 :doc-id: 01-02
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: End-to-end business journeys, the critical paths among them, and the failure analysis of order placement.
@@ -41,10 +41,10 @@ What strategy gives a complete picture of what the store does, in one table?
 | {JRN-CART-002} | Keep favorites | Customer | {must} | {st-draft}
 | {JRN-ORD-001} | Buy the cart | Customer | {must} {critical} | {st-draft}
 | {JRN-ORD-002} | Follow an order | Customer | {must} | {st-draft}
-| {JRN-ORD-003} | Cancel an order and be refunded | Customer | {should} | {st-proposed}
+| {JRN-ORD-003} | Cancel an order and be refunded | Customer | {should} | {st-draft}
 | {JRN-CAT-002} | Manage the catalog | Administrator | {must} {critical} | {st-draft}
 | {JRN-INV-001} | Manage stock | Administrator | {must} | {st-draft}
-| {JRN-ORD-004} | Fulfill orders | Administrator | {should} | {st-proposed}
+| {JRN-ORD-004} | Fulfill orders | Administrator | {should} | {st-draft}
 | {JRN-ORD-005} | Supervise orders and recover blocked ones | Administrator | {must} | {st-draft}
 |===
 
@@ -170,8 +170,6 @@ Stages are business steps, not screens; the use cases that detail them are in do
 [[JRN-ORD-003]]
 === JRN-ORD-003 — Cancel an order and be refunded
 
-{st-proposed}
-
 [cols="2,11"]
 |===
 | Actor | Customer
@@ -224,8 +222,6 @@ Stages are business steps, not screens; the use cases that detail them are in do
 
 [[JRN-ORD-004]]
 === JRN-ORD-004 — Fulfill orders
-
-{st-proposed}
 
 [cols="2,11"]
 |===
@@ -473,7 +469,7 @@ The table lists, for each step, what can go wrong, how the system notices, what 
 |===
 
 With these delays the store itself never has to refund in the automatic flow: the stock is reserved before the payment, an unanswered payment is canceled before the order is rejected, and an order is decided long before its reservation can expire.
-A refund remains for two cases only: a decision of an administrator after a long outage, and, if that journey is accepted, a cancellation by the customer.
+A refund remains for two cases only: a cancellation by the customer, and a decision of an administrator after a long outage.
 
 The technical design that implements these guarantees — the orchestrated saga, the transactional outbox, idempotent consumers, deadlines — is specified in folder 03.
 Each row of the table becomes a saga scenario there, with its sequence diagram and its tests.

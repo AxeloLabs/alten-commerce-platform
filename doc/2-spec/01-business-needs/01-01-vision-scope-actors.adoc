@@ -1,6 +1,6 @@
 = Vision, Scope and Actors: What the Platform Is For and Where It Stops
 :doc-id: 01-01
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Business vision, actors, scope, constraints, open decisions and glossary.
@@ -87,12 +87,6 @@ Anything that does not exercise a new business rule or a new architectural patte
 | Catalog administration | Create, update, price, publish and retire products | {JRN-CAT-002}
 | Stock administration | Adjust stock, review stock levels | {JRN-INV-001}
 | Order supervision and recovery | An administrator finds any order, and decides those the system could not decide alone | {JRN-ORD-005}
-|===
-
-.Proposed, awaiting validation
-[cols="4,9,3", options="header"]
-|===
-| Capability | Content | Journey
 | Order cancellation | A customer cancels a confirmed order before it ships and is refunded | {JRN-ORD-003}
 | Order fulfillment | The administrator marks an order shipped, then delivered | {JRN-ORD-004}
 |===
@@ -150,32 +144,33 @@ What strategy separates what is imposed from what we chose, so that nobody re-op
 |===
 
 [[decisions]]
-== Decisions awaiting validation
+== Decisions of the product owner
 
 .Strategy question
 ****
 What strategy keeps the product owner in control of the scope before detailed design starts?
 ****
 
-These points are submitted at the gate of this lot.
-Everything written about them in the business documents carries the badge {st-proposed}; nothing downstream depends on them yet.
+Every business decision the brief left open was put in front of the product owner, with a recommendation and the cost of the other choice.
+The table records what was decided; the rest of the specification is written on these decisions and does not reopen them.
 
-[cols="1,5,6,4", options="header"]
+.Decisions validated on 2026-11-19
+[cols="1,6,8", options="header"]
 |===
-| # | Decision | Recommendation | Impact if refused
-| 1 | Add order cancellation by the customer ({JRN-ORD-003}) | Accept. It is the one journey where a refund is a normal business event; without it, a refund only ever follows a decision of an administrator. | The automatic refund is never exercised.
-| 2 | Add order fulfillment by the administrator ({JRN-ORD-004}) | Accept. It gives the order lifecycle its `SHIPPED` and `DELIVERED` statuses. | The lifecycle ends at `CONFIRMED`, which becomes a final status.
-| 3 | Require sign-in to keep a cart | Accept. | A visitor cart must be designed in the storefront.
-| 4 | Keep the limits and delays of the table "Limits and delays" in document 01-06 | Accept; they are configuration values. | Values change, design does not.
-| 5 | An administrator account cannot buy: roles do not nest | Accept. It keeps the authorization matrix testable line by line. | An administrator also needs a cart, favorites and orders.
-| 6 | One line that cannot be reserved rejects the whole order ({FR-INV-003}) | Accept. A partial order is a different promise to the customer. | Partial orders, partial payments and partial rejections must be designed.
-| 7 | The cart counter counts units, not products ({FR-CART-006}) | Accept. | A change of wording and of one rule.
-| 8 | A retired product is never put back on sale ({FR-CAT-005}) | Accept. A product that returns gets a new SKU. | Reactivation needs its own rule and its own checks on carts and favorites.
-| 9 | A customer has one order pending at a time ({FR-ORD-017}) | Accept. It lasts seconds and prevents two orders from one cart. | The cart must be locked or split while an order is pending.
-| 10 | A cart line that can no longer be bought blocks the checkout until it is removed ({FR-CART-010}) | Accept. The customer always sees what will not be ordered. | Such lines are skipped silently.
+| # | Decision | Consequence
+| 1 | Order cancellation by the customer is part of the first release ({JRN-ORD-003}) | It is the journey where a refund happens without any person deciding it. Adds the statuses `CANCELING` and `CANCELED`.
+| 2 | Order fulfillment by the administrator is part of the first release ({JRN-ORD-004}) | The order lifecycle goes on to `SHIPPED` and `DELIVERED`.
+| 3 | A cart requires a signed-in customer | No visitor cart to merge at sign-in.
+| 4 | The limits and delays of the table "Limits and delays" in document 01-06 are accepted | They are configuration values: 10 units per line, 15-minute reservation, 2-minute order deadline, 5-minute review delay.
+| 5 | An administrator account cannot buy: roles do not nest | The authorization matrix stays testable line by line.
+| 6 | One line that cannot be reserved rejects the whole order ({FR-INV-003}) | No partial order, no partial payment.
+| 7 | The cart counter counts units, not products ({FR-CART-006}) | –
+| 8 | A retired product is never put back on sale ({FR-CAT-005}) | A product that returns gets a new SKU.
+| 9 | A customer has one order pending at a time ({FR-ORD-017}) | Two orders can never come out of the same cart.
+| 10 | A cart line that can no longer be bought blocks the checkout until it is removed ({FR-CART-010}) | The customer always sees what will not be ordered.
 |===
 
-.Decisions already taken by the product owner on 2026-11-18
+.Decisions taken on 2026-11-18
 [cols="4,11", options="header"]
 |===
 | Subject | Decision

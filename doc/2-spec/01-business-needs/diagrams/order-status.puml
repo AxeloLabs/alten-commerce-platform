@@ -7,10 +7,10 @@ state PENDING
 state CONFIRMED
 state REJECTED #FFCDD2
 state UNDER_REVIEW #FFF8E1
-state SHIPPED #ECEFF1
-state DELIVERED #ECEFF1
-state CANCELING #ECEFF1
-state CANCELED #ECEFF1
+state SHIPPED
+state DELIVERED
+state CANCELING
+state CANCELED
 
 [*] --> PENDING : order placed
 PENDING --> CONFIRMED : paid and\nstock secured
@@ -28,7 +28,4 @@ REJECTED --> [*]
 DELIVERED --> [*]
 CANCELED --> [*]
 
-legend right
-  Gray: proposed, awaiting validation
-endlegend
 @enduml

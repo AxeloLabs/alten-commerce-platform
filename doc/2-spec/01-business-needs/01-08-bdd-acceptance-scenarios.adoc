@@ -1,6 +1,6 @@
 = BDD Acceptance Scenarios: Examples That Define "Done"
 :doc-id: 01-08
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Gherkin acceptance scenarios, generated from the feature files, with their index and trace links.
@@ -45,7 +45,6 @@ That is what allows the same scenario to run at two levels.
 | `@FR-…` | The business rules the scenario exercises.
 | `@nominal` `@error` `@edge` `@invariant` | The family of the example. Every rule should have its nominal example and at least one of the others.
 | `@critical-path` | The scenario belongs to a critical path. It is also run end to end against the deployed system.
-| `@proposed` | The scenario belongs to a journey awaiting validation.
 |===
 
 .Where scenarios run

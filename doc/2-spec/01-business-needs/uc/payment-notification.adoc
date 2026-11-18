@@ -104,7 +104,7 @@ Their primary actor is the customer on whose behalf they run.
 | Supporting actors | E-mail provider
 | Goal | Inform the customer once, promptly and truthfully.
 | Priority and status | {must} · {st-draft}
-| Trigger | An order is confirmed, rejected or put under review, or a payment is refunded; and, when those journeys are accepted, an order is canceled, shipped or delivered.
+| Trigger | An order is confirmed, rejected or put under review, a payment is refunded, or an order is canceled, shipped or delivered.
 | Preconditions | The event carries the order number, the customer's e-mail address and what the e-mail must say.
 | Postconditions on success | One e-mail was handed to the e-mail provider for the event.
 | Postconditions in every case | At most one e-mail per event. A failure to notify never changes or delays the order. No payment data appears in an e-mail. An e-mail never says "nothing was charged" when something was.
