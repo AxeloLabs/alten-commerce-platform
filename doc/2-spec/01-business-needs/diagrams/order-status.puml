@@ -9,24 +9,26 @@ state REJECTED #FFCDD2
 state UNDER_REVIEW #FFF8E1
 state SHIPPED #ECEFF1
 state DELIVERED #ECEFF1
-state CANCELLED #ECEFF1
+state CANCELING #ECEFF1
+state CANCELED #ECEFF1
 
 [*] --> PENDING : order placed
-PENDING --> CONFIRMED : paid and stock secured
-PENDING --> REJECTED : out of stock,\npayment refused\nor timed out
-PENDING --> UNDER_REVIEW : an undo keeps failing
-UNDER_REVIEW --> CONFIRMED : administrator
-UNDER_REVIEW --> REJECTED : administrator
+PENDING --> CONFIRMED : paid and\nstock secured
+PENDING --> REJECTED : holds no payment:\nout of stock, payment refused,\ntimed out
+PENDING --> UNDER_REVIEW : a refund keeps failing,\nor review delay reached
+UNDER_REVIEW --> CONFIRMED : administrator,\nif paid and stock secured
+UNDER_REVIEW --> REJECTED : administrator,\nonce it holds no payment
 CONFIRMED --> SHIPPED : administrator
 SHIPPED --> DELIVERED : administrator
-CONFIRMED --> CANCELLED : customer cancels,\nstock returned, refunded
-CONFIRMED --> UNDER_REVIEW : refund of a\ncancellation fails
-UNDER_REVIEW --> CANCELLED : administrator
+CONFIRMED --> CANCELING : customer cancels
+CANCELING --> CANCELED : stock returned\nand payment refunded
+CANCELING --> UNDER_REVIEW : the refund\nkeeps failing
+UNDER_REVIEW --> CANCELED : administrator,\nonce refunded
 REJECTED --> [*]
 DELIVERED --> [*]
-CANCELLED --> [*]
+CANCELED --> [*]
 
 legend right
-  Grey: proposed, awaiting validation
+  Gray: proposed, awaiting validation
 endlegend
 @enduml

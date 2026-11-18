@@ -16,56 +16,59 @@ Orders are where the platform makes its promise; these use cases carry most of t
 | Goal | Own a confirmed, paid order, or know why not and have paid nothing.
 | Priority and status | {must} · {st-draft}
 | Trigger | The customer proceeds to checkout.
-| Preconditions | The customer is signed in. The cart holds at least one line.
-| Success guarantees a|
+| Preconditions | The customer is signed in. The cart holds at least one line and no flagged line. The customer has no other order pending.
+| Postconditions on success a|
 * The order is `CONFIRMED`, with the lines and prices shown at checkout.
 * Exactly one payment was captured, for exactly the order total.
 * The stock on hand of each product decreased by the quantity ordered.
-* The cart is empty and a confirmation e-mail is on its way.
-| Minimal guarantees a|
-* The order ends `CONFIRMED`, `REJECTED` with a reason, or `UNDER_REVIEW`; it never stays `PENDING` beyond the deadline.
-* No payment stays captured for an order that is not confirmed: it is refunded, or the order is under review with an alert.
-* No stock stays set aside for a rejected order.
+* The quantities ordered left the cart, and a confirmation e-mail is on its way.
+| Postconditions in every case a|
+* The order is settled within the review delay: confirmed, rejected or under review. An order whose payment is not captured is decided within the order deadline.
+* A rejected order holds no payment: nothing was captured, or it was refunded before the order was rejected.
+* No stock stays reserved for a rejected order beyond the reservation lifetime.
 * Whatever is retried, duplicated or restarted, there is at most one order and one payment per checkout.
-| Authorization | {allowed} Customer, from their own cart. {denied} Visitor. Administrator.
-| Business rules | {FR-ORD-001} {FR-ORD-002} {FR-ORD-003} {FR-ORD-004} {FR-ORD-005} {FR-ORD-006} {FR-ORD-007} {FR-ORD-008} {FR-ORD-009} {FR-ORD-010} {FR-ORD-011} {FR-ORD-014} {FR-ORD-015} {FR-INV-003} {FR-INV-004} {FR-INV-005} {FR-CART-007}
-| Quality attributes | {NFR-PERF-002} {NFR-PERF-003} {NFR-REL-001} {NFR-REL-002} {NFR-REL-003} {NFR-OBS-001}
+| Authorization | {allowed} Customer, from their own cart. {denied} Visitor and administrator.
+| Business rules | {FR-ORD-001} {FR-ORD-002} {FR-ORD-003} {FR-ORD-004} {FR-ORD-005} {FR-ORD-006} {FR-ORD-007} {FR-ORD-008} {FR-ORD-009} {FR-ORD-010} {FR-ORD-011} {FR-ORD-014} {FR-ORD-015} {FR-ORD-016} {FR-ORD-017} {FR-INV-003} {FR-INV-004} {FR-INV-005} {FR-CART-007} {FR-CART-010} {FR-PAY-005}
+| Quality attributes | {NFR-PERF-002} {NFR-PERF-003} {NFR-AVAIL-005} {NFR-REL-001} {NFR-REL-002} {NFR-REL-003} {NFR-OBS-001}
 | Stories | {US-ORD-001} {US-ORD-002} {US-ORD-003} {US-ORD-004} {US-ORD-005}
-| Acceptance | {BDD-ORD-001} {BDD-ORD-002} {BDD-ORD-003} {BDD-ORD-004} {BDD-ORD-005} {BDD-ORD-006} {BDD-ORD-007} {BDD-ORD-008} {BDD-ORD-009} {BDD-ORD-010} {BDD-ORD-011} {BDD-ORD-012} {BDD-ORD-023} {BDD-INV-005}
+| Acceptance | {BDD-ORD-001} {BDD-ORD-002} {BDD-ORD-003} {BDD-ORD-004} {BDD-ORD-005} {BDD-ORD-006} {BDD-ORD-007} {BDD-ORD-008} {BDD-ORD-009} {BDD-ORD-010} {BDD-ORD-011} {BDD-ORD-012} {BDD-ORD-023} {BDD-ORD-024} {BDD-ORD-025} {BDD-ORD-026} {BDD-ORD-027} {BDD-ORD-028} {BDD-ORD-029} {BDD-INV-005}
 |===
 
 .Main success scenario
 . The customer opens the checkout from the cart.
-. The system shows the lines with current prices and availability, and the total.
-. The customer enters a shipping address and a payment token, and submits.
-. The system checks that nothing changed since step 2: every product is still published, at the same price, with enough displayed availability.
+. The system shows the lines with current prices, and the total.
+. The customer enters a shipping address and chooses a means of payment — the storefront obtains a payment token from the payment provider — then submits.
+. The system checks that nothing changed since step 2: every product is still published, at the same price, and the available quantity known to the catalog covers each line.
 . The system creates the order `PENDING`, with an order number and the prices copied from the catalog, and acknowledges it to the customer at once.
 . The system reserves the stock of every line.
 . The system charges the order total ({UC-PAY-001}).
 . The system confirms the reservation; the stock on hand decreases.
-. The system sets the order to `CONFIRMED` and empties the cart.
+. The system sets the order to `CONFIRMED` and removes the ordered quantities from the cart.
 . The system sends the confirmation e-mail ({UC-NOT-001}).
 . The storefront, which has been asking for the order status since step 5, shows the order as confirmed.
 
 .Alternative flows
 3a. The customer submits the same checkout again (double click, refresh, retry after a network error):: The system recognizes the checkout and returns the order created the first time, in its current state. Nothing new is created.
-7a. The payment answer is slow but arrives before the deadline:: The flow continues at step 8.
-8a. The inventory is temporarily unavailable:: The system retries the confirmation until it succeeds. The payment is captured, so the order goes forward; the customer keeps seeing "pending" meanwhile, and an alert is raised if it lasts.
+7a. The payment answer is slow but arrives before the order deadline:: The flow continues at step 8.
+8a. The inventory is temporarily unavailable:: The system retries the confirmation. The payment is captured, so the order goes forward; the customer keeps seeing "pending" meanwhile.
 
 .Exception flows
-1a. The cart is empty:: Checkout is refused.
+1a. The cart is empty, or holds a flagged line:: Checkout is refused. The lines to remove or adjust are named.
+1b. The customer already has a pending order:: Checkout is refused and the pending order is shown.
 3b. The shipping address or the payment token is missing or malformed:: Nothing is created. Every faulty field is reported.
-4a. A price changed, a product was retired or the displayed availability is insufficient:: No order is created. The differences are returned and the customer is sent back to the cart.
+4a. A price changed, a product was retired, or the available quantity known to the catalog no longer covers a line:: No order is created. The differences are returned and the customer is sent back to the cart.
 6a. One line cannot be reserved in full:: Nothing is reserved. The order becomes `REJECTED` with the reason `OUT_OF_STOCK`. No payment is requested. The cart is kept.
-6b. The inventory does not answer before the deadline:: The order becomes `REJECTED` with the reason `TIMED_OUT`. A release is sent in case the reservation was made after all. The cart is kept.
+6b. The inventory does not answer before the order deadline:: No payment was requested. A release is sent in case the reservation was made after all. The order becomes `REJECTED` with the reason `TIMED_OUT`. The cart is kept.
 7b. The payment is refused:: The reservation is released. The order becomes `REJECTED` with the reason `PAYMENT_REFUSED`. The cart is kept.
-7c. No payment answer before the deadline:: The system asks for the payment status. Not captured: the reservation is released and the order becomes `REJECTED` with the reason `TIMED_OUT`. Captured: the flow continues at step 8.
-7d. A "captured" answer arrives after the order was rejected:: The payment is refunded ({UC-PAY-002}). The order stays `REJECTED` and shows the refund.
-8b. The reservation no longer exists and the stock cannot be reserved again:: The payment is refunded. The order becomes `REJECTED` with the reason `OUT_OF_STOCK`.
-*a. At any step, a release or a refund keeps failing:: The order becomes `UNDER_REVIEW` and an administrator is alerted ({UC-ORD-007}).
+7c. No payment answer before the order deadline:: The system cancels the payment at the provider. Canceled: the reservation is released and the order becomes `REJECTED` with the reason `TIMED_OUT`. Already captured: the flow continues at step 8.
+7d. Neither the payment nor its cancellation can be obtained before the review delay:: The order becomes `UNDER_REVIEW` ({UC-ORD-007}).
+8b. The reservation has expired and the stock cannot be reserved again:: The payment is refunded ({UC-PAY-002}); once it is, the order becomes `REJECTED` with the reason `OUT_OF_STOCK`. With the default delays this can only happen after an outage longer than the reservation lifetime, that is when an administrator retries the confirmation of an order under review.
+8c. The reservation is still not confirmed when the review delay expires:: The order becomes `UNDER_REVIEW`, paid, its stock still held ({UC-ORD-007}).
+*a. At any step, a refund keeps failing:: The order becomes `UNDER_REVIEW` and an administrator is alerted. The payment is never recorded as refunded.
 *b. At any step, the order service stops and restarts:: The order resumes from the last step it recorded.
 
-In every rejection the customer is told the reason on screen and by e-mail, and that nothing was charged or that the charge is being refunded.
+In every rejection the customer is told the reason, on screen and by e-mail, and whether something was charged and refunded.
+When an order is put under review the customer is told that the store is checking it and will come back with the outcome.
 
 [[UC-ORD-002]]
 === UC-ORD-002 — View order history
@@ -79,8 +82,8 @@ In every rejection the customer is told the reason on screen and by e-mail, and 
 | Priority and status | {must} · {st-draft}
 | Trigger | The customer opens "My orders".
 | Preconditions | The customer is signed in.
-| Success guarantees | The list shows the customer's orders, newest first, with number, date, total and status.
-| Minimal guarantees | No order of another customer is ever listed.
+| Postconditions on success | The list shows the customer's orders, newest first, with number, date, total and status.
+| Postconditions in every case | No order of another customer is ever listed.
 | Authorization | {allowed} Customer, own orders. {denied} Visitor.
 | Business rules | {FR-IAM-004} {FR-ORD-005}
 | Quality attributes | {NFR-PERF-001}
@@ -99,6 +102,8 @@ In every rejection the customer is told the reason on screen and by e-mail, and 
 [[UC-ORD-003]]
 === UC-ORD-003 — Track an order
 
+{critical}
+
 [cols="3,11"]
 |===
 | Overview | The customer opens an order to see its content, its status and how it got there. The same use case serves the screen that waits for the outcome right after checkout.
@@ -108,9 +113,9 @@ In every rejection the customer is told the reason on screen and by e-mail, and 
 | Priority and status | {must} · {st-draft}
 | Trigger | The customer opens an order, or the storefront refreshes a pending order.
 | Preconditions | The actor is signed in.
-| Success guarantees | The order shows its lines, the prices paid, the shipping address, the current status and the date of each status change. A rejected order shows its reason; a refunded payment shows the refund.
-| Minimal guarantees | The status shown is one of the order lifecycle; once final it never changes.
-| Authorization | {allowed} Customer, own orders. Administrator, any order. {denied} Visitor. Another customer's order: "not found".
+| Postconditions on success | The order shows its lines, the prices paid, the shipping address, the current status and the date of each status change. A rejected order shows its reason; a refunded payment shows the refund.
+| Postconditions in every case | The status shown is one of the order lifecycle; once final it never changes.
+| Authorization | {allowed} Customer, own orders; administrator, any order. {denied} Visitor. Another customer's order is answered "not found".
 | Business rules | {FR-IAM-004} {FR-ORD-010} {FR-ORD-011}
 | Quality attributes | {NFR-PERF-001} {NFR-USAB-002}
 | Stories | {US-ORD-007} {US-ORD-003}
@@ -122,7 +127,7 @@ In every rejection the customer is told the reason on screen and by e-mail, and 
 . The system returns the order with its status and its history.
 
 .Alternative flows
-2a. The order is pending:: The storefront asks again at short intervals until the status is final, then stops.
+2a. The order is pending:: The storefront asks again at short intervals until the order is settled, that is no longer `PENDING`, then stops.
 
 .Exception flows
 2b. The order does not exist or belongs to another customer:: The system answers "not found".
@@ -141,47 +146,45 @@ In every rejection the customer is told the reason on screen and by e-mail, and 
 | Priority and status | {should} · {st-proposed}
 | Trigger | The customer chooses "cancel" on an order.
 | Preconditions | The customer is signed in. The order is `CONFIRMED`.
-| Success guarantees | The order is `CANCELLED`. The quantities ordered are available again. The full amount is refunded and the customer is told.
-| Minimal guarantees | An order is cancelled at most once and refunded at most once. From the moment the cancellation is accepted the order can no longer ship. The order becomes `CANCELLED` only once the refund is made; if the refund keeps failing, the order goes `UNDER_REVIEW`.
-| Authorization | {allowed} Customer, own order. {denied} Visitor. Administrator. Another customer's order: "not found".
+| Postconditions on success | The order is `CANCELED`. The quantities ordered are available again. The full amount is refunded and the customer is told.
+| Postconditions in every case | An order is canceled at most once and refunded at most once. From the moment the cancellation is accepted the order is `CANCELING` and can no longer ship. It becomes `CANCELED` only once the refund is made; if the refund keeps failing, it goes `UNDER_REVIEW`.
+| Authorization | {allowed} Customer, own order. {denied} Visitor and administrator. Another customer's order is answered "not found".
 | Business rules | {FR-ORD-012} {FR-ORD-010} {FR-ORD-014} {FR-PAY-006} {FR-IAM-004}
 | Quality attributes | {NFR-REL-001} {NFR-REL-002}
 | Stories | {US-ORD-008} {US-PAY-003}
-| Acceptance | {BDD-ORD-015} {BDD-ORD-016}
+| Acceptance | {BDD-ORD-015} {BDD-ORD-016} {BDD-ORD-030}
 |===
 
 .Main success scenario
 . The customer asks to cancel an order.
-. The system checks that the order is `CONFIRMED` and has not shipped.
-. The system records the cancellation; from now on the order cannot ship.
+. The system checks that the order is `CONFIRMED`.
+. The system sets the order to `CANCELING`; from now on it cannot ship.
 . The system returns the quantities to the stock.
 . The system refunds the payment ({UC-PAY-002}).
-. The system sets the order to `CANCELLED` and tells the customer, on screen and by e-mail.
+. The system sets the order to `CANCELED` and tells the customer, on screen and by e-mail.
 
 .Alternative flows
-1a. The customer asks twice:: The second request returns the order, cancelled or being cancelled; nothing is done twice.
+1a. The customer asks twice:: The second request returns the order, canceling or canceled; nothing is done twice.
 
 .Exception flows
-2a. The order has shipped, or is not confirmed:: The cancellation is refused and the reason is given.
-5a. The refund keeps failing:: The order becomes `UNDER_REVIEW` ({UC-ORD-007}).
+2a. The order is not `CONFIRMED` — it is pending, has shipped, or is already closed:: The cancellation is refused and the reason is given.
+5a. The refund keeps failing:: The order becomes `UNDER_REVIEW` ({UC-ORD-007}). The stock already returned stays returned.
 
 [[UC-ORD-005]]
 === UC-ORD-005 — Search orders
 
-{st-proposed}
-
 [cols="3,11"]
 |===
-| Overview | The administrator finds orders of any customer.
+| Overview | The administrator finds orders of any customer: to answer a customer, to watch what is happening, and to reach the orders that need a decision.
 | Primary actor | Administrator
 | Supporting actors | –
-| Goal | Prepare orders and answer customers.
-| Priority and status | {should} · {st-proposed}
-| Trigger | Daily preparation, or a customer request.
+| Goal | Find any order.
+| Priority and status | {must} · {st-draft}
+| Trigger | A customer request, a routine check, an alert.
 | Preconditions | The administrator is signed in.
-| Success guarantees | The list shows the orders matching the criteria, newest first.
-| Minimal guarantees | Payment tokens and other payment data are never shown.
-| Authorization | {allowed} Administrator. {denied} Visitor, customer.
+| Postconditions on success | The list shows the orders matching the criteria, newest first.
+| Postconditions in every case | Payment tokens and other payment data are never shown.
+| Authorization | {allowed} Administrator. {denied} Visitor and customer.
 | Business rules | {FR-IAM-005}
 | Quality attributes | {NFR-SEC-006} {NFR-SEC-007}
 | Stories | {US-ORD-009}
@@ -207,13 +210,13 @@ In every rejection the customer is told the reason on screen and by e-mail, and 
 | Priority and status | {should} · {st-proposed}
 | Trigger | The parcel leaves, or arrives.
 | Preconditions | The administrator is signed in. The order is `CONFIRMED` (to ship) or `SHIPPED` (to deliver).
-| Success guarantees | The order is `SHIPPED`, then `DELIVERED`. Each change is recorded with its author and date, and the customer is told.
-| Minimal guarantees | No status is skipped or revisited. A shipped order can no longer be cancelled.
-| Authorization | {allowed} Administrator. {denied} Visitor, customer.
+| Postconditions on success | The order is `SHIPPED`, then `DELIVERED`. Each change is recorded with its author and date, and the customer is told.
+| Postconditions in every case | No status is skipped or revisited. A shipped order can no longer be canceled; an order being canceled can no longer ship.
+| Authorization | {allowed} Administrator. {denied} Visitor and customer.
 | Business rules | {FR-ORD-013} {FR-ORD-010}
 | Quality attributes | {NFR-SEC-006}
 | Stories | {US-ORD-010} {US-ORD-011}
-| Acceptance | {BDD-ORD-018} {BDD-ORD-019}
+| Acceptance | {BDD-ORD-018} {BDD-ORD-019} {BDD-ORD-031}
 |===
 
 .Main success scenario
@@ -223,9 +226,8 @@ In every rejection the customer is told the reason on screen and by e-mail, and 
 . The system sets the order to `DELIVERED` and tells the customer.
 
 .Exception flows
-1a. The order is not `CONFIRMED`:: Shipping is refused.
+1a. The order is not `CONFIRMED`:: Shipping is refused. This includes an order the customer has just canceled: it is `CANCELING`.
 3a. The order is not `SHIPPED`:: Delivery is refused.
-1b. The customer cancelled the order a moment before:: Shipping is refused; the order is `CANCELLED`.
 
 [[UC-ORD-007]]
 === UC-ORD-007 — Resolve an order under review
@@ -234,32 +236,43 @@ In every rejection the customer is told the reason on screen and by e-mail, and 
 
 [cols="3,11"]
 |===
-| Overview | An order is under review when the system could not undo, or could not complete, what it had started: a refund or a stock release kept failing. A person decides.
+| Overview | An order is under review when the system could not decide alone and has stopped processing it. A person decides, under the same rules as the system.
 | Primary actor | Administrator
 | Supporting actors | Payment provider
 | Goal | Bring the order to a state the business and the customer can live with.
 | Priority and status | {must} · {st-draft}
 | Trigger | An alert says an order is under review.
 | Preconditions | The administrator is signed in. The order is `UNDER_REVIEW`.
-| Success guarantees | The order left `UNDER_REVIEW` for `CONFIRMED` or `REJECTED`. Stock and payment match that status. The decision, its author and a comment are recorded. The customer is told.
-| Minimal guarantees | A manual decision goes through the same rules as the automatic flow: a payment is never refunded twice, stock is never released twice.
-| Authorization | {allowed} Administrator. {denied} Visitor, customer.
-| Business rules | {FR-ORD-014} {FR-ORD-010} {FR-PAY-006} {FR-IAM-005}
+| Postconditions on success | The order left `UNDER_REVIEW` for `CONFIRMED`, for `REJECTED` with the reason `ADMIN_DECISION`, or, when it was being canceled, for `CANCELED`. Stock and payment match that status. The decision, its author and a comment are recorded. The customer is told.
+| Postconditions in every case | A confirmed order is paid and its stock secured. A rejected or canceled order holds no payment. A payment is never refunded twice, stock is never released twice.
+| Authorization | {allowed} Administrator. {denied} Visitor and customer.
+| Business rules | {FR-ORD-014} {FR-ORD-016} {FR-ORD-018} {FR-ORD-010} {FR-PAY-006} {FR-IAM-005}
 | Quality attributes | {NFR-SEC-006} {NFR-OBS-004} {NFR-REL-003}
 | Stories | {US-ORD-012}
-| Acceptance | {BDD-ORD-012} {BDD-ORD-020} {BDD-ORD-021}
+| Acceptance | {BDD-ORD-012} {BDD-ORD-020} {BDD-ORD-021} {BDD-ORD-027} {BDD-ORD-032} {BDD-ORD-033}
+|===
+
+.How an order comes under review
+[%unbreakable, cols="6,5,5", options="header"]
+|===
+| Situation | Payment | Stock
+| A refund keeps failing | Captured | Released or lost
+| The payment outcome cannot be established before the review delay | Unknown | Reserved
+| The payment is captured but the stock is not confirmed before the review delay | Captured | Reserved
+| The refund of a cancellation keeps failing {st-proposed} | Captured | Returned
 |===
 
 .Main success scenario
 . The administrator opens the orders under review.
-. The system lists them with, for each, the steps done, the step that failed and why.
-. The administrator asks to retry the failed step.
-. The system retries it; it succeeds, and the order continues to its outcome.
+. The system lists them with, for each, the steps done, the step that failed and why, and the state of its payment and of its stock.
+. The administrator asks to retry the failed step, with a comment.
+. The system retries it; it succeeds, and the order continues to its outcome as it would have by itself.
 
 .Alternative flows
-3a. The administrator decides to reject the order:: The system refunds any captured payment, releases any reserved stock, and sets the order to `REJECTED`.
-3b. The administrator decides to confirm the order, after settling the stock by hand:: The system sets the order to `CONFIRMED`.
+3a. The administrator decides to reject the order:: The system refunds the payment if it is captured, or cancels it if its outcome is unknown, and releases the stock. Once the order holds no payment, it becomes `REJECTED` with the reason `ADMIN_DECISION`.
+3b. The administrator decides to confirm the order:: Allowed only when the payment is captured. The system confirms the reservation and sets the order to `CONFIRMED`.
 
 .Exception flows
-4a. The retry fails again:: The order stays `UNDER_REVIEW`; the new failure is added to its history.
-3c. No comment is given:: The decision is refused.
+3c. The administrator asks to confirm an order whose payment is not captured:: The decision is refused.
+3d. No comment is given:: The decision is refused.
+4a. The retry, the refund or the confirmation fails again:: The order stays `UNDER_REVIEW`; the new failure is added to its history.

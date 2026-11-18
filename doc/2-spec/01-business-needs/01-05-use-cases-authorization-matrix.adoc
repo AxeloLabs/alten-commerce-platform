@@ -1,7 +1,7 @@
 = Use Cases and Authorization Matrix: Every Interaction, Every Flow, Every Refusal
 :doc-id: 01-05
-:revnumber: 0.1
-:revdate: 2026-11-18
+:revnumber: 0.2
+:revdate: 2026-11-19
 :revremark: Draft
 :description: Fully dressed use cases, UML use case diagrams and the authorization matrix.
 include::../_shared/attributes.adoc[]
@@ -21,7 +21,8 @@ Conventions used in this document:
 * Steps are numbered and alternate between the actor and the system. A step says *what* happens, never how it is displayed or implemented.
 * An alternative flow is named after the step it leaves: `4a` is the first variation of step 4. It still reaches the goal.
 * An exception flow is named the same way. It does not reach the goal; it states where the interaction stops and what the system guarantees.
-* *Success guarantees* hold when the goal is reached. *Minimal guarantees* hold whatever happens, including a crash in the middle.
+* Postconditions are split in two: what holds *on success*, when the goal is reached, and what holds *in every case*, including a failure or a crash in the middle.
+* Taking a payment, refunding a payment and notifying the customer are never started by a person: they are included in the use cases that need them, and their primary actor is the customer on whose behalf they run.
 * The *Authorization* row states what is {allowed} and what is {denied}. A refusal is always decided by the server.
 * Error codes returned by exception flows are assigned in the Error Handling Strategy (05-01).
 
@@ -38,30 +39,30 @@ What strategy shows at a glance everything the system lets each actor do?
 [cols="3,7,3,4", options="header"]
 |===
 | ID | Use case | Primary actor | Priority and status
-| {UC-IAM-001} | Register an account | Visitor | {must} {st-draft}
+| {UC-IAM-001} | Register an account | Visitor | {must} {critical} {st-draft}
 | {UC-IAM-002} | Sign in and access protected functions | Customer, administrator | {must} {critical} {st-draft}
 | {UC-CAT-001} | Browse and search the catalog | Visitor | {must} {st-draft}
-| {UC-CAT-002} | View a product | Visitor | {must} {st-draft}
-| {UC-CAT-003} | Create a product | Administrator | {must} {st-draft}
+| {UC-CAT-002} | View a product | Visitor | {must} {critical} {st-draft}
+| {UC-CAT-003} | Create a product | Administrator | {must} {critical} {st-draft}
 | {UC-CAT-004} | Update a product | Administrator | {must} {st-draft}
 | {UC-CAT-005} | Change a product price | Administrator | {must} {critical} {st-draft}
 | {UC-CAT-006} | Publish or retire a product | Administrator | {must} {critical} {st-draft}
-| {UC-INV-001} | Adjust stock | Administrator | {must} {st-draft}
+| {UC-INV-001} | Adjust stock | Administrator | {must} {critical} {st-draft}
 | {UC-INV-002} | Review stock levels | Administrator | {should} {st-draft}
 | {UC-CART-001} | Add a product to the cart | Customer | {must} {st-draft}
-| {UC-CART-002} | View the cart | Customer | {must} {st-draft}
+| {UC-CART-002} | View the cart | Customer | {must} {critical} {st-draft}
 | {UC-CART-003} | Update the cart | Customer | {must} {st-draft}
 | {UC-CART-004} | Manage favorites | Customer | {must} {st-draft}
 | {UC-ORD-001} | Place an order | Customer | {must} {critical} {st-draft}
 | {UC-ORD-002} | View order history | Customer | {must} {st-draft}
-| {UC-ORD-003} | Track an order | Customer | {must} {st-draft}
+| {UC-ORD-003} | Track an order | Customer | {must} {critical} {st-draft}
 | {UC-ORD-004} | Cancel an order | Customer | {should} {st-proposed}
-| {UC-ORD-005} | Search orders | Administrator | {should} {st-proposed}
+| {UC-ORD-005} | Search orders | Administrator | {must} {st-draft}
 | {UC-ORD-006} | Update the fulfillment of an order | Administrator | {should} {st-proposed}
 | {UC-ORD-007} | Resolve an order under review | Administrator | {must} {critical} {st-draft}
-| {UC-PAY-001} | Take a payment | Order saga | {must} {critical} {st-draft}
-| {UC-PAY-002} | Refund a payment | Order saga | {must} {critical} {st-draft}
-| {UC-NOT-001} | Notify the customer by e-mail | Order events | {must} {st-draft}
+| {UC-PAY-001} | Take a payment | Customer, indirectly | {must} {critical} {st-draft}
+| {UC-PAY-002} | Refund a payment | Customer, indirectly | {must} {critical} {st-draft}
+| {UC-NOT-001} | Notify the customer by e-mail | Customer, as recipient | {must} {critical} {st-draft}
 |===
 
 plantuml::diagrams/use-cases-customer.puml[format=svg, align=center]
@@ -89,18 +90,18 @@ Three principles apply everywhere:
 |===
 | Action | Visitor | Customer | Administrator
 | Browse and search the catalog, view a published product | {allowed} | {allowed} | {allowed}
-| View a draft or retired product | {denied} | {denied} | {allowed}
+| List and view draft or retired products | {denied} | {denied} | {allowed}
 | Register an account | {allowed} | {denied} | {denied}
 | Sign in, sign out | {allowed} | {allowed} | {allowed}
 | Add to, view and update a cart | {denied} | {allowed} own | {denied}
 | Mark, unmark and list favorites | {denied} | {allowed} own | {denied}
 | Place an order | {denied} | {allowed} own cart | {denied}
 | View order history and track an order | {denied} | {allowed} own | {allowed} any
-| Cancel an order | {denied} | {allowed} own | {denied}
+| Cancel an order {st-proposed} | {denied} | {allowed} own | {denied}
 | Create, update, price, publish, retire a product | {denied} | {denied} | {allowed}
 | Adjust stock, review stock levels | {denied} | {denied} | {allowed}
 | Search all orders | {denied} | {denied} | {allowed}
-| Mark an order shipped or delivered | {denied} | {denied} | {allowed}
+| Mark an order shipped or delivered {st-proposed} | {denied} | {denied} | {allowed}
 | Resolve an order under review | {denied} | {denied} | {allowed}
 | Take a payment, refund a payment, send an e-mail | {denied} | {denied} | {denied}
 |===

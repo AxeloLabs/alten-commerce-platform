@@ -1,7 +1,7 @@
 = Epics and User Stories: The Backlog of the First Release
 :doc-id: 01-04
-:revnumber: 0.1
-:revdate: 2026-11-18
+:revnumber: 0.2
+:revdate: 2026-11-19
 :revremark: Draft
 :description: Epics, user stories with priority, estimate and acceptance criteria, and the story map.
 include::../_shared/attributes.adoc[]
@@ -23,7 +23,7 @@ Stories are what is planned, built, demonstrated and accepted.
 | Rule | Meaning
 | One actor, one benefit | "As a _role_, I want _capability_ so that _benefit_." A story with no benefit is a task.
 | INVEST | Independent, Negotiable, Valuable, Estimable, Small, Testable. A story that fails one of them is rewritten or split.
-| Acceptance criteria | Two to five observable outcomes. Each becomes at least one acceptance scenario in document 01-08.
+| Acceptance criteria | Two to five observable outcomes. They are refined into the acceptance scenarios of document 01-08, where every business rule behind a criterion has at least one scenario.
 | Priority | MoSCoW. {must}: the release has no value without it. {should}: expected, can slip. {could}: only if time allows. {wont}: explicitly excluded.
 | Estimate | Story points on the Fibonacci scale (1, 2, 3, 5, 8). Relative size, not days. A story above 8 is split.
 | Realized by | The use case that details every flow of the story, in document 01-05.
@@ -43,23 +43,23 @@ What strategy shows the whole release on one page, so that scope can be traded a
 ****
 
 .Epics
-[cols="3,6,3,2,2,3", options="header"]
+[cols="3,6,3,2,2,2,3", options="header"]
 |===
-| ID | Epic | Journey | Stories | Points | Status
-| {EPIC-IAM-001} | Account and access | {JRN-IAM-001} | 3 | 8 | {st-draft}
-| {EPIC-CAT-001} | Product discovery | {JRN-CAT-001} | 3 | 10 | {st-draft}
-| {EPIC-CAT-002} | Catalog administration | {JRN-CAT-002} | 4 | 10 | {st-draft}
-| {EPIC-INV-001} | Stock management | {JRN-INV-001} | 3 | 10 | {st-draft}
-| {EPIC-CART-001} | Shopping cart | {JRN-CART-001} | 4 | 10 | {st-draft}
-| {EPIC-CART-002} | Favorites | {JRN-CART-002} | 3 | 5 | {st-draft}
-| {EPIC-ORD-001} | Checkout and order placement | {JRN-ORD-001} | 5 | 24 | {st-draft}
-| {EPIC-PAY-001} | Payment and refund | {JRN-ORD-001} | 2 | 10 | {st-draft}
-| {EPIC-ORD-002} | Order tracking | {JRN-ORD-002} | 2 | 5 | {st-draft}
-| {EPIC-NOT-001} | Customer notifications | {JRN-ORD-002} | 3 | 7 | {st-draft}
-| {EPIC-ORD-003} | Order cancellation | {JRN-ORD-003} | 2 | 8 | {st-proposed}
-| {EPIC-ORD-004} | Order fulfillment | {JRN-ORD-004} | 3 | 6 | {st-proposed}
-| {EPIC-ORD-005} | Blocked order recovery | {JRN-ORD-005} | 1 | 5 | {st-draft}
-| | *Total* | | *38* | *118* |
+| ID | Epic | Journey | Priority | Stories | Points | Status
+| {EPIC-IAM-001} | Account and access | {JRN-IAM-001} | {must} | 3 | 8 | {st-draft}
+| {EPIC-CAT-001} | Product discovery | {JRN-CAT-001} | {must} | 3 | 10 | {st-draft}
+| {EPIC-CAT-002} | Catalog administration | {JRN-CAT-002} | {must} | 5 | 12 | {st-draft}
+| {EPIC-INV-001} | Stock management | {JRN-INV-001} | {must} | 3 | 10 | {st-draft}
+| {EPIC-CART-001} | Shopping cart | {JRN-CART-001} | {must} | 4 | 10 | {st-draft}
+| {EPIC-CART-002} | Favorites | {JRN-CART-002} | {must} | 3 | 5 | {st-draft}
+| {EPIC-ORD-001} | Checkout and order placement | {JRN-ORD-001} | {must} | 5 | 24 | {st-draft}
+| {EPIC-PAY-001} | Payment and refund | {JRN-ORD-001} | {must} | 2 | 10 | {st-draft}
+| {EPIC-ORD-002} | Order tracking | {JRN-ORD-002} | {must} | 2 | 5 | {st-draft}
+| {EPIC-NOT-001} | Customer notifications | {JRN-ORD-002} | {must} | 3 | 7 | {st-draft}
+| {EPIC-ORD-005} | Order supervision and recovery | {JRN-ORD-005} | {must} | 2 | 8 | {st-draft}
+| {EPIC-ORD-003} | Order cancellation | {JRN-ORD-003} | {should} | 2 | 8 | {st-proposed}
+| {EPIC-ORD-004} | Order fulfillment | {JRN-ORD-004} | {should} | 2 | 3 | {st-proposed}
+| | *Total* | | | *39* | *120* |
 |===
 
 The story map reads left to right along the customer's path, then the administrator's.
@@ -73,18 +73,18 @@ Each row is a slice that could be released on its own: the first row is the smal
 | {must}
 | {US-IAM-001} {US-IAM-002} {US-IAM-003}
 | {US-CAT-001} {US-CAT-003} {US-INV-003}
-| {US-CART-001} {US-CART-002} {US-CART-003} {US-CART-005} {US-CART-006}
+| {US-CART-001} {US-CART-002} {US-CART-003} {US-CART-004} {US-CART-005} {US-CART-006}
 | {US-ORD-001} {US-ORD-002} {US-ORD-003} {US-ORD-004} {US-ORD-005} {US-PAY-001} {US-PAY-002}
 | {US-ORD-006} {US-ORD-007} {US-NOT-001} {US-NOT-002}
-| {US-CAT-004} {US-CAT-005} {US-CAT-006} {US-CAT-007} {US-INV-001} {US-ORD-012}
+| {US-CAT-004} {US-CAT-005} {US-CAT-006} {US-CAT-007} {US-CAT-008} {US-INV-001} {US-ORD-009} {US-ORD-012}
 
 | {should}
 |
 | {US-CAT-002}
-| {US-CART-004}
+|
 | {US-ORD-008} {US-PAY-003}
 | {US-NOT-003}
-| {US-INV-002} {US-ORD-009} {US-ORD-010} {US-ORD-011}
+| {US-INV-002} {US-ORD-010} {US-ORD-011}
 
 | {could}
 |
@@ -224,7 +224,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Story | *As an* administrator, *I want* to create a product with its SKU, name, description, category and price *so that* it can be put on sale.
 | Priority | {must} · 3 points
 | Acceptance criteria a|
-. The product is created as a draft, invisible to customers.
+. The product is created as a draft, invisible to customers. A SKU and a name are enough; the rest can be completed later.
 . A SKU that already exists is refused.
 . A missing name, an unknown category or a price outside the allowed range is refused, field by field.
 | Realized by | {UC-CAT-003}
@@ -266,10 +266,24 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Story | *As an* administrator, *I want* to publish a draft and to retire a product *so that* customers see exactly what is on sale.
 | Priority | {must} · 2 points
 | Acceptance criteria a|
-. A complete draft can be published; it then appears in the storefront.
+. A draft that has a name, a description, a category and a price can be published, and then appears in the storefront. An incomplete draft is refused and what is missing is listed.
 . A retired product disappears from the catalog and from search, and can no longer be added to a cart.
 . A retired product remains readable in the orders and the favorites that reference it.
 | Realized by | {UC-CAT-006}
+|===
+
+[[US-CAT-008]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-CAT-008 — Find any product
+| Epic | {EPIC-CAT-002}
+| Story | *As an* administrator, *I want* to list the products of every status and filter them by status *so that* I can find the one to complete, update or retire.
+| Priority | {must} · 2 points
+| Acceptance criteria a|
+. The list includes drafts and retired products, which customers never see.
+. The list can be limited to one status.
+. Any product opens, whatever its status.
+| Realized by | {UC-CAT-001} {UC-CAT-002}
 |===
 
 [[EPIC-INV-001]]
@@ -345,7 +359,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Acceptance criteria a|
 . The product is added with the chosen quantity and the cart counter is updated.
 . Adding a product that is already in the cart increases the quantity of its line.
-. A quantity above the displayed availability, or above 10 units, is refused with an explanatory message.
+. A quantity above the available quantity, or above 10 units, is refused with an explanatory message.
 . An out-of-stock or retired product cannot be added.
 | Realized by | {UC-CART-001}
 |===
@@ -360,7 +374,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Acceptance criteria a|
 . The cart shows each line with the product name, the current unit price, the quantity and the line total, then the cart total.
 . A counter on every page shows the total number of units in the cart.
-. A line whose price changed, or whose product is no longer available, is flagged.
+. A line whose price changed shows both prices. A line that can no longer be bought is flagged, left out of the total and of the counter, and blocks the checkout until it is removed or adjusted.
 | Realized by | {UC-CART-002}
 |===
 
@@ -372,7 +386,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Story | *As a* customer, *I want* to change a quantity or remove a line *so that* my cart holds exactly what I want.
 | Priority | {must} · 2 points
 | Acceptance criteria a|
-. A quantity can be set between 1 and 10, within the displayed availability.
+. A quantity can be set between 1 and 10, within the available quantity.
 . Removing a line, or setting its quantity to zero, deletes it.
 . Totals and counter follow at once.
 | Realized by | {UC-CART-003}
@@ -384,7 +398,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 2+h| US-CART-004 — Find my cart again later
 | Epic | {EPIC-CART-001}
 | Story | *As a* customer, *I want* my cart to be kept when I sign out or change device *so that* I can finish my purchase later.
-| Priority | {should} · 2 points
+| Priority | {must} · 2 points
 | Acceptance criteria a|
 . The cart is the same after signing out and in again, on any device.
 . A cart is visible to its owner only.
@@ -465,7 +479,8 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Priority | {must} · 3 points
 | Acceptance criteria a|
 . The checkout shows the lines, the current prices and the total, and asks for a shipping address and a means of payment.
-. A line whose price or availability changed since it was put in the cart is highlighted and must be acknowledged.
+. A line whose price changed since it was put in the cart is highlighted with both prices.
+. A line that can no longer be bought must be removed or adjusted before the checkout can continue.
 . An empty cart cannot be checked out.
 | Realized by | {UC-ORD-001}
 |===
@@ -481,7 +496,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 . Submitting creates an order with an order number and the status "pending"; the answer does not wait for the payment.
 . The prices of the order are those shown at checkout and never change afterwards.
 . The order appears in the order history immediately.
-. If a price or an availability changed between the review and the submission, no order is created and the customer is sent back to the cart.
+. If a price changed, a product was retired or a quantity is no longer available between the review and the submission, no order is created and the customer is sent back to the cart.
 | Realized by | {UC-ORD-001}
 |===
 
@@ -494,9 +509,9 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Priority | {must} · 5 points
 | Acceptance criteria a|
 . The order page updates by itself to "confirmed" or "rejected" within seconds.
-. A rejection gives its reason in plain language and says that nothing was charged, or that the charge is being refunded.
+. A rejection gives its reason in plain language and says truthfully that nothing was charged, or that the charge was refunded.
 . The outcome is also sent by e-mail.
-. An order with no outcome after 2 minutes is rejected; it never stays pending.
+. An order that is not paid after 2 minutes is rejected. An order that cannot be decided after 5 minutes is handed to an administrator, and the customer is told that it is being checked.
 | Realized by | {UC-ORD-001} {UC-ORD-003}
 |===
 
@@ -525,6 +540,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Acceptance criteria a|
 . Submitting the same checkout twice returns the same order.
 . One checkout leads to at most one payment.
+. While an order is pending, another checkout is refused and points to it.
 | Realized by | {UC-ORD-001}
 |===
 
@@ -564,7 +580,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Story | *As a* customer, *I want* to be refunded without asking when an order I paid cannot be confirmed *so that* I never pay for nothing.
 | Priority | {must} · 5 points
 | Acceptance criteria a|
-. A payment captured for an order that ends rejected is refunded in full, automatically.
+. A paid order is rejected only after its payment has been refunded in full.
 . The refund is visible on the order and announced by e-mail.
 . A payment is never refunded twice.
 | Realized by | {UC-PAY-002}
@@ -642,7 +658,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Priority | {must} · 2 points
 | Acceptance criteria a|
 . The e-mail gives the reason in plain language.
-. It states that nothing was charged, or that the charge is being refunded.
+. It states truthfully that nothing was charged, or that the charge was refunded.
 | Realized by | {UC-NOT-001}
 |===
 
@@ -651,10 +667,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 |===
 2+h| US-NOT-003 — Receive an e-mail when my order progresses
 | Epic | {EPIC-NOT-001}
-| Story | *As a* customer, *I want* an e-mail when my order is shipped, delivered, cancelled or refunded *so that* I can follow it without signing in.
+| Story | *As a* customer, *I want* an e-mail when my order is shipped, delivered or canceled *so that* I can follow it without signing in.
 | Priority | {should} · 2 points · {st-proposed}
 | Acceptance criteria a|
 . Each of these changes produces one e-mail with the order number and the new status.
+. The same change announced twice produces one e-mail.
 | Realized by | {UC-NOT-001}
 |===
 
@@ -679,9 +696,9 @@ Each row is a slice that could be released on its own: the first row is the smal
 | Story | *As a* customer, *I want* to cancel a confirmed order that has not shipped *so that* I can change my mind.
 | Priority | {should} · 5 points · {st-proposed}
 | Acceptance criteria a|
-. A confirmed order that has not shipped can be cancelled; its status becomes "cancelled".
+. A confirmed order that has not shipped can be canceled: it shows "canceling" until the refund is made, then "canceled".
 . The quantities of the order become available again.
-. An order that has shipped, or that is already cancelled or rejected, cannot be cancelled, and the reason is given.
+. An order that has shipped, or that is already canceled or rejected, cannot be canceled, and the reason is given.
 | Realized by | {UC-ORD-004}
 |===
 
@@ -690,7 +707,7 @@ Each row is a slice that could be released on its own: the first row is the smal
 |===
 2+h| US-PAY-003 — Be refunded after a cancellation
 | Epic | {EPIC-ORD-003}
-| Story | *As a* customer, *I want* the full amount back when I cancel an order *so that* cancelling costs me nothing.
+| Story | *As a* customer, *I want* the full amount back when I cancel an order *so that* canceling costs me nothing.
 | Priority | {should} · 3 points · {st-proposed}
 | Acceptance criteria a|
 . The cancellation triggers a refund of the full amount paid.
@@ -707,22 +724,8 @@ Each row is a slice that could be released on its own: the first row is the smal
 |===
 | Journey | {JRN-ORD-004}
 | Value | The administrator takes confirmed orders to delivery and the customer follows along.
-| Scope | Order search for administrators, shipment, delivery.
+| Scope | Shipment and delivery.
 | Owner | {role-swe}
-|===
-
-[[US-ORD-009]]
-[cols="3,11", frame=all, grid=rows, stripes=none]
-|===
-2+h| US-ORD-009 — Find any order
-| Epic | {EPIC-ORD-004}
-| Story | *As an* administrator, *I want* to search all orders by number, customer, status or date *so that* I can prepare them and answer customers.
-| Priority | {should} · 3 points · {st-proposed}
-| Acceptance criteria a|
-. The search covers the orders of all customers.
-. Criteria can be combined; the result is paginated, newest first.
-. An order opens with the same detail the customer sees, plus its technical history.
-| Realized by | {UC-ORD-005}
 |===
 
 [[US-ORD-010]]
@@ -752,14 +755,28 @@ Each row is a slice that could be released on its own: the first row is the smal
 |===
 
 [[EPIC-ORD-005]]
-== EPIC-ORD-005 — Blocked order recovery
+== EPIC-ORD-005 — Order supervision and recovery
 
 [cols="2,11"]
 |===
 | Journey | {JRN-ORD-005}
-| Value | No order stays in a state nobody understands; a person can always settle it.
-| Scope | List of orders under review, retry, manual settlement, audit trail.
+| Value | No order stays in a state nobody understands: a person can always find it and decide.
+| Scope | Search of all orders, list of orders under review, retry, decision by hand, audit trail.
 | Owner | {role-sre} {role-swe}
+|===
+
+[[US-ORD-009]]
+[cols="3,11", frame=all, grid=rows, stripes=none]
+|===
+2+h| US-ORD-009 — Find any order
+| Epic | {EPIC-ORD-005}
+| Story | *As an* administrator, *I want* to search all orders by number, customer, status or date *so that* I can answer customers and reach the orders that need a decision.
+| Priority | {must} · 3 points
+| Acceptance criteria a|
+. The search covers the orders of all customers.
+. Criteria can be combined; the result is paginated, newest first.
+. An order opens with the same detail the customer sees, plus its technical history.
+| Realized by | {UC-ORD-005}
 |===
 
 [[US-ORD-012]]
@@ -767,12 +784,13 @@ Each row is a slice that could be released on its own: the first row is the smal
 |===
 2+h| US-ORD-012 — Resolve an order under review
 | Epic | {EPIC-ORD-005}
-| Story | *As an* administrator, *I want* to see the orders the system could not settle and to settle them myself *so that* no customer is left charged without an order, or with an order in limbo.
+| Story | *As an* administrator, *I want* to see the orders the system could not decide and to decide them myself *so that* no customer is left charged without an order, or with an order in limbo.
 | Priority | {must} · 5 points
 | Acceptance criteria a|
 . The list shows each order under review with what was done and what failed.
 . The failed action can be retried.
-. The order can be settled by hand: confirmed, or rejected with a refund.
-. Each decision is recorded with its author and a comment, and the customer is told the outcome.
+. The order can be decided by hand: confirmed if it is paid, or rejected once any payment is refunded.
+. Each decision is recorded with its author and a comment.
+. The customer is told when an order is put under review, and again when it is decided.
 | Realized by | {UC-ORD-007}
 |===

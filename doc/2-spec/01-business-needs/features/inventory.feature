@@ -28,7 +28,7 @@ Feature: Inventory
       And exactly 5 reservations are rejected
       And "KB-001" has 0 units available
 
-  Rule: A reservation that is not settled in time expires
+  Rule: A reservation that is neither confirmed nor released in time expires
 
     @BDD-INV-005 @UC-ORD-001 @FR-INV-004 @edge
     Scenario: A reservation expires

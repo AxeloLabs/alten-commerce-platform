@@ -27,7 +27,7 @@ Feature: Identity and access
       Then she is signed in as "alice@example.com" with the role "CUSTOMER"
       And she can open her cart
 
-    @BDD-IAM-004 @UC-IAM-002 @FR-IAM-006 @error
+    @BDD-IAM-004 @UC-IAM-002 @FR-IAM-007 @error
     Scenario: Signing in with a wrong password
       Given a customer "alice@example.com"
       When she signs in with a wrong password

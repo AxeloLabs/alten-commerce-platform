@@ -47,6 +47,6 @@ NOT1 --> MAIL
 
 legend right
   Orange: critical path
-  Grey: proposed, awaiting validation
+  Gray: proposed, awaiting validation
 endlegend
 @enduml

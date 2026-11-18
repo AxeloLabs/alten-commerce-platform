@@ -23,7 +23,7 @@ Feature: Cart and favorites
 
     @BDD-CART-003 @UC-CART-001 @FR-CART-002 @FR-CART-004 @edge
     Scenario Outline: Adding up to and beyond the limits
-      Given a cart with <in cart> units of "<sku>"
+      Given <in cart> units of "<sku>" are already in the cart
       When the customer adds <added> units of "<sku>" to the cart
       Then the addition is <outcome>
 
@@ -70,6 +70,18 @@ Feature: Cart and favorites
       Then the line "KB-001" shows the unit price 99.90, flagged as changed from 89.90
       And the cart total is 99.90
 
+  Rule: A line that can no longer be bought is flagged, left out of the totals, and blocks the checkout
+
+    @BDD-CART-013 @UC-CART-002 @FR-CART-010 @FR-CART-005 @FR-CART-006 @edge
+    Scenario: A retired product is flagged in the cart and left out of the totals
+      Given a cart with 1 unit of "KB-001" and 3 units of "CB-001"
+      And the administrator retired "CB-001"
+      When the customer opens the cart
+      Then the line "CB-001" is flagged as unavailable
+      And the cart total is 89.90
+      And the cart counter shows 1
+      And the checkout is not offered
+
   Rule: A customer changes quantities and removes lines freely
 
     @BDD-CART-007 @UC-CART-003 @FR-CART-002 @FR-CART-005 @nominal
@@ -109,7 +121,6 @@ Feature: Cart and favorites
       And "CB-001" is now retired
       When the customer opens the favorites
       Then both favorites are listed, flagged as unavailable
-      And neither can be added to the cart
 
     @BDD-CART-012 @UC-CART-004 @UC-CART-001 @FR-CART-003 @nominal
     Scenario: Adding a favorite to the cart

@@ -1,7 +1,7 @@
 = Vision, Scope and Actors: What the Platform Is For and Where It Stops
 :doc-id: 01-01
-:revnumber: 0.1
-:revdate: 2026-11-18
+:revnumber: 0.2
+:revdate: 2026-11-19
 :revremark: Draft
 :description: Business vision, actors, scope, constraints, open decisions and glossary.
 include::../_shared/attributes.adoc[]
@@ -14,7 +14,7 @@ What strategy keeps a small e-commerce product focused on what matters to the bu
 ****
 
 The {project-name} is an online store where customers buy products from a catalog managed by an administrator.
-The business lives or dies on one promise: *an order that is accepted is paid, in stock and delivered; an order that cannot be honored costs the customer nothing*.
+The business lives or dies on one promise: *an order that is confirmed is paid and its stock is secured; an order that cannot be honored costs the customer nothing*.
 
 Everything in this specification is ranked against that promise.
 Placing an order is the critical journey; browsing, carts and favorites feed it; notifications and order tracking report on it.
@@ -25,7 +25,7 @@ Placing an order is the critical journey; browsing, carts and favorites feed it;
 | # | Objective | How we know it is met
 | 1 | A customer finds a product and buys it without help | The journey {JRN-ORD-001} completes end to end in a few clicks
 | 2 | The store never sells what it does not have | No confirmed order without confirmed stock ({FR-ORD-007})
-| 3 | A customer is never charged for nothing | No captured payment without a confirmed order, or else a refund ({FR-PAY-005})
+| 3 | A customer is never charged for nothing | A rejected order never holds a payment ({FR-ORD-008})
 | 4 | The administrator runs the catalog alone | Products, prices and stock are managed without a developer ({JRN-CAT-002}, {JRN-INV-001})
 | 5 | The customer always knows where an order stands | Status on screen and by e-mail at every change ({JRN-ORD-002})
 | 6 | A failure degrades the store, it does not corrupt it | Every order ends in a consistent state, whatever fails ({CP-ORD-004})
@@ -86,7 +86,7 @@ Anything that does not exercise a new business rule or a new architectural patte
 | Order tracking | Order history, order detail and status, e-mails | {JRN-ORD-002}
 | Catalog administration | Create, update, price, publish and retire products | {JRN-CAT-002}
 | Stock administration | Adjust stock, review stock levels | {JRN-INV-001}
-| Blocked order recovery | An administrator resolves an order the system could not settle alone | {JRN-ORD-005}
+| Order supervision and recovery | An administrator finds any order, and decides those the system could not decide alone | {JRN-ORD-005}
 |===
 
 .Proposed, awaiting validation
@@ -109,6 +109,10 @@ Anything that does not exercise a new business rule or a new architectural patte
 | Several currencies, languages or warehouses | One currency (EUR), one language (English), one stock per product.
 | Invoices and accounting exports | Downstream of the order; no impact on its consistency.
 | Supplier purchasing and replenishment | Stock arrives through manual adjustment by the administrator.
+| Password reset, profile, e-mail verification | Offered by the standard pages of the identity provider and not specified here. A new account can sign in at once.
+| Saved addresses, delivery areas | The shipping address is typed at checkout, as free text, and kept with the order. Nothing checks that it can be delivered.
+| Product images | A product has a name and a description. Pictures add storage and nothing to the order.
+| Category management | Categories are a fixed list, set when the store is installed.
 |===
 
 == Constraints and assumptions
@@ -159,10 +163,25 @@ Everything written about them in the business documents carries the badge {st-pr
 [cols="1,5,6,4", options="header"]
 |===
 | # | Decision | Recommendation | Impact if refused
-| 1 | Add order cancellation by the customer ({JRN-ORD-003}) | Accept. It is the one journey where a refund is a normal business event rather than a failure recovery. | Refund is exercised only by the late-payment failure case.
-| 2 | Add order fulfillment by the administrator ({JRN-ORD-004}) | Accept. It gives the order lifecycle its `SHIPPED` and `DELIVERED` states. | The lifecycle ends at `CONFIRMED`.
+| 1 | Add order cancellation by the customer ({JRN-ORD-003}) | Accept. It is the one journey where a refund is a normal business event; without it, a refund only ever follows a decision of an administrator. | The automatic refund is never exercised.
+| 2 | Add order fulfillment by the administrator ({JRN-ORD-004}) | Accept. It gives the order lifecycle its `SHIPPED` and `DELIVERED` statuses. | The lifecycle ends at `CONFIRMED`, which becomes a final status.
 | 3 | Require sign-in to keep a cart | Accept. | A visitor cart must be designed in the storefront.
-| 4 | Keep the limits and delays listed in the working assumptions | Accept; they are configuration values. | Values change, design does not.
+| 4 | Keep the limits and delays of the table "Limits and delays" in document 01-06 | Accept; they are configuration values. | Values change, design does not.
+| 5 | An administrator account cannot buy: roles do not nest | Accept. It keeps the authorization matrix testable line by line. | An administrator also needs a cart, favorites and orders.
+| 6 | One line that cannot be reserved rejects the whole order ({FR-INV-003}) | Accept. A partial order is a different promise to the customer. | Partial orders, partial payments and partial rejections must be designed.
+| 7 | The cart counter counts units, not products ({FR-CART-006}) | Accept. | A change of wording and of one rule.
+| 8 | A retired product is never put back on sale ({FR-CAT-005}) | Accept. A product that returns gets a new SKU. | Reactivation needs its own rule and its own checks on carts and favorites.
+| 9 | A customer has one order pending at a time ({FR-ORD-017}) | Accept. It lasts seconds and prevents two orders from one cart. | The cart must be locked or split while an order is pending.
+| 10 | A cart line that can no longer be bought blocks the checkout until it is removed ({FR-CART-010}) | Accept. The customer always sees what will not be ordered. | Such lines are skipped silently.
+|===
+
+.Decisions already taken by the product owner on 2026-11-18
+[cols="4,11", options="header"]
+|===
+| Subject | Decision
+| Interchangeable persistence | PostgreSQL is the store of every service that takes part in an order. The three interchangeable stores — PostgreSQL, a document database, a file — are implemented for the catalog and the cart only, and proven by one shared test suite ({NFR-MAINT-004}).
+| Environments | One Google Cloud project and one cluster, with three isolated environments: test, integration, production. The layout with one project per environment is described, not deployed.
+| Documentation | Sources in AsciiDoc with diagrams as text; PDF generated by the build.
 |===
 
 == Glossary
@@ -185,18 +204,22 @@ They are used with this meaning, and only this meaning, in every document and in
 | Stock on hand | The quantity of a product physically held.
 | Reservation | A quantity of stock set aside for one order while it is being paid. It is confirmed, released, or it expires.
 | Available quantity | Stock on hand minus reserved quantities: what can still be sold.
-| Displayed availability | What the storefront shows: in stock, low stock or out of stock. An indication, not a guarantee.
+| Available quantity known to the catalog | The catalog's own copy of the available quantity, refreshed each time the inventory announces a change. It can be a few seconds late.
+| Availability level | What the storefront shows, derived from that copy: in stock, low stock or out of stock. An indication, not a guarantee.
 | Cart | The products a customer intends to buy, with quantities. One per customer.
 | Favorite | A product a customer marked to find it again.
-| Checkout | The step where the customer reviews the cart, gives a shipping address and a payment token, and submits.
+| Checkout | The step where the customer reviews the cart, gives a shipping address and a means of payment, and submits.
+| Same checkout | The storefront gives each checkout an identifier when the review is shown. Two submissions carrying the same identifier are the same checkout, and give one order.
+| Flagged line | A cart line that can no longer be bought as it is: its product was retired, or its quantity is no longer available.
 | Order | A customer's commitment to buy given products at given prices. Created at checkout, immutable afterwards.
 | Order number | The human-readable identifier of an order.
 | Payment | The charge of an order total on the customer's means of payment.
-| Payment token | An opaque value issued by the payment provider that stands for a card. The platform never sees card data.
+| Payment token | An opaque value issued by the payment provider that stands for a card. The customer enters card details on the provider's form, the storefront receives the token, and the platform never sees card data.
 | Refund | The return of a captured payment to the customer.
-| Confirmed, rejected | An order is confirmed when it is paid and its stock is secured. It is rejected, with a reason, when it cannot be.
-| Under review | The state of an order the system could not settle alone; an administrator must act.
+| Confirmed, rejected | An order is confirmed when it is paid and its stock is secured. It is rejected, with a reason, when it cannot be; a rejected order holds no payment.
+| Settled | An order is settled when it is no longer pending: the customer has an answer.
+| Under review | The status of an order the system could not decide alone. Automatic processing has stopped; an administrator decides.
 | Saga | The sequence of steps, spread over several services, that takes an order to its outcome.
-| Compensation | The action that undoes a completed step when a later step fails: releasing stock, refunding a payment.
+| Compensation, undo | The action that undoes a completed step when a later step fails: releasing stock, canceling or refunding a payment. Business documents say "undo"; technical documents say "compensation".
 | Critical path | A journey, or a branch of one, whose failure stops the business or harms the customer.
 |===

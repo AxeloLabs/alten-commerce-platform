@@ -19,7 +19,7 @@ Three rules make the set hold together:
 
 . *Every specification item has an identifier.* A use case, a business rule, an event, a test: each one is defined once and referenced everywhere else by its identifier. The build fails when a reference points to nothing.
 . *Every version number is declared once.* The technology stack is described in a single attribute file; documents quote it and never write a version by hand.
-. *Every document answers a strategy question.* Each section opens with the question it settles, so that a reader always knows which concern is being addressed.
+. *Every document answers a strategy question.* Each section opens with the question it answers, so that a reader always knows which concern is being addressed.
 
 This guide is the entry point of the specification. Read it first; it explains how to find, read, write and build everything else.
 
@@ -151,7 +151,7 @@ An identifier has three parts: `<TYPE>-<CONTEXT>-<NNN>`.
 * `CONTEXT` says which bounded context or concern owns it.
 * `NNN` is a three-digit sequence number, unique for that type and context.
 
-An identifier is *never reused and never renumbered*.
+Once the document that defines it is approved, an identifier is *never reused and never renumbered*.
 An item that is abandoned keeps its identifier and is marked {st-rejected}; its number is not given to another item.
 
 .Identifier types
@@ -280,7 +280,7 @@ Requirement wording:: A functional requirement is one sentence with "shall", ver
 Priority:: MoSCoW, shown with a badge. {must} is required for the first release, {should} is expected, {could} is optional, {wont} is explicitly out of scope.
 Authorization:: Every use case states what is {allowed} and what is {denied}, per actor.
 Tables before prose:: Catalogs (events, errors, tests, tools) are tables. Prose explains decisions, not inventories.
-Diagrams:: Every document that describes behavior contains at least one diagram. Critical paths always have a sequence diagram.
+Diagrams:: Every document that describes behavior contains at least one diagram. Every critical path has a sequence diagram: a business view of the nominal path in document 01-02, and a technical view of each scenario in document 03-03.
 Versions:: A version is never typed in a document. It is quoted from the shared attribute file, for example Spring Boot {v-spring-boot} on Java {v-java}.
 Decisions:: A choice between alternatives is recorded as an `ADR` and referenced from the text; the text does not re-argue it.
 
@@ -312,7 +312,7 @@ Each one is a section whose title is the identifier and the name, followed by th
 | Main success scenario | Numbered steps, alternating actor and system
 | Alternative flows | Variations that still reach the goal, numbered from the step they leave
 | Exception flows | Failures, numbered from the step they leave, each with the error code returned
-| Postconditions | Success guarantees, and minimal guarantees that hold even on failure
+| Postconditions | On success: what holds when the goal is reached. In every case: what holds even after a failure or a crash
 | Authorization | What is {allowed} and what is {denied}, per actor
 | Business rules | The `FR` identifiers applied
 | Quality attributes | The `NFR` identifiers that constrain it
@@ -335,7 +335,7 @@ It is small enough to be delivered in one iteration and satisfies the INVEST cri
 | Acceptance criteria a|
 . The product is added with the chosen quantity and the cart counter is updated.
 . Adding a product that is already in the cart increases its quantity.
-. A quantity larger than the displayed availability is refused with an explanatory message.
+. A quantity larger than the available quantity is refused with an explanatory message.
 | Realized by | UC-CART-nnn
 | Owner | {role-swe} {role-qa}
 |===

@@ -27,9 +27,22 @@ Feature: Catalog
         | DRAFT   |
         | RETIRED |
 
+  Rule: An administrator sees the products of every status
+
+    @BDD-CAT-017 @UC-CAT-001 @FR-CAT-011 @nominal
+    Scenario: An administrator lists drafts and retired products
+      Given a signed-in administrator
+      And the products
+        | sku    | status    |
+        | KB-001 | PUBLISHED |
+        | KB-002 | DRAFT     |
+        | CB-001 | RETIRED   |
+      When the administrator lists the products with the status "DRAFT" or "RETIRED"
+      Then the list contains exactly "KB-002" and "CB-001"
+
   Rule: Catalog lists are paginated and can be filtered and sorted
 
-    @BDD-CAT-002 @UC-CAT-001 @FR-CAT-007 @nominal
+    @BDD-CAT-002 @UC-CAT-001 @FR-CAT-010 @nominal
     Scenario: Filtering by category and price range
       Given the published products
         | sku    | category  | price |
@@ -81,7 +94,7 @@ Feature: Catalog
     @BDD-CAT-008 @UC-CAT-003 @FR-CAT-002 @edge
     Scenario Outline: Creating a product with a price at and beyond the limits
       Given a signed-in administrator
-      When the administrator creates the product "KB-011" at <price>
+      When the administrator creates the product "KB-011" named "Test keyboard" at <price>
       Then the creation is <outcome>
 
       Examples:
@@ -101,7 +114,7 @@ Feature: Catalog
       When the administrator changes the description of "KB-001" to "Hot-swappable switches"
       Then a visitor who opens "KB-001" reads "Hot-swappable switches"
 
-    @BDD-CAT-010 @UC-CAT-004 @error
+    @BDD-CAT-010 @UC-CAT-004 @FR-CAT-009 @error
     Scenario: Updating a product that someone else just changed
       Given two signed-in administrators who both opened the product "KB-001"
       And the first administrator saved a new name
@@ -125,9 +138,26 @@ Feature: Catalog
     @BDD-CAT-012 @UC-CAT-006 @FR-CAT-004 @nominal
     Scenario: Publishing a complete draft
       Given a signed-in administrator
-      And a draft product "KB-010" with a name, a category and a price
+      And a draft product "KB-010" with a name, a description, a category and a price
       When the administrator publishes "KB-010"
       Then a visitor who browses the catalog sees "KB-010"
+
+    @BDD-CAT-015 @UC-CAT-006 @FR-CAT-004 @error
+    Scenario: Publishing an incomplete draft
+      Given a signed-in administrator
+      And a draft product "KB-012" with a name and a price, but no description and no category
+      When the administrator publishes "KB-012"
+      Then the publication is refused
+      And the missing description and category are listed
+      And the product "KB-012" is still a draft
+
+    @BDD-CAT-016 @UC-CAT-006 @FR-CAT-005 @invariant
+    Scenario: A retired product is never published again
+      Given a signed-in administrator
+      And a retired product "KB-001"
+      When the administrator publishes "KB-001"
+      Then the publication is refused
+      And the product "KB-001" is still retired
 
     @BDD-CAT-013 @UC-CAT-006 @FR-CAT-005 @nominal
     Scenario: Retiring a product keeps it readable where it is referenced
@@ -142,8 +172,8 @@ Feature: Catalog
     @BDD-CAT-014 @UC-CAT-006 @UC-INV-001 @UC-CART-001 @FR-CAT-003 @FR-INV-007 @nominal @critical-path
     Scenario: A newly published product becomes purchasable
       Given a signed-in administrator
-      And a draft product "KB-010" priced 59.00
-      When the administrator adds 20 units to the stock of "KB-010"
-      And the administrator publishes "KB-010"
+      And a complete draft product "KB-010" priced 59.00
+      And the administrator added 20 units to the stock of "KB-010"
+      When the administrator publishes "KB-010"
       Then within 5 seconds a visitor sees "KB-010" at 59.00 with the availability "IN_STOCK"
       And a customer can add "KB-010" to the cart

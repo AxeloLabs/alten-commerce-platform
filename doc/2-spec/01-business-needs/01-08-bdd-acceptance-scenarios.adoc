@@ -1,7 +1,7 @@
 = BDD Acceptance Scenarios: Examples That Define "Done"
 :doc-id: 01-08
-:revnumber: 0.1
-:revdate: 2026-11-18
+:revnumber: 0.2
+:revdate: 2026-11-19
 :revremark: Draft
 :description: Gherkin acceptance scenarios, generated from the feature files, with their index and trace links.
 include::../_shared/attributes.adoc[]

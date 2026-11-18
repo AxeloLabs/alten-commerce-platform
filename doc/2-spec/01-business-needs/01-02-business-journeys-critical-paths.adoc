@@ -1,7 +1,7 @@
 = Business Journeys and Critical Paths: What Actors Achieve and What Must Never Break
 :doc-id: 01-02
-:revnumber: 0.1
-:revdate: 2026-11-18
+:revnumber: 0.2
+:revdate: 2026-11-19
 :revremark: Draft
 :description: End-to-end business journeys, the critical paths among them, and the failure analysis of order placement.
 include::../_shared/attributes.adoc[]
@@ -45,7 +45,7 @@ What strategy gives a complete picture of what the store does, in one table?
 | {JRN-CAT-002} | Manage the catalog | Administrator | {must} {critical} | {st-draft}
 | {JRN-INV-001} | Manage stock | Administrator | {must} | {st-draft}
 | {JRN-ORD-004} | Fulfill orders | Administrator | {should} | {st-proposed}
-| {JRN-ORD-005} | Recover a blocked order | Administrator | {must} | {st-draft}
+| {JRN-ORD-005} | Supervise orders and recover blocked ones | Administrator | {must} | {st-draft}
 |===
 
 plantuml::diagrams/journey-map.puml[format=svg, align=center]
@@ -144,7 +144,7 @@ Stages are business steps, not screens; the use cases that detail them are in do
 . Give a shipping address and a means of payment.
 . Submit. The store acknowledges at once and shows the order as pending.
 . The store secures the stock, then takes the payment.
-. The store confirms the order, on screen and by e-mail; the cart is emptied.
+. The store confirms the order, on screen and by e-mail; the ordered products leave the cart.
 | Outcome | Either the order is confirmed, paid and its stock secured; or it is rejected with a reason and the customer has paid nothing.
 | Epics | {EPIC-ORD-001} {EPIC-PAY-001} {EPIC-NOT-001}
 | Critical paths | {CP-ORD-001} {CP-ORD-002} {CP-ORD-003} {CP-ORD-004}
@@ -182,7 +182,7 @@ Stages are business steps, not screens; the use cases that detail them are in do
 . The store checks that the order has not shipped.
 . The store returns the stock and refunds the payment.
 . The store confirms the cancellation and the refund, on screen and by e-mail.
-| Outcome | The order is cancelled, the full amount is refunded, the stock is sellable again.
+| Outcome | The order is canceled, the full amount is refunded, the stock is sellable again.
 | Epics | {EPIC-ORD-003} {EPIC-PAY-001} {EPIC-NOT-001}
 | Critical paths | –
 |===
@@ -242,17 +242,18 @@ Stages are business steps, not screens; the use cases that detail them are in do
 |===
 
 [[JRN-ORD-005]]
-=== JRN-ORD-005 — Recover a blocked order
+=== JRN-ORD-005 — Supervise orders and recover blocked ones
 
 [cols="2,11"]
 |===
 | Actor | Administrator
-| Goal | Settle an order the system could not settle alone.
-| Trigger | An automatic undo failed repeatedly; the order is under review and an alert was raised.
+| Goal | Find any order, and decide the ones the system could not decide alone.
+| Trigger | A customer asks about an order, or an alert says an order is under review.
 | Stages a|
+. Search the orders of all customers.
 . See the orders under review, with what was done and what failed.
-. Retry the failed action, or settle the order by hand: confirm it, or reject it and refund it.
-. The order leaves the review state; the customer is told the outcome.
+. Retry the failed action, or decide by hand: confirm a paid order, or reject it once any payment is refunded.
+. The order leaves the review; the customer is told the outcome.
 | Outcome | No order stays in an inconsistent state, and every manual decision is recorded.
 | Epics | {EPIC-ORD-005}
 | Critical paths | {CP-ORD-004}
@@ -286,12 +287,14 @@ Six paths meet both conditions.
 
 {critical}
 
-The nominal purchase: the customer submits the checkout, the stock is reserved, the payment is captured, the reservation is confirmed, the order becomes `CONFIRMED`, the cart is emptied and a confirmation e-mail is sent.
+The nominal purchase: the customer submits the checkout, the stock is reserved, the payment is captured, the reservation is confirmed, the order becomes `CONFIRMED`, the ordered quantities leave the cart and a confirmation e-mail is sent.
 
 Guarantees:: The customer is charged exactly once, for exactly the order total. The stock on hand decreases by exactly the quantities ordered.
 Use cases:: {UC-ORD-001} {UC-PAY-001} {UC-NOT-001} {UC-ORD-003}
 
 plantuml::diagrams/cp-order-confirmed-sequence.puml[format=svg, align=center]
+
+This business view is drawn for the nominal path. Every other path — refusal, missing stock, time-outs, restarts, duplicates — has its technical sequence diagram in document 03-03, one per saga scenario.
 
 [[CP-ORD-002]]
 === CP-ORD-002 — Order rejected: payment refused
@@ -323,7 +326,7 @@ Use cases:: {UC-ORD-001} {UC-CART-002}
 Something technical goes wrong while an order is being processed: a service is down or slow, the payment provider does not answer, a message is delivered twice or late, the order service restarts in the middle.
 The order still ends either `CONFIRMED` or `REJECTED`; when the system cannot decide alone, it ends `UNDER_REVIEW` and an administrator is alerted.
 
-Guarantees:: Never a captured payment without a confirmed order, unless it is refunded. Never a confirmed order without confirmed stock. Never the same payment taken twice. Never an order left pending forever.
+Guarantees:: Never a rejected order that still holds a payment. Never a confirmed order without confirmed stock. Never the same payment taken twice. Never an order left pending beyond the review delay.
 Use cases:: {UC-ORD-001} {UC-PAY-001} {UC-PAY-002} {UC-ORD-007}
 
 [[CP-CAT-001]]
@@ -334,7 +337,7 @@ Use cases:: {UC-ORD-001} {UC-PAY-001} {UC-PAY-002} {UC-ORD-007}
 The administrator creates a product, sets its price, gives it stock and publishes it.
 The product appears in the storefront with the right price and the right availability, and can be added to a cart and bought.
 
-Guarantees:: A customer never sees a draft or retired product. The price charged is the price published when the order was placed.
+Guarantees:: A customer never finds a draft or a retired product in the catalog; a retired product is readable only where an order, a cart or a favorite references it. The price charged is the price published when the order was placed.
 Use cases:: {UC-CAT-003} {UC-CAT-005} {UC-CAT-006} {UC-INV-001} {UC-CAT-002}
 
 [[CP-IAM-001]]
@@ -355,13 +358,13 @@ Use cases:: {UC-IAM-001} {UC-IAM-002}
 What strategy guarantees that an order ends in a state the business can live with, whatever fails and whenever it fails?
 ****
 
-The order is placed in five steps spread over four services.
+The order is placed in five steps — create it, reserve the stock, charge the payment, confirm the stock, confirm the order — spread over three services; a fourth then tells the customer.
 A database transaction cannot span them, so each step commits alone and a later failure is repaired by *undoing* the earlier steps.
 The order of the steps is chosen so that as little as possible has to be undone:
 
 . the stock is reserved first, because a reservation is cheap to release;
 . the payment comes after, because money is the costly thing to give back;
-. once the payment is captured there is no way back: the remaining steps are retried until they succeed.
+. once the payment is captured the order goes forward: the remaining steps are retried, and the only way back is a refund.
 
 The table lists, for each step, what can go wrong, how the system notices, what it does, and where the order ends.
 
@@ -371,15 +374,20 @@ The table lists, for each step, what can go wrong, how the system notices, what 
 | Step | What goes wrong | How it is noticed | What the system does | The order ends
 
 | Checkout review
-| A price changed, a product was retired or the cart is empty
+| A price changed, a product was retired, or the stock known to the catalog no longer covers a line
 | Checked when the checkout is submitted
 | Nothing is created. The customer is sent back to the cart with the differences shown.
 | No order
 
-| Order creation
+.2+| Order creation
 | The customer submits twice, or the browser retries
-| Same idempotency key
+| Each checkout carries its own identifier
 | The first order is returned; nothing new is created.
+| One order
+
+| The customer checks out again while an order is pending
+| One pending order per customer
+| The new checkout is refused and points to the pending order.
 | One order
 
 .2+| Stock reservation
@@ -390,7 +398,7 @@ The table lists, for each step, what can go wrong, how the system notices, what 
 
 | Inventory does not answer
 | Order deadline reached
-| A release is sent in case the reservation was made after all; the reservation expires by itself anyway.
+| No payment was requested. A release is sent in case the reservation was made after all; it would expire by itself anyway.
 | `REJECTED` `TIMED_OUT`
 
 .3+| Payment
@@ -401,24 +409,29 @@ The table lists, for each step, what can go wrong, how the system notices, what 
 
 | The provider or the payment service does not answer
 | Order deadline reached
-| The payment status is asked first. Not captured: the reservation is released. Captured: the order continues.
+| The payment is canceled at the provider, so that it can no longer be captured. Canceled: the reservation is released. Already captured: the order continues.
 | `REJECTED` `TIMED_OUT`, or continues
 
-| The answer "captured" arrives after the order was rejected
-| Late message on a closed order
-| The payment is refunded.
-| Stays `REJECTED`, refund recorded
+| Nobody can say whether the payment was captured
+| Review delay reached
+| Automatic processing stops. An administrator is alerted and the customer is told.
+| `UNDER_REVIEW`
 
-.2+| Reservation confirmation
+.3+| Stock confirmation
 | Inventory is unavailable
 | No answer
-| Retried until it succeeds; the reservation is still held. An alert is raised if it lasts.
+| Retried. The payment is captured and the reservation is still held.
 | `CONFIRMED` once it succeeds
 
-| The reservation no longer exists
-| Inventory answers "unknown reservation"
-| Inventory tries to reserve again. If it cannot, the payment is refunded.
-| `CONFIRMED`, or `REJECTED` `OUT_OF_STOCK` with refund
+| Inventory is still unavailable
+| Review delay reached
+| Automatic processing stops. An administrator is alerted and the customer is told.
+| `UNDER_REVIEW`
+
+| The reservation expired during a long outage and the stock is gone
+| Inventory answers "cannot confirm" when an administrator retries
+| The payment is refunded; only then is the order rejected.
+| `REJECTED` `OUT_OF_STOCK`, refunded
 
 | Confirmation e-mail
 | The e-mail provider fails
@@ -426,14 +439,19 @@ The table lists, for each step, what can go wrong, how the system notices, what 
 | Retried, then recorded as not sent. The order is not affected.
 | `CONFIRMED`
 
-.2+| Any undo
-| A release or a refund keeps failing
-| Retries exhausted, message set aside
-| The order is handed to an administrator and an alert is raised. It is never marked as undone when it is not.
+.3+| Any undo
+| A release does not get through
+| No answer
+| Nothing more is needed: the reservation expires by itself.
+| Unchanged
+
+| A refund keeps failing
+| Retries exhausted
+| The order is handed to an administrator, or stays with one. The payment is never recorded as refunded when it is not.
 | `UNDER_REVIEW`
 
 | The undo is delivered twice
-| Same message identifier
+| Each message carries its own identifier
 | The second one is ignored.
 | Unchanged
 
@@ -444,15 +462,18 @@ The table lists, for each step, what can go wrong, how the system notices, what 
 | As if nothing happened
 
 | A message is delivered twice, or two messages arrive together
-| Message identifier and order version
+| Each message carries its own identifier; an order handles one message at a time
 | Each message has its effect once; the others are ignored.
 | Unchanged
 
-| A service commits its work and stops before telling the others
+| A service saves its work and stops before telling the others
 | On restart
 | The pending message is sent; no business operation is lost.
 | As if nothing happened
 |===
+
+With these delays the store itself never has to refund in the automatic flow: the stock is reserved before the payment, an unanswered payment is canceled before the order is rejected, and an order is decided long before its reservation can expire.
+A refund remains for two cases only: a decision of an administrator after a long outage, and, if that journey is accepted, a cancellation by the customer.
 
 The technical design that implements these guarantees — the orchestrated saga, the transactional outbox, idempotent consumers, deadlines — is specified in folder 03.
 Each row of the table becomes a saga scenario there, with its sequence diagram and its tests.

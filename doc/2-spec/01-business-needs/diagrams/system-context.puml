@@ -18,7 +18,7 @@ rectangle "Alten Commerce Platform" {
   usecase "Manage the catalog" as CATALOG
   usecase "Manage stock" as STOCK
   usecase "Fulfill orders" as FULFILL
-  usecase "Recover a blocked order" as RECOVER
+  usecase "Supervise orders,\nrecover blocked ones" as RECOVER
 }
 
 actor "Identity\nprovider" as IDP <<system>>

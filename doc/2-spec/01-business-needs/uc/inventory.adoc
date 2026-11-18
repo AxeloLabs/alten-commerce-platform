@@ -6,6 +6,8 @@ The inventory is the only place that knows what can really be sold.
 [[UC-INV-001]]
 === UC-INV-001 — Adjust stock
 
+{critical}
+
 [cols="3,11"]
 |===
 | Overview | The administrator records that goods were received, counted, lost or damaged. It is the only way stock enters the store in this release.
@@ -15,9 +17,9 @@ The inventory is the only place that knows what can really be sold.
 | Priority and status | {must} · {st-draft}
 | Trigger | A delivery, a stock count, a loss.
 | Preconditions | The administrator is signed in. The product exists.
-| Success guarantees | The stock on hand is changed by the quantity given. The movement is recorded with its reason, author and date. The storefront availability follows within seconds.
-| Minimal guarantees | The stock on hand never goes below the quantity reserved for orders in progress, and never below zero.
-| Authorization | {allowed} Administrator. {denied} Visitor, customer.
+| Postconditions on success | The stock on hand is changed by the quantity given. The movement is recorded with its reason, author and date. The storefront availability follows within seconds.
+| Postconditions in every case | The stock on hand never goes below the quantity reserved for orders in progress, and never below zero.
+| Authorization | {allowed} Administrator. {denied} Visitor and customer.
 | Business rules | {FR-INV-001} {FR-INV-002} {FR-INV-006} {FR-INV-007} {FR-INV-008}
 | Quality attributes | {NFR-SEC-006} {NFR-REL-001}
 | Stories | {US-INV-001} {US-INV-003}
@@ -49,9 +51,9 @@ The inventory is the only place that knows what can really be sold.
 | Priority and status | {should} · {st-draft}
 | Trigger | Routine review, or a customer question.
 | Preconditions | The administrator is signed in.
-| Success guarantees | The list shows, per SKU, the stock on hand, the reserved quantity and the available quantity.
-| Minimal guarantees | The figures are those of the inventory itself, not the displayed availability of the catalog.
-| Authorization | {allowed} Administrator. {denied} Visitor, customer.
+| Postconditions on success | The list shows, per SKU, the stock on hand, the reserved quantity and the available quantity.
+| Postconditions in every case | The figures are those of the inventory itself, not the displayed availability of the catalog.
+| Authorization | {allowed} Administrator. {denied} Visitor and customer.
 | Business rules | {FR-INV-002} {FR-CAT-008}
 | Quality attributes | {NFR-PERF-001}
 | Stories | {US-INV-002}

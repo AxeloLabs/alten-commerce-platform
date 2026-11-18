@@ -14,7 +14,7 @@ switch (Stock reservation)
 case (not available)
   :REJECTED\nOUT_OF_STOCK; <<#FFCDD2>>
   stop
-case (no answer in time)
+case (no answer before\nthe order deadline)
   :Send a release,\njust in case;
   :REJECTED\nTIMED_OUT; <<#FFCDD2>>
   stop
@@ -26,28 +26,42 @@ case (refused)
   :Release the stock;
   :REJECTED\nPAYMENT_REFUSED; <<#FFCDD2>>
   stop
-case (no answer in time)
-  :Ask the payment status;
-  if (Captured after all?) then (no)
+case (no answer before\nthe order deadline)
+  :Cancel the payment\nat the provider;
+  switch (Cancellation)
+  case (canceled)
     :Release the stock;
     :REJECTED\nTIMED_OUT; <<#FFCDD2>>
     stop
-  else (yes)
-  endif
+  case (no answer before\nthe review delay)
+    :UNDER_REVIEW; <<#FFF8E1>>
+    stop
+  case (already captured)
+  endswitch
 case (captured)
 endswitch
 note right
-  Point of no return:
-  from here the order goes forward
+  The payment is captured:
+  the order now goes forward.
+  The only way back is a refund.
 end note
-:Confirm the reservation\n(retried until it succeeds);
-if (Stock secured?) then (yes)
+:Confirm the reservation\n(retried);
+switch (Stock)
+case (secured)
   :CONFIRMED; <<#C8E6C9>>
-  :Empty the cart,\nsend the e-mail;
+  :Update the cart,\nsend the e-mail;
   stop
-else (reservation lost\nand stock gone)
+case (not secured before\nthe review delay)
+  :UNDER_REVIEW; <<#FFF8E1>>
+  stop
+case (reservation expired\nand stock gone)
   :Refund the payment;
-  :REJECTED\nOUT_OF_STOCK; <<#FFCDD2>>
-  stop
-endif
+  if (Refunded?) then (yes)
+    :REJECTED\nOUT_OF_STOCK; <<#FFCDD2>>
+    stop
+  else (keeps failing)
+    :UNDER_REVIEW; <<#FFF8E1>>
+    stop
+  endif
+endswitch
 @enduml

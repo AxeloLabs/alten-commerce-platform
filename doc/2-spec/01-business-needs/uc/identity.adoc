@@ -6,6 +6,8 @@ Accounts and credentials belong to the identity provider; the platform decides w
 [[UC-IAM-001]]
 === UC-IAM-001 — Register an account
 
+{critical}
+
 [cols="3,11"]
 |===
 | Overview | A visitor creates an account with an e-mail address and a password, and becomes a customer. Credentials are entered on the identity provider's pages, never on the storefront.
@@ -15,8 +17,8 @@ Accounts and credentials belong to the identity provider; the platform decides w
 | Priority and status | {must} · {st-draft}
 | Trigger | The visitor chooses "Create an account", or tries to use the cart.
 | Preconditions | The visitor is not signed in.
-| Success guarantees | An account exists for the e-mail address, with the role `CUSTOMER` and no other. The customer has an empty cart and no favorites.
-| Minimal guarantees | No account is created unless every check passed. No password is stored or logged by the platform.
+| Postconditions on success | An account exists for the e-mail address, with the role `CUSTOMER` and no other. The customer has an empty cart and no favorites.
+| Postconditions in every case | No account is created unless every check passed. No password is stored or logged by the platform.
 | Authorization | {allowed} Visitor. {denied} A signed-in actor: registration is not offered.
 | Business rules | {FR-IAM-001} {FR-IAM-002} {FR-IAM-006}
 | Quality attributes | {NFR-SEC-001} {NFR-SEC-007}
@@ -51,10 +53,10 @@ Accounts and credentials belong to the identity provider; the platform decides w
 | Priority and status | {must} · {st-draft}
 | Trigger | The actor chooses "Sign in", or opens a protected function.
 | Preconditions | The actor has an account.
-| Success guarantees | The actor is signed in. Each later request is authorized against the authorization matrix.
-| Minimal guarantees | No protected function runs for an unauthenticated or unauthorized request. A refusal reveals nothing about data the actor may not see.
+| Postconditions on success | The actor is signed in. Each later request is authorized against the authorization matrix.
+| Postconditions in every case | No protected function runs for an unauthenticated or unauthorized request. A refusal reveals nothing about data the actor may not see.
 | Authorization | {allowed} Any account holder. {denied} Any function outside the actor's row of the authorization matrix.
-| Business rules | {FR-IAM-003} {FR-IAM-004} {FR-IAM-005} {FR-IAM-006}
+| Business rules | {FR-IAM-003} {FR-IAM-004} {FR-IAM-005} {FR-IAM-006} {FR-IAM-007}
 | Quality attributes | {NFR-SEC-001} {NFR-SEC-002} {NFR-SEC-006}
 | Stories | {US-IAM-002} {US-IAM-003}
 | Acceptance | {BDD-IAM-003} {BDD-IAM-004} {BDD-IAM-005} {BDD-IAM-006} {BDD-IAM-007}

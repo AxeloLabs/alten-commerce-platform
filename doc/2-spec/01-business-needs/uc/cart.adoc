@@ -15,9 +15,9 @@ A cart and a list of favorites belong to one customer; they hold intentions and 
 | Priority and status | {must} · {st-draft}
 | Trigger | The customer chooses "add to cart".
 | Preconditions | The customer is signed in. The product is published.
-| Success guarantees | The cart holds one line for the product with the requested quantity added. The cart counter reflects it.
-| Minimal guarantees | The cart never holds a line above 10 units, more than 50 lines, or a product that is not published. Nothing is reserved: a cart holds intentions, not stock.
-| Authorization | {allowed} Customer, own cart. {denied} Visitor: invited to sign in. Administrator.
+| Postconditions on success | The cart holds one line for the product with the requested quantity added. The cart counter reflects it.
+| Postconditions in every case | A line is never added or increased for a product that is not published, nor above 10 units, and a cart never exceeds 50 lines. Nothing is reserved: a cart holds intentions, not stock.
+| Authorization | {allowed} Customer, own cart. {denied} Visitor (invited to sign in) and administrator.
 | Business rules | {FR-CART-001} {FR-CART-002} {FR-CART-003} {FR-CART-004} {FR-CART-006} {FR-CAT-003}
 | Quality attributes | {NFR-PERF-004} {NFR-AVAIL-003}
 | Stories | {US-CART-001} {US-CART-007}
@@ -26,7 +26,7 @@ A cart and a list of favorites belong to one customer; they hold intentions and 
 
 .Main success scenario
 . The customer chooses a product and a quantity, 1 by default.
-. The system checks that the product is published and that the quantity fits the limits and the displayed availability.
+. The system checks that the product is published and that the quantity fits the limits and the available quantity known to the catalog.
 . The system adds a line to the cart and returns the cart with its new counter.
 
 .Alternative flows
@@ -34,29 +34,31 @@ A cart and a list of favorites belong to one customer; they hold intentions and 
 1a. The customer adds from the favorites:: One unit is added; the product stays a favorite.
 
 .Exception flows
-2b. The resulting quantity exceeds 10 units or the displayed availability:: Nothing is added. The maximum that can be added is given.
+2b. The resulting quantity exceeds 10 units or the available quantity known to the catalog:: Nothing is added. The maximum that can be added is given.
 2c. The product is out of stock, retired or unknown:: Nothing is added.
 2d. The cart already holds 50 lines:: Nothing is added.
 
 [[UC-CART-002]]
 === UC-CART-002 — View the cart
 
+{critical}
+
 [cols="3,11"]
 |===
-| Overview | The customer sees the content of the cart with today's prices and availability, and the counter on every page.
+| Overview | The customer sees the content of the cart with today's prices and availability, and the counter on every page. The counter counts units, not products.
 | Primary actor | Customer
 | Supporting actors | –
 | Goal | Know what is about to be bought and what it costs.
 | Priority and status | {must} · {st-draft}
 | Trigger | The customer opens the cart, or any page that shows the counter.
 | Preconditions | The customer is signed in.
-| Success guarantees | Each line shows the product name, the current unit price, the quantity and the line total; the cart shows its total and its counter. A line whose price changed since it was added, or whose product is no longer available, is flagged.
-| Minimal guarantees | The cart shown is the customer's own, identical on every device.
-| Authorization | {allowed} Customer, own cart. {denied} Visitor. Administrator. Another customer's cart: "not found".
-| Business rules | {FR-CART-001} {FR-CART-005} {FR-CART-006} {FR-IAM-004}
+| Postconditions on success | Each line shows the product name, the current unit price, the quantity and the line total; the cart shows its total and its counter. A line whose price changed since it was added shows both prices. A line whose product is no longer published, or whose quantity is no longer available, is flagged as unavailable, left out of the total and of the counter, and blocks the checkout until it is removed or adjusted.
+| Postconditions in every case | The cart shown is the customer's own, identical on every device.
+| Authorization | {allowed} Customer, own cart. {denied} Visitor and administrator. Another customer's cart is answered "not found".
+| Business rules | {FR-CART-001} {FR-CART-005} {FR-CART-006} {FR-CART-010} {FR-IAM-004}
 | Quality attributes | {NFR-PERF-004}
 | Stories | {US-CART-002} {US-CART-004}
-| Acceptance | {BDD-CART-005} {BDD-CART-006} {BDD-CART-009}
+| Acceptance | {BDD-CART-005} {BDD-CART-006} {BDD-CART-009} {BDD-CART-013}
 |===
 
 .Main success scenario
@@ -65,7 +67,8 @@ A cart and a list of favorites belong to one customer; they hold intentions and 
 
 .Alternative flows
 2a. The cart is empty:: The system returns an empty cart with a counter of zero.
-2b. A price changed or a product became unavailable:: The line is returned with a flag and, for a price, the previous amount.
+2b. A price changed:: The line is returned with both prices; the total uses the new one.
+2d. A product was retired, or its quantity is no longer available:: The line is returned flagged as unavailable and left out of the total and of the counter. Checkout is not offered until the line is removed or adjusted.
 2c. The catalog cannot be reached:: The cart is returned with the last known prices, marked as possibly outdated. Checkout is not offered until prices are confirmed.
 
 [[UC-CART-003]]
@@ -80,9 +83,9 @@ A cart and a list of favorites belong to one customer; they hold intentions and 
 | Priority and status | {must} · {st-draft}
 | Trigger | The customer changes a quantity or chooses "remove".
 | Preconditions | The customer is signed in. The line exists.
-| Success guarantees | The line has the new quantity, or is gone. Totals and counter follow.
-| Minimal guarantees | A refused change leaves the cart as it was.
-| Authorization | {allowed} Customer, own cart. {denied} Visitor. Administrator.
+| Postconditions on success | The line has the new quantity, or is gone. Totals and counter follow.
+| Postconditions in every case | A refused change leaves the cart as it was.
+| Authorization | {allowed} Customer, own cart. {denied} Visitor and administrator.
 | Business rules | {FR-CART-002} {FR-CART-004} {FR-CART-005} {FR-CART-006}
 | Quality attributes | {NFR-PERF-004}
 | Stories | {US-CART-003}
@@ -91,14 +94,14 @@ A cart and a list of favorites belong to one customer; they hold intentions and 
 
 .Main success scenario
 . The customer sets a new quantity on a line.
-. The system checks the limits and the displayed availability.
+. The system checks the limits and the available quantity known to the catalog.
 . The system saves the line and returns the cart.
 
 .Alternative flows
 1a. The customer removes the line, or sets its quantity to zero:: The system deletes the line.
 
 .Exception flows
-2a. The quantity exceeds 10 units or the displayed availability:: The change is refused; the maximum is given.
+2a. The quantity exceeds 10 units or the available quantity known to the catalog:: The change is refused; the maximum is given.
 1b. The line no longer exists:: The system returns the current cart.
 
 [[UC-CART-004]]
@@ -113,9 +116,9 @@ A cart and a list of favorites belong to one customer; they hold intentions and 
 | Priority and status | {must} · {st-draft}
 | Trigger | The customer chooses "favorite" on a product, or opens the favorites.
 | Preconditions | The customer is signed in.
-| Success guarantees | The product is, or is no longer, in the customer's favorites. The list shows each favorite with its current price and availability.
-| Minimal guarantees | A product appears at most once. Favorites survive the retirement of a product, flagged as unavailable.
-| Authorization | {allowed} Customer, own favorites. {denied} Visitor: invited to sign in. Administrator.
+| Postconditions on success | The product is, or is no longer, in the customer's favorites. The list shows each favorite with its current price and availability.
+| Postconditions in every case | A product appears at most once. Favorites survive the retirement of a product, flagged as unavailable.
+| Authorization | {allowed} Customer, own favorites. {denied} Visitor (invited to sign in) and administrator.
 | Business rules | {FR-CART-008} {FR-CART-009} {FR-IAM-004}
 | Quality attributes | {NFR-PERF-004}
 | Stories | {US-CART-005} {US-CART-006} {US-CART-007}

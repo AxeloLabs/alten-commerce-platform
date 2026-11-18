@@ -15,7 +15,7 @@ package "Administrator side" {
   rectangle "JRN-CAT-002\nManage the catalog" as CATALOG #FFE0B2
   rectangle "JRN-INV-001\nManage stock" as STOCK
   rectangle "JRN-ORD-004\nFulfill orders" as FULFILL #ECEFF1
-  rectangle "JRN-ORD-005\nRecover a\nblocked order" as RECOVER
+  rectangle "JRN-ORD-005\nSupervise orders,\nrecover blocked ones" as RECOVER
 }
 
 DISC -right-> CART
@@ -34,6 +34,6 @@ BUY -down-> RECOVER : blocked orders
 
 legend right
   Orange: critical journey
-  Grey: proposed, awaiting validation
+  Gray: proposed, awaiting validation
 endlegend
 @enduml

@@ -1,7 +1,7 @@
 = Non-Functional Requirements: How Well the System Shall Do It
 :doc-id: 01-07
-:revnumber: 0.1
-:revdate: 2026-11-18
+:revnumber: 0.2
+:revdate: 2026-11-19
 :revremark: Draft
 :description: Measurable quality attributes: performance, availability, reliability, security, observability, maintainability, scalability, usability and cost.
 include::../_shared/attributes.adoc[]
@@ -58,6 +58,7 @@ The two are measured separately.
 | [[NFR-PERF-002]]NFR-PERF-002 | Time to acknowledge an order placement | 95th percentile below 500 ms | Load test on the checkout
 | [[NFR-PERF-003]]NFR-PERF-003 | Time from order placement to its outcome, when every service is healthy | 95th percentile below 5 s, 99th below 15 s | Load test; saga duration metric
 | [[NFR-PERF-004]]NFR-PERF-004 | Response time of cart and favorites operations | 95th percentile below 200 ms | Load test
+| [[NFR-PERF-005]]NFR-PERF-005 | Delay between a change of stock and the availability shown in the storefront | 95th percentile below 5 s | Delay metric between the stock change and the catalog update
 |===
 
 Owner: {role-swe} {role-sre}
@@ -76,6 +77,7 @@ What strategy keeps the store open when one of its parts is down?
 | [[NFR-AVAIL-002]]NFR-AVAIL-002 | No single point of failure: losing one instance or one zone stops no function | Every service runs at least 2 replicas in production, spread over zones | Deployment review; instance-kill test
 | [[NFR-AVAIL-003]]NFR-AVAIL-003 | Degraded mode: browsing, cart and favorites keep working when the order, payment or notification service is down | No error on those functions during the outage | Resilience test: stop each service in turn
 | [[NFR-AVAIL-004]]NFR-AVAIL-004 | Recovery after the loss of the database | At most 5 minutes of data lost, service back within 60 minutes | Restore drill
+| [[NFR-AVAIL-005]]NFR-AVAIL-005 | Availability of order placement in production: a valid checkout is accepted | 99.0 % per month | Availability objective on the checkout
 |===
 
 Owner: {role-sre} {role-cloud}
@@ -95,7 +97,7 @@ They are verified by the saga and resilience test scenarios of document 07-03.
 | ID | Requirement | Target | Verified by
 | [[NFR-REL-001]]NFR-REL-001 | No business operation is lost: a state change and the message that announces it are saved together, and the message is eventually published even if the service stops in between | 100 % of committed changes published | Crash test between commit and publish
 | [[NFR-REL-002]]NFR-REL-002 | Duplicate, late and out-of-order messages are harmless | No double charge, no double refund, no double stock movement, no double e-mail | Duplicate-delivery and concurrency tests
-| [[NFR-REL-003]]NFR-REL-003 | No order stays without an outcome | Every order final or under review within 5 minutes; an alert otherwise | Deadline tests; alert on stuck orders
+| [[NFR-REL-003]]NFR-REL-003 | No order stays pending | Every order settled — confirmed, rejected or under review — within the review delay of 5 minutes; an alert for each order put under review | Deadline and review-delay tests; alert on orders under review
 | [[NFR-REL-004]]NFR-REL-004 | A new version is deployed without interrupting orders in progress | Zero failed order caused by a deployment | Rolling-update test under load
 | [[NFR-REL-005]]NFR-REL-005 | A committed change is published promptly | 99th percentile of publication delay below 5 s | Delay metric between commit and publish
 |===
