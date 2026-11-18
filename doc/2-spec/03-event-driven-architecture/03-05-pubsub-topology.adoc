@@ -1,0 +1,171 @@
+= Pub/Sub Topology: Topics, Subscriptions and Dead Letters
+:doc-id: 03-05
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: Every topic and subscription of the platform, their settings, their access rights and how they are created.
+include::../_shared/attributes.adoc[]
+
+== Principles
+
+.Strategy question
+****
+What strategy keeps the message bus small enough to understand and strict enough to trust?
+****
+
+Google Cloud Pub/Sub is the only bus.
+Its topology follows five rules.
+
+. *One command topic and one event topic per context that needs them.* Not one topic per message type: messages about the same order must stay in order, which only one topic can guarantee.
+. *One subscription per consumer and per topic.* Each consumer reads at its own pace and fails on its own.
+. *One dead-letter topic per subscription.* A message that cannot be handled is set aside where its consumer, and nobody else, can find it.
+. *Everything is created by Terraform.* No topic or subscription is created by a service at startup, by hand or from a console.
+. *Names carry the environment.* The three environments share one Google Cloud project, so every name starts with `test`, `integration` or `prod`.
+
+Owner: {role-cloud} {role-sol}
+
+== Topics
+
+.Strategy question
+****
+What strategy decides how many topics there are and what each one carries?
+****
+
+plantuml::diagrams/pubsub-topology.puml[format=svg, align=center]
+
+.Topics (the environment prefix is omitted)
+[cols="4,3,5,5", options="header"]
+|===
+| Topic | Published by | Carries | Ordering key
+| `inventory.commands` | Order | {CMD-INV-002} to {CMD-INV-005} | Order identifier
+| `inventory.events` | Inventory | {EVT-INV-001} to {EVT-INV-007} | Order identifier; SKU for {EVT-INV-007}
+| `payment.commands` | Order | {CMD-PAY-001} to {CMD-PAY-003} | Order identifier
+| `payment.events` | Payment | {EVT-PAY-001} to {EVT-PAY-006} | Order identifier
+| `order.events` | Order | {EVT-ORD-001} to {EVT-ORD-006} | Order identifier
+|===
+
+.Settings of every topic
+[%unbreakable, cols="4,4,8", options="header"]
+|===
+| Setting | Value | Reason
+| Schema | The Protobuf schema of the topic, binary encoding | A message that does not match is refused at publication, before it can reach a consumer
+| Message retention | 7 days | A consumer that was repaired can be replayed from a point in time
+| Storage region | The region of the cluster | Data stays in one region
+|===
+
+The catalog, the cart and the notification services have no topic: they publish nothing (document 03-01).
+
+== Subscriptions
+
+.Strategy question
+****
+What strategy gives each consumer exactly the messages it handles, in order, with a way out for those it cannot handle?
+****
+
+.Subscriptions (the environment prefix is omitted)
+[cols="5,3,3,5", options="header"]
+|===
+| Subscription | On topic | Consumer | Receives
+| `inventory.commands.inventory-service` | `inventory.commands` | Inventory | Everything
+| `inventory.events.order-service` | `inventory.events` | Order | Everything except {EVT-INV-007}
+| `inventory.events.catalog-service` | `inventory.events` | Catalog | {EVT-INV-007} only
+| `payment.commands.payment-service` | `payment.commands` | Payment | Everything
+| `payment.events.order-service` | `payment.events` | Order | Everything
+| `order.events.cart-service` | `order.events` | Cart | {EVT-ORD-001} only
+| `order.events.notification-service` | `order.events` | Notification | Everything
+|===
+
+A subscription that does not receive everything has a *filter* on the attribute `ce-type`.
+Filtering happens in Pub/Sub: the messages a consumer does not want are never delivered to it and cost it nothing.
+
+.Settings of every subscription
+[cols="4,4,8", options="header"]
+|===
+| Setting | Value | Reason
+| Delivery | Pull, streaming | The consumer controls its own pace; nothing is exposed to receive pushes
+| Message ordering | Enabled | Messages with the same ordering key are delivered one at a time, in order
+| Acknowledgement deadline | 30 seconds, extended by the client while a message is being handled | Handlers are short; a message whose handler died is redelivered quickly
+| Retry policy | Exponential backoff from 5 seconds to 5 minutes | A consumer in difficulty is not hammered
+| Dead-letter topic | After 10 delivery attempts | A message that keeps failing stops blocking the messages behind it with the same key
+| Message retention | 7 days | A consumer may be down for a weekend without losing anything
+| Expiration | Never | A subscription must not disappear because its consumer was idle
+| Exactly-once delivery | Disabled | Consumers are idempotent by design (document 03-06); the option would add latency without removing that need
+|===
+
+Ordering and dead-lettering work together in a way worth knowing: while a message is being retried, the messages behind it with the same key wait.
+That is the desired behavior — an order's messages must not overtake each other — and it is why the number of attempts is bounded.
+
+== Dead letters
+
+.Strategy question
+****
+What strategy makes sure a message that cannot be handled is noticed, kept and replayable?
+****
+
+Each subscription has its own dead-letter topic, named after it with the suffix `.dead-letter`, and that topic has one subscription used only for inspection and replay.
+
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| What arrives there | A message that its consumer failed to handle 10 times. In a healthy system: nothing.
+| Alert | Any message in a dead-letter subscription raises an alert within 5 minutes ({NFR-OBS-004}).
+| Inspection | The message keeps its envelope: its type, its saga identifier and its trace context say which order it concerns and where it failed.
+| Replay | Once the cause is fixed, the message is published again to its original topic by a documented procedure (document 06-07). Consumers being idempotent, replaying is safe.
+| Retention | 7 days. A dead letter not handled within a week is a process failure, and the alert is still firing.
+|===
+
+A dead letter on a saga's subscription usually means an order is stuck in a working state.
+The review deadline covers it: the order goes under review and a person is already looking.
+
+== Access rights
+
+.Strategy question
+****
+What strategy ensures a service can publish and read only what the catalog of messages says it should?
+****
+
+Each service runs under its own Google identity, obtained through Workload Identity Federation: no key exists.
+Rights are granted on individual topics and subscriptions, never on the project.
+
+.Rights per service
+[%unbreakable, cols="3,6,6", options="header"]
+|===
+| Service | May publish to | May read from
+| Order | `inventory.commands`, `payment.commands`, `order.events` | `inventory.events.order-service`, `payment.events.order-service`
+| Inventory | `inventory.events` | `inventory.commands.inventory-service`
+| Payment | `payment.events` | `payment.commands.payment-service`
+| Catalog | – | `inventory.events.catalog-service`
+| Cart | – | `order.events.cart-service`
+| Notification | – | `order.events.notification-service`
+|===
+
+Pub/Sub itself needs two rights to move dead letters: to publish to each dead-letter topic, and to acknowledge on the subscription the message came from.
+They are granted to the Pub/Sub service agent by Terraform, with the rest.
+
+== Creation and environments
+
+.Strategy question
+****
+What strategy guarantees that the three environments have exactly the same topology?
+****
+
+The topology is declared once, as a Terraform module that takes the environment name as a parameter, and applied three times.
+A topic, its schema, its subscriptions, their filters, their dead-letter topics and the rights are created together or not at all.
+
+.What Terraform creates per environment
+[%unbreakable, cols="6,3,6", options="header"]
+|===
+| Resource | Count | Note
+| Schemas | 5 | One per topic, from the contract files
+| Topics | 5 | With their schema
+| Subscriptions | 7 | With filter, ordering, retry policy and dead-letter policy
+| Dead-letter topics and their inspection subscriptions | 7 and 7 | –
+| Access bindings | About 25 | Per topic and per subscription
+|===
+
+On a workstation and in component tests, the Pub/Sub emulator stands for the service.
+It does not validate Protobuf schemas, so schema enforcement is verified against the real Pub/Sub of the test environment, by the integration tests of document 07-03.
+
+At the volumes of this platform — a few messages per order — Pub/Sub costs almost nothing: the monthly free allowance is far above what a demonstration store publishes.
+
+Owner: {role-cloud} {role-devops}

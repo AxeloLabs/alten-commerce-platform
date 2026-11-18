@@ -1,0 +1,26 @@
+@startuml
+title Transactional outbox: saving and publishing are two separate acts
+
+participant "Subscriber\n(adapter)" as S
+participant "Use case\n(application)" as U
+database "Service database" as DB
+participant "Relay\n(adapter)" as R
+queue "Pub/Sub" as PS
+
+PS ->> S : message
+S -> U : handle(message)
+group one database transaction
+  U -> DB : record the message identifier (inbox)
+  U -> DB : save the aggregate at its new version
+  U -> DB : insert the outgoing messages (outbox)
+end
+U --> S : done
+S ->> PS : acknowledge
+
+loop every few hundred milliseconds
+  R -> DB : claim unpublished rows, oldest first
+  R ->> PS : publish, with ordering key and envelope
+  PS -->> R : accepted
+  R -> DB : mark as published
+end
+@enduml

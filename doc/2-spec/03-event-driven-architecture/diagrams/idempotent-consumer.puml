@@ -1,0 +1,23 @@
+@startuml
+title Idempotent consumer: a message delivered twice has its effect once
+
+participant "Subscriber" as S
+participant "Use case" as U
+database "Service database" as DB
+queue "Pub/Sub" as PS
+
+PS ->> S : message (id = m1)
+S -> U : handle(m1)
+U -> DB : insert m1 into the inbox
+U -> DB : save the aggregate, insert outgoing messages
+U --> S : done
+S ->> PS : acknowledge
+
+PS ->> S : message (id = m1) again
+S -> U : handle(m1)
+U -> DB : insert m1 into the inbox
+DB --> U : already there
+U --> S : already handled
+S ->> PS : acknowledge
+note over U, DB : nothing else was read,\nchanged or published
+@enduml

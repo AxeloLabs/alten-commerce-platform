@@ -1,0 +1,219 @@
+= Reliable Messaging in Spring Boot: Outbox, Idempotent Consumers and Deadlines
+:doc-id: 03-06
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: How producers and consumers are built so that no business operation is lost, none is applied twice, and none waits forever.
+include::../_shared/attributes.adoc[]
+
+== The problem
+
+.Strategy question
+****
+What strategy makes a service that saves to a database and publishes to a bus behave as if the two were one?
+****
+
+A service that handles a message does two things: it saves its new state, and it tells the others.
+The database and the bus are two systems; no transaction covers both.
+Whatever the order of the two acts, a crash between them leaves one done and the other not:
+
+* publish, then save: the others hear about something that never happened;
+* save, then publish: something happened that nobody will ever hear about.
+
+Pub/Sub adds its own facts of life.
+It delivers every message *at least once*: sometimes twice.
+It preserves order only among messages with the same ordering key, and only while the subscriber acknowledges them one after the other.
+And it delivers as soon as it can: it cannot be asked to deliver later.
+
+Four mechanisms, used together in every service, turn these facts into three guarantees.
+
+.Guarantees and mechanisms
+[%unbreakable, cols="5,5,5", options="header"]
+|===
+| Guarantee | Mechanism | Requirement
+| No operation is lost | Transactional outbox | {NFR-REL-001}
+| No operation is applied twice | Inbox, and aggregates that answer from their state | {NFR-REL-002}
+| Two messages about one thing never corrupt it | Ordering key and aggregate version | {NFR-REL-002}
+| No operation waits forever | Deadlines on the saga, dead letters on the bus | {NFR-REL-003}
+|===
+
+Owner: {role-arch} {role-swe}
+
+== Transactional outbox
+
+.Strategy question
+****
+What strategy guarantees that a message is published if, and only if, the change it announces was saved?
+****
+
+The code that does the work never publishes.
+It writes the outgoing message into a table of its own database — the *outbox* — in the same transaction as the business change.
+A separate component, the *relay*, reads the table and publishes.
+
+plantuml::diagrams/outbox-relay.puml[format=svg, align=center]
+
+.The outbox table
+[%unbreakable, cols="3,11", options="header"]
+|===
+| Column | Content
+| Message identifier | The `id` of the envelope, generated when the row is written. It never changes, even if the message is published several times.
+| Destination | The topic.
+| Ordering key | The order identifier or the SKU.
+| Type and attributes | The envelope, complete: type, saga identifier, causation identifier, trace context.
+| Payload | The Protobuf bytes, already encoded.
+| Created at, published at | When the row was written; when Pub/Sub accepted the message, empty until then.
+|===
+
+.Behavior of the relay
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Selection | Unpublished rows, oldest first, in small batches. Several replicas of a service run a relay; each claims the rows it takes so that two relays never take the same row.
+| Order | Rows with the same ordering key are published in the order they were written, and the next is sent only when Pub/Sub has accepted the previous one.
+| Publication | With the ordering key and the envelope as message attributes. Publication is confirmed by Pub/Sub before the row is marked.
+| Failure | A row that could not be published stays unpublished and is tried again. Nothing is lost; the only effect is delay.
+| Crash after publishing, before marking | The row is published again on restart: the same message, with the same identifier, twice. Consumers handle that (next section).
+| Cleaning | Published rows are deleted after a few days. They are kept that long to investigate incidents.
+| Measures | Number of unpublished rows and age of the oldest. Both are near zero in a healthy service; an alert watches them ({NFR-REL-005}).
+|===
+
+.Alternatives that were not retained
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Alternative | Reason
+| Publish inside the transaction | Does not make the two atomic: the publication can succeed and the commit fail, or the reverse.
+| Change data capture on the database log | Removes the polling relay, but adds a streaming service to operate for a platform that publishes a handful of messages per order.
+| The event publication registry of Spring Modulith | The same idea, built in, but with no publisher for Pub/Sub and a model tied to Spring events. The outbox is implemented explicitly, behind a port, where it can be tested without Spring.
+|===
+
+== Idempotent consumers
+
+.Strategy question
+****
+What strategy makes a message that arrives twice as harmless as a message that arrives once?
+****
+
+A consumer records the identifier of each message it handles in a table of its own database — the *inbox* — in the same transaction as the handling.
+The identifier is unique in that table.
+A second delivery of the same message fails to insert it, and the consumer acknowledges without doing anything else.
+
+plantuml::diagrams/idempotent-consumer.puml[format=svg, align=center]
+
+The inbox catches a message delivered twice.
+It does not catch the same *request* sent as two messages with different identifiers — which happens when a sender, after a crash, sends a command it had in fact already sent.
+A second layer covers it: the aggregates themselves.
+
+.Idempotence by layer
+[cols="4,6,5", options="header"]
+|===
+| Layer | How it works | Example
+| Inbox | Same message identifier: handled once | `PaymentCaptured` delivered twice by Pub/Sub
+| Aggregate found by its business key | A request about something that already exists is answered from its recorded state | A second `ChargePayment` for an order that has a payment: the provider is not called, the recorded outcome is published again
+| State machine | An event that the current state does not expect is ignored | `StockReserved` reaching a saga that is already compensated
+| Provider reference | The same reference on every call for one payment | A charge retried after a time-out cannot be taken twice by the provider
+|===
+
+.When a message is acknowledged
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Outcome of the handling | What the subscriber does
+| The transaction committed | Acknowledges.
+| The message was already in the inbox | Acknowledges.
+| A transient failure: database unavailable, version conflict, a dependency timing out | Does not acknowledge. Pub/Sub delivers the message again, with increasing delays.
+| The message cannot be understood: unknown type despite the filter, missing mandatory field | Does not acknowledge; after 10 attempts Pub/Sub moves it to the dead-letter topic. Retrying will not help, but setting it aside must leave a trace and raise an alert.
+| A business refusal: no stock, payment declined | Acknowledges. A refusal is a normal outcome: it is saved and announced by an event, never treated as an error.
+|===
+
+The last row matters most.
+An exception is for what should not happen; `StockReservationRejected` and `PaymentRefused` are things that happen every day, and they travel as events.
+
+== Order and concurrency
+
+.Strategy question
+****
+What strategy keeps two messages about the same order from corrupting it, on several replicas?
+****
+
+Two protections, one after the other.
+
+Ordering key:: Every message carries the identifier of what it is about as its ordering key. Pub/Sub delivers messages with the same key to a subscription one at a time, in publication order, even when the service runs several replicas. Messages about different orders are handled in parallel.
+Aggregate version:: Every aggregate, saga included, carries a version that is checked when it is saved. If something else changed it in the meantime — a deadline reached at the same instant as an answer arrived, for instance — the save fails, the transaction is rolled back, the message is not acknowledged and is handled again against the fresh state.
+
+The ordering key makes collisions rare; the version makes them harmless.
+Neither replaces the other: ordering keys do not cover deadlines, which do not come from the bus.
+
+== Deadlines
+
+.Strategy question
+****
+What strategy produces "nothing happened in time" as an event, when the bus cannot deliver later?
+****
+
+A saga saves, with its state, the two instants after which something must be decided (document 03-03).
+A scheduled task in the order service turns a passed deadline into a call to the saga, through the same use case and the same transaction rules as a message.
+
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Frequency | Every few seconds. A deadline is honored within that margin, which is negligible against delays counted in minutes.
+| Several replicas | Each run claims the sagas it handles, so that two replicas do not handle the same one. A saga handled twice would ignore the second call anyway.
+| After a restart | Deadlines are in the database: a deadline that passed while the service was down is handled when it comes back.
+| Reservations | The inventory expires reservations the same way: an instant saved with the reservation, and a scheduled task.
+|===
+
+== In the code
+
+.Strategy question
+****
+What strategy keeps all of this out of the business code?
+****
+
+None of these mechanisms appears in the domain.
+A use case receives a message that is already decoded, calls the domain, and hands the result to one port.
+
+.Where each piece lives (document 04-03 gives the full structure)
+[cols="4,4,8", options="header"]
+|===
+| Piece | Layer | Responsibility
+| Subscriber | Inbound adapter | Receives from Pub/Sub, decodes the envelope and the payload, restores the trace context, calls the use case, acknowledges or not according to the outcome
+| Use case | Application | Loads the aggregate, calls its method with the message, passes the decision to the unit of work
+| Unit of work | Port | "Record this incoming message, save this aggregate at this version, add these outgoing messages" — all or nothing
+| Unit of work for PostgreSQL | Outbound adapter | One database transaction over the inbox, the aggregate tables and the outbox
+| Relay | Outbound adapter | Publishes the outbox to Pub/Sub
+| Deadline task | Inbound adapter | Finds due sagas and reservations, calls the use case
+|===
+
+The unit of work is the one port whose contract includes atomicity.
+A use case never opens a transaction and never publishes: it cannot get the order of the two wrong, because it does neither.
+
+The catalog and the cart, whose storage is interchangeable, publish nothing in this release.
+Their adapters for the document database and for a file therefore need the inbox only: "record this message and save this aggregate" in one atomic write, which both stores can do.
+
+.Settings that matter
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Setting | Choice
+| Messages handled at once by one replica | Bounded, so that a burst cannot exhaust the database connections
+| Acknowledgement | Explicit, by the subscriber, after the commit. Never automatic.
+| Publication | Ordering enabled on the publisher; a failed publication for a key is resumed explicitly by the relay
+| Shutdown | A replica that is asked to stop first stops receiving, finishes the messages in hand, then stops: a deployment never interrupts a transaction ({NFR-REL-004})
+| Startup | A replica starts receiving only once it is ready: database reachable, relay running
+|===
+
+== Proving it
+
+.Strategy question
+****
+What strategy shows that these guarantees hold, rather than assuming so?
+****
+
+Each mechanism has tests that provoke exactly the situation it exists for.
+They are specified in document 07-03; in short:
+
+* stop a service between its commit and its publication, restart it, and check that the message arrives ({SC-ORD-009});
+* deliver every message of a scenario twice, and check that the outcome is that of a single delivery ({SC-ORD-008});
+* deliver two messages about one order to two replicas at once, and check that the state is the one a sequential handling gives ({SC-ORD-010});
+* stop the order service after the debit, restart it, and check one charge and a confirmed order ({SC-ORD-007});
+* withhold an answer, and check that the deadline decides ({SC-ORD-004}, {SC-ORD-005}).
+
+Owner: {role-qa} {role-sre}

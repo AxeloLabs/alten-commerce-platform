@@ -1,0 +1,38 @@
+@startuml
+title Pub/Sub topology (one environment)
+
+left to right direction
+
+rectangle "Order" as ORD #FFE0B2
+rectangle "Inventory" as INV
+rectangle "Payment" as PAY
+rectangle "Catalog" as CAT
+rectangle "Cart" as CART
+rectangle "Notification" as NOT
+
+queue "inventory.commands" as TIC
+queue "inventory.events" as TIE
+queue "payment.commands" as TPC
+queue "payment.events" as TPE
+queue "order.events" as TOE
+
+ORD --> TIC : publishes
+TIC --> INV : inventory-service
+INV --> TIE : publishes
+TIE --> ORD : order-service\n(all but availability)
+TIE --> CAT : catalog-service\n(availability only)
+
+ORD --> TPC : publishes
+TPC --> PAY : payment-service
+PAY --> TPE : publishes
+TPE --> ORD : order-service
+
+ORD --> TOE : publishes
+TOE --> CART : cart-service\n(OrderConfirmed only)
+TOE --> NOT : notification-service
+
+note bottom of TOE
+  Every subscription has its own
+  dead-letter topic (not drawn).
+end note
+@enduml

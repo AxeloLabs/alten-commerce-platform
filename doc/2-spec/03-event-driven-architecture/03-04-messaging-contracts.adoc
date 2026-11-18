@@ -1,0 +1,239 @@
+= Messaging Contracts: CloudEvents, Protocol Buffers and AsyncAPI
+:doc-id: 03-04
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The envelope, the payload and the channel description of every message, their compatibility rules and how they are governed.
+include::../_shared/attributes.adoc[]
+
+== Three layers, three standards
+
+.Strategy question
+****
+What strategy lets two services exchange messages for years without ever having to be deployed together?
+****
+
+A message contract has three layers, and each has its own standard.
+
+[%unbreakable, cols="3,4,8", options="header"]
+|===
+| Layer | Standard | Answers
+| Envelope | CloudEvents {v-cloudevents} | What is this message, who sent it, when, about what, as part of which saga and which trace? Readable without opening the payload.
+| Payload | Protocol Buffers | What exactly does it say? Typed, compact, with explicit rules for evolution.
+| Channel | AsyncAPI {v-asyncapi} | Where does it travel, who publishes and who subscribes, with which Pub/Sub settings? The asynchronous counterpart of an OpenAPI document.
+|===
+
+Contracts are written first, by hand, and stored in the repository under `contracts/`.
+Code is generated from them or tested against them; a contract is never derived from code.
+A change of contract is a pull request that the pipeline checks for compatibility before any service is touched.
+
+Owner: {role-sol} {role-data}
+
+== Envelope
+
+.Strategy question
+****
+What strategy makes every message identifiable, traceable and filterable in the same way, whatever it carries?
+****
+
+Every command and every event is a CloudEvent.
+
+.Attributes of the envelope
+[cols="3,2,5,6", options="header"]
+|===
+| Attribute | Origin | Content | Used for
+| `id` | Standard | A universally unique identifier, new for each message | Recognizing a message already handled
+| `source` | Standard | `/alten-commerce/<service>` | Knowing who published
+| `specversion` | Standard | `1.0` | –
+| `type` | Standard | The full name of the payload type, for example `altencommerce.inventory.v1.StockReserved` | Routing, filtering subscriptions, choosing the handler
+| `time` | Standard | When the fact happened, in UTC | Ordering by a human, measuring delays
+| `subject` | Standard | The identifier of what the message is about: an order identifier, or a SKU | The ordering key
+| `datacontenttype` | Standard | `application/protobuf` | –
+| `dataschema` | Standard | The name of the Pub/Sub schema of the topic | Finding the contract
+| `sagaid` | Extension | The saga identifier | Following an order across services (document 03-03)
+| `causationid` | Extension | The `id` of the message that caused this one | Reconstructing who triggered what
+| `traceparent` | Extension | The trace context, in the W3C format | Continuing the distributed trace across the bus
+|===
+
+Extension names are lower-case letters and digits only, as the CloudEvents specification requires.
+
+.How the envelope travels on Pub/Sub
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Choice | Reason
+| Binary content mode | Each attribute becomes a Pub/Sub message attribute named `ce-` followed by its name: `ce-id`, `ce-type`, `ce-sagaid`. The message data is the Protobuf payload, untouched.
+| Not structured mode | Wrapping the payload inside a JSON envelope would hide it from the topic schema and from subscription filters, and encode it twice.
+| Ordering key = `subject` | All messages about one order, or one SKU, reach a subscriber in the order they were published.
+|===
+
+The mapping of CloudEvents onto Pub/Sub is a working draft published by Google, not yet a ratified part of the CloudEvents specification.
+The table above is therefore the reference for this platform: it does not depend on the draft moving.
+
+.A message as it travels: `StockReserved`
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Part | Value
+| Topic | `prod.inventory.events`
+| Ordering key | The order identifier
+| Attribute `ce-id` | A new identifier
+| Attribute `ce-type` | `altencommerce.inventory.v1.StockReserved`
+| Attribute `ce-source` | `/alten-commerce/inventory-service`
+| Attribute `ce-subject` | The order identifier
+| Attribute `ce-sagaid` | The saga identifier
+| Attribute `ce-causationid` | The `ce-id` of the `ReserveStock` command it answers
+| Attribute `ce-traceparent` | The trace context
+| Data | The Protobuf message: order identifier, reservation identifier, expiry time
+|===
+
+== Payload
+
+.Strategy question
+****
+What strategy lets a producer evolve a message without breaking a consumer it does not know?
+****
+
+Payloads are Protocol Buffers messages, version 3 of the language.
+
+.Conventions
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Package | `altencommerce.<context>.v1`. The version is part of the package, hence of the type name.
+| One schema per topic | Pub/Sub validates a topic against one schema, which must be a single self-contained message definition: no import. Each topic therefore has one file whose top-level message is a wrapper holding exactly one of the messages of that topic.
+| Shared shapes | A money amount or an order line is defined again inside each schema that needs it. Duplication is the price of self-contained schemas; a lint rule checks that the copies are identical.
+| Amounts | An integer number of minor units (cents) and a currency code. Never a floating-point number, never a formatted string.
+| Identifiers | Strings holding the textual form of the identifier.
+| Instants | Seconds and nanoseconds since the epoch, in UTC.
+| Enumerations | The first value is `UNSPECIFIED` and means "not set". A consumer treats an unknown value as `UNSPECIFIED`.
+| Personal data | Only the customer's e-mail address, only in order events, only because the notification needs it. Never a password, a token or card data.
+|===
+
+.Shape of a topic schema (illustrative excerpt)
+[source,protobuf]
+----
+syntax = "proto3";
+package altencommerce.inventory.v1;
+
+// The single top-level message of the topic "inventory.events".
+message InventoryEvent {
+  oneof event {
+    StockReserved stock_reserved = 1;
+    StockReservationRejected stock_reservation_rejected = 2;
+    ReservationConfirmed reservation_confirmed = 3;
+    // … one entry per event of the catalog
+  }
+
+  message StockReserved {
+    string order_id = 1;
+    string reservation_id = 2;
+    Instant expires_at = 3;
+  }
+
+  message Instant {
+    int64 seconds = 1;
+    int32 nanos = 2;
+  }
+}
+----
+
+.Compatibility rules
+[%unbreakable, cols="5,3,7", options="header"]
+|===
+| Change | Allowed | Why
+| Add a field | Yes | Old consumers ignore it; old producers leave it unset.
+| Add a message to the wrapper | Yes | Old consumers ignore a type they do not know.
+| Add a value to an enumeration | Yes | Old consumers read it as `UNSPECIFIED`.
+| Remove a field | Only by reserving its number and name | The number must never be reused with another meaning.
+| Rename a field | No | The name is part of generated code and of the JSON form.
+| Change the type or the number of a field | No | Old messages would be misread.
+| Change the meaning of a field | No | The worst break: nothing detects it.
+|===
+
+A change that cannot respect these rules is a new major version: a new package `v2`, a new topic, and both versions published side by side until every consumer has moved.
+The rules are enforced by `buf` in the pipeline: a pull request that breaks them cannot be merged.
+
+== Channel description
+
+.Strategy question
+****
+What strategy documents who publishes what and where, in a form that tools can check?
+****
+
+Each service has one AsyncAPI document that states the messages it sends and the messages it receives.
+The Google Pub/Sub bindings ({v-asyncapi-pubsub-binding}) carry what is specific to the bus: the schema of the topic, the ordering key, the attributes.
+
+.Shape of an AsyncAPI document (illustrative excerpt)
+[source,yaml]
+----
+asyncapi: 3.1.0
+info:
+  title: Inventory service
+  version: 1.0.0
+channels:
+  inventoryEvents:
+    address: '{env}.inventory.events'
+    messages:
+      stockReserved:
+        $ref: '#/components/messages/StockReserved'
+    bindings:
+      googlepubsub:
+        schemaSettings:
+          encoding: binary
+          name: projects/{project}/schemas/{env}-inventory-events-v1
+operations:
+  publishStockReserved:
+    action: send
+    channel:
+      $ref: '#/channels/inventoryEvents'
+components:
+  messages:
+    StockReserved:
+      name: altencommerce.inventory.v1.StockReserved
+      contentType: application/protobuf
+      traits:
+        - $ref: '#/components/messageTraits/CloudEventAttributes'
+      bindings:
+        googlepubsub:
+          orderingKey: order identifier
+----
+
+AsyncAPI documents are written by hand.
+The tools that generate them from code read Kafka or AMQP listeners and cannot read Pub/Sub ones; and a contract generated from code would describe what was built, not what was agreed.
+
+== Ownership and governance
+
+.Strategy question
+****
+What strategy stops a contract from changing under the feet of those who rely on it?
+****
+
+.Who owns a contract
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Contract | Owner
+| An event | The service that publishes it. Consumers adapt; they may ask for a field, never impose a shape.
+| A command | The service that receives it. The sender conforms.
+| The envelope | The platform. It is the same for everyone and changes only by an architecture decision.
+|===
+
+.Checks in the pipeline
+[cols="4,4,8", options="header"]
+|===
+| Check | Tool | Fails when
+| Schema style | buf {v-buf} | A schema ignores the conventions above
+| Schema compatibility | buf | A change breaks a compatibility rule against the main branch
+| AsyncAPI validity | AsyncAPI CLI {v-asyncapi-cli} | A document is not valid AsyncAPI {v-asyncapi}
+| AsyncAPI conventions | Spectral {v-spectral} | A channel lacks its schema, a message lacks the envelope attributes, a name breaks the naming rules
+| Conformance of a service | Microcks {v-microcks} | A service publishes a message that does not match its contract, or cannot handle a valid one
+|===
+
+.Rules for consumers
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Rule | Meaning
+| Tolerant reader | A consumer reads the fields it needs and ignores the rest. It never fails on an unknown field or an unknown message type.
+| Filter at the subscription | A consumer subscribes only to the types it handles, through a filter on `ce-type`. What still arrives unexpectedly is acknowledged and counted.
+| Validate what you use | A consumer checks the fields it relies on. A message it cannot use is set aside for inspection, not retried forever (document 03-06).
+|===
+
+Owner: {role-sol} {role-qa}
