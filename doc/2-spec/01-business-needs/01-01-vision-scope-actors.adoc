@@ -190,6 +190,16 @@ The table records what was decided; the rest of the specification is written on 
 
 These three decisions close gaps found by the independent review of the domain design (documents 02-03 and 03-03).
 
+.Decisions validated on 2026-11-19, on architecture, security and cost
+[cols="1,6,8", options="header"]
+|===
+| # | Decision | Consequence
+| 14 | A web gateway keeps tokens on the server side, and a service that calls another passes on the token of the person it serves ({ADR-PLT-018}, {ADR-PLT-021}) | One more deployment at the edge. No token in the browser; no interface between services that answers for anyone.
+| 15 | Three risks are accepted: one region, one cluster for the three environments, one database instance for all services | The loss of a zone is covered; the loss of the region stops the store and is repaired by hand (document 05-02).
+| 16 | No second factor at sign-in in this release, for customers or administrators | An administrator account rests on its password. A second factor can be required later by a setting of the identity provider (document 05-04).
+| 17 | The platform is first deployed as a proof of concept, for 24 to 48 hours, under a budget of 10 EUR, and destroyed at a deadline set when it is created ({ADR-PLT-030}) | One environment awake, one replica, a small database. The design with three environments is kept and described; its availability targets are not demonstrated by the proof of concept.
+|===
+
 == Glossary
 
 .Strategy question

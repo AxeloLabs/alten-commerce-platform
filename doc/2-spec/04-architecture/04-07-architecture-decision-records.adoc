@@ -62,6 +62,7 @@ It is marked as replaced, and a new record says what replaced it and why: the hi
 | {ADR-PLT-027} | GitHub Actions to integrate, Cloud Deploy to deliver | {st-proposed}
 | {ADR-PLT-028} | OpenTelemetry towards the observability services of Google Cloud | {st-proposed}
 | {ADR-PLT-029} | Documentation as code | {st-approved}
+| {ADR-PLT-030} | A deployment profile for the proof of concept, destroyed on schedule | {st-approved}
 |===
 
 Owner: {role-arch} {role-sol}
@@ -433,7 +434,7 @@ What strategy lets six services look alike without being tied together?
 What strategy records here the platform decisions that other lots detail?
 ****
 
-These four decisions are argued in the documents of folders 06 and 05.
+These decisions are argued in the documents of folders 06 and 05.
 They are listed here so that the register is complete.
 
 [[ADR-PLT-026]]
@@ -486,4 +487,17 @@ They are listed here so that the register is complete.
 | Alternatives | A word processor and a drawing tool: no review of changes, no automatic check, diagrams that drift from the text.
 | Consequences | A broken reference fails the build. Authors must write markup and accept layout decided by a theme.
 | Owner | {role-arch}
+|===
+
+[[ADR-PLT-030]]
+=== ADR-PLT-030 — A deployment profile for the proof of concept, destroyed on schedule
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-19 · validated by the product owner
+| Context | The platform is first run as a proof of concept, for one or two days, paid for by a person, under a ceiling of 10 EUR. The full layout — two replicas of everything, a database with a standby, three environments — costs several hundred euros a month if it stays up. Billing data arrives hours late: over two days, a budget alert comes after the money is spent.
+| Decision | The specification keeps the full design and adds a deployment profile for the proof of concept: one environment awake, one replica of each workload with small requests, a small database instance without standby, no managed firewall, no outgoing address, no purchased domain name. A deadline is given when the environment is created; at that deadline the pipeline destroys every resource, without anyone acting.
+| Alternatives | Three environments awake during the demonstration: about two and a half times the cost of the pods. Everything on a workstation: free, but GKE Autopilot, imposed by the brief, would never be shown. Stopping by hand: the same result, unless someone forgets.
+| Consequences | The proof of concept costs of the order of ten euros for 48 hours, and nothing once destroyed. It tolerates no loss of a pod and has no rate limit at its entry: the availability and resilience requirements are specified for the full profile and tested there, not demonstrated by the proof of concept. The two profiles differ by values only (documents 06-01, 06-03 and 06-06): going from one to the other changes no code and no contract.
+| Owner | {role-cloud} {role-platform}
 |===
