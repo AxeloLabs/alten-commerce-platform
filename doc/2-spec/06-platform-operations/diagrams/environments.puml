@@ -1,0 +1,49 @@
+@startuml
+title Three environments in one project and one cluster
+
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+package "Google Cloud project" #F4F7F9 {
+  component "Load balancer\none address, three host names" as LB #ECEFF1
+
+  package "GKE Autopilot cluster" #FFFFFF {
+    package "namespace test" #E3F2FD {
+      component "web gateway, six services,\nidentity provider" as T
+    }
+    package "namespace integration" #FFF8E1 {
+      component "web gateway, six services,\nidentity provider" as I
+    }
+    package "namespace prod" #C8E6C9 {
+      component "web gateway, six services,\nidentity provider" as P
+    }
+  }
+
+  database "Cloud SQL instance\none database per service\nand per environment" as SQL
+  queue "Pub/Sub\ntopics and subscriptions\nprefixed by environment" as PS
+  component "Secret Manager\nsecrets prefixed by environment" as SEC
+  component "Artifact Registry\none image, promoted" as AR #ECEFF1
+}
+
+LB --> T : test host
+LB --> I : integration host
+LB --> P : production host
+T --> SQL : test_* databases
+I --> SQL : integration_* databases
+P --> SQL : prod_* databases
+T --> PS
+I --> PS
+P --> PS
+T ..> SEC
+I ..> SEC
+P ..> SEC
+AR ..> T
+AR ..> I
+AR ..> P
+
+note bottom of SQL
+  Nothing crosses from one environment
+  to another: network policies, identities
+  and rights are per environment.
+end note
+@enduml

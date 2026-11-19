@@ -1,0 +1,30 @@
+@startuml
+title One build, three deployments
+
+skinparam componentStyle rectangle
+left to right direction
+
+component "Pull request\nmerged" as PR
+component "Build once\nimage signed,\nscanned, versioned" as B #FFF8E1
+component "test\nautomatic" as T #E3F2FD
+component "integration\nautomatic, after\nthe tests of test" as I #FFF8E1
+component "prod\nafter approval,\nprogressive" as P #C8E6C9
+
+PR --> B
+B --> T : deploy
+T --> I : promote the same image
+I --> P : promote the same image
+
+note bottom of T
+  contract, integration and
+  security tests
+end note
+note bottom of I
+  end-to-end, load and
+  resilience tests
+end note
+note bottom of P
+  verification after deployment;
+  rollback if it fails
+end note
+@enduml

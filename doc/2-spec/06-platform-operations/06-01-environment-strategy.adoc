@@ -1,0 +1,202 @@
+= Environment Strategy: Three Environments, One Cluster, and the Path to Production
+:doc-id: 06-01
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: What each environment is for, how the three are separated inside one project and one cluster, what may differ between them, how a version is promoted, and the layout a company would use.
+include::../_shared/attributes.adoc[]
+
+== What each environment is for
+
+.Strategy question
+****
+What strategy gives every change a place to be wrong before it reaches a customer?
+****
+
+The brief asks for three environments: test, integration and production.
+An engineer's workstation comes before them; it is described in document 08-01 and listed here because it is the first place a change runs.
+
+.Environments
+[cols="3,5,4,4,4", options="header"]
+|===
+| Environment | Purpose | Receives | Data | Runs
+| Workstation | Write and try a change | Uncommitted code | A small set loaded by a script | Services started from the IDE; database, bus emulator, identity provider and telemetry in local containers
+| `test` | Prove that what was merged works with real cloud services | Every merge to the main branch, automatically | Synthetic, reset by the tests that need it | On demand: scaled to nothing when unused ({NFR-COST-002})
+| `integration` | Prove that a release candidate behaves as a whole: journeys, load, failures | Every version that passed `test`, automatically | A realistic synthetic catalog, customers and orders | On demand: scaled down when unused
+| `prod` | Serve customers | A version approved by a person | The data of the store | Always, with at least two replicas of everything ({NFR-AVAIL-002})
+|===
+
+.Which tests run where (detail in document 07-01)
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Place | Tests
+| Build | Unit tests, architecture rules, component tests with containers, contract checks
+| `test` | What needs the real services: schemas enforced by Pub/Sub, the document database, identities and rights; the authorization suite; the dynamic security scan
+| `integration` | End-to-end tests of the critical paths; saga scenarios with failures provoked; load tests; the database failover drill
+| `prod` | A verification after each deployment: the critical paths, read-only or on a test account
+|===
+
+Owner: {role-platform} {role-devops}
+
+== How the three are separated
+
+.Strategy question
+****
+What strategy keeps three environments apart when they share a project, a cluster and a database instance?
+****
+
+The three environments live in one Google Cloud project and one GKE Autopilot cluster ({ADR-PLT-026}), and their databases on one instance ({ADR-PLT-012}).
+Separation is therefore logical, and has to be complete: for each kind of resource, something must make it impossible for one environment to touch another.
+
+plantuml::diagrams/environments.puml[format=svg, align=center]
+
+.What separates them
+[cols="4,6,5", options="header"]
+|===
+| Resource | Separation | Named
+| Workloads | One Kubernetes namespace per environment | `test`, `integration`, `prod`
+| Network | Traffic between namespaces is denied by network policies (document 05-04) | –
+| Identities | One Kubernetes service account and one Google identity per service and per environment | `<env>-<service>`
+| Topics and subscriptions | Separate resources; rights granted per identity, hence per environment (document 03-05) | `<env>.<context>.commands`, `<env>.<context>.events`
+| Databases | One database per service and per environment, each with its own account and a limit on its connections | `<env>_<service>`
+| Identity provider | One deployment and one realm per environment: an account of `test` does not exist in `prod` | –
+| Secrets | Separate secrets; an identity reads those of its environment only | `<env>-<service>-<name>`
+| Entry point | One host name per environment, routed to the web gateway of that environment only | See document 06-02
+| Quotas | A quota of processor and memory per namespace, so that a runaway test cannot starve production | –
+| Images | Not separated, on purpose: the same image is promoted from one environment to the next | One registry
+|===
+
+.What this separation does not give
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Shared | Consequence, accepted by the product owner on 2026-11-19
+| The cluster | An incident at cluster level — an upgrade gone wrong, a cluster-wide misconfiguration — reaches production. Upgrades follow the regular release channel and maintenance windows.
+| The database instance | A load test on `integration` uses the same processors and disks as production. Connections are limited per account; load tests are announced, bounded in time and run outside busy hours.
+| The project | Project-wide quotas and rights are shared. Rights are granted on resources, never on the project (document 05-04).
+| The region | One region for all three (document 05-02).
+|===
+
+== What may differ, and what must not
+
+.Strategy question
+****
+What strategy guarantees that what was tested is what runs in production?
+****
+
+An environment is the same software and the same descriptions, with different values.
+
+.The same everywhere
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Item | Rule
+| Images | Built once; the image that passed the tests is the one deployed, identified by its digest, never rebuilt per environment.
+| Deployment packages | One chart per service; an environment is a file of values (document 06-03).
+| Infrastructure | One Terraform module for the topology of an environment, applied three times with its name (document 06-04).
+| Contracts, schemas, migrations | Identical. A migration reaches production only after it ran on the two others.
+| Security | Tokens validated, deny by default, network policies and identities are the same in `test` as in `prod`. An environment is never "opened up to make tests easier".
+|===
+
+.Values that differ
+[cols="4,3,3,3", options="header"]
+|===
+| Value | `test` | `integration` | `prod`
+| Replicas of each service | 1 | 2 | 2 or more, autoscaled
+| Running when unused | No | No | Always
+| Host name | A name of its own | A name of its own | The name of the store
+| Payment and e-mail providers | Simulated | Simulated | Simulated in this release
+| Trace sampling | Everything | Everything | Orders: everything; reads: 10 %
+| Log level | Information | Information | Information
+| Data | Synthetic, reset | Synthetic, kept between runs | Real
+| Who may deploy | The pipeline | The pipeline | The pipeline, after approval
+| Browsable contract pages, test tokens of the simulated provider | Yes | Yes | No contract pages; test tokens as long as the provider is simulated
+|===
+
+Configuration is read from the environment at startup: values from the chart, secrets from the secret manager.
+No file of the image names an environment, and no code tests which environment it runs in.
+
+== The path to production
+
+.Strategy question
+****
+What strategy moves a version forward only as fast as the evidence allows?
+****
+
+plantuml::diagrams/promotion.puml[format=svg, align=center]
+
+.Rules of promotion (detail in document 06-05)
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| One direction | `test`, then `integration`, then `prod`. Nothing is deployed to an environment that did not pass the one before.
+| What moves | A release: the images of the services that changed, their charts and values, identified by one version.
+| Gates | Automatic between `test` and `integration`: the tests of `test` must pass. A person approves the step to `prod`, after the tests of `integration`.
+| Database | The migrations of a release are applied in each environment just before its services start, and are compatible with the version still running (document 04-04).
+| Rollback | Deploying the previous release again. It is always possible because migrations never break the previous version.
+| Urgent fix | The same path, faster: no step is skipped, the queue is.
+| Infrastructure changes | Applied by the same promotion, environment by environment, never to the three at once.
+|===
+
+== Data in each environment
+
+.Strategy question
+****
+What strategy gives tests realistic data without ever copying a customer's?
+****
+
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Production data | Never leaves production. No copy, no extract, no anonymized dump in another environment.
+| Synthetic data | A script creates a catalog, stock, accounts and orders that look real and belong to nobody. It is versioned with the code and can rebuild an environment from empty.
+| Accounts | Test accounts exist in the realms of `test` and `integration` only. Production has no shared or generic account.
+| Reset | `test` can be emptied and reloaded at any time. `integration` keeps its data between runs, so that migrations are exercised on data that has a history.
+| Reference data | The list of categories is part of the migrations, identical everywhere.
+|===
+
+== Who may do what
+
+.Strategy question
+****
+What strategy lets engineers investigate freely without letting anyone change production by hand?
+****
+
+[cols="4,4,4,4", options="header"]
+|===
+| Action | `test` | `integration` | `prod`
+| Deploy | The pipeline | The pipeline | The pipeline, after approval
+| Read logs, metrics, traces | Engineers | Engineers | Engineers
+| Read data | Engineers | Engineers | Nobody by default; an emergency access, limited in time and recorded (document 05-04)
+| Change data or configuration by hand | Engineers, for an investigation | Nobody: it would invalidate the tests | Nobody
+| Change infrastructure | The pipeline | The pipeline | The pipeline
+|===
+
+A change made by hand is a change nobody reviewed and nobody can reproduce.
+Outside `test`, the only hands are those of the pipeline; document 06-06 lists the commands that are forbidden for that reason.
+
+== The layout a company would use
+
+.Strategy question
+****
+What strategy shows where this layout stops being enough, and what comes next?
+****
+
+One project and one cluster keep the fixed cost of the platform low.
+A company that takes real payments would separate more; that layout is described here and not deployed.
+
+.From this release to a company layout
+[cols="4,5,6", options="header"]
+|===
+| Aspect | This release | Company layout
+| Projects | One | One per environment, plus one for the build and the image registry, under one folder with shared policies
+| Clusters | One, three namespaces | One per environment; upgrades reach production last
+| Databases | One instance | One instance per environment at least; one per service where the load asks for it
+| Network | One network | One per environment, or a shared network with a subnet per environment; no route between them
+| Rights | Per resource, in one project | Per project: nobody who works on `test` has any right in the production project
+| Regions | One | A second region for production, with the database replicated
+| Cost | The lowest fixed cost | About three times the fixed cost
+|===
+
+Moving from one to the other changes no service and no contract: names already carry the environment, identities are already per environment, and the infrastructure is already a module applied once per environment.
+The move is a matter of applying that module in other projects and migrating the data.
+
+Owner: {role-cloud} {role-platform}
