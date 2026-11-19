@@ -280,7 +280,7 @@ What strategy proves the setup described here actually works?
 ****
 
 The setup was applied to the reference workstation on {revdate}.
-Each line was checked by running the tool, not by reading its documentation. The check found one tool missing that this document had not listed: the Compose provider.
+Each line was checked by running the tool, not by reading its documentation. The check found one tool missing that this document had not listed, the Compose provider; the owner installed it the same day, and the lines below are the state after that.
 
 .State of the reference workstation
 [cols="4,4,7", options="header"]
@@ -297,8 +297,10 @@ Each line was checked by running the tool, not by reading its documentation. The
 | Java language server (jdtls) | 1.63.0 | Archive in the home directory, checksum verified
 | TypeScript language server | 6.1.0 | pnpm, in the home directory
 | Podman | 5.8.9 | Preinstalled
-| Compose provider | Missing when checked (`podman compose` stopped with an error); package `podman-compose` available | System package: a remaining step below
-| Google Cloud CLI | 593.0.0 | Preinstalled, system package
+| Podman socket, for Testcontainers | Active for the user; answers the ping of its interface; rootless | User service, enabled by the owner
+| Compose provider | `podman-compose` 1.6.0; `podman compose` runs it | System package, installed by the owner with administrator rights. It had been missing: `podman compose` stopped with an error.
+| Google Cloud CLI | 593.0.0, signed in with the owner's own Google identity | Preinstalled, system package
+| GKE authentication plugin | 593.0.0 | System package, installed by the owner with administrator rights
 | GitHub CLI, Git, Python, Chrome | – | Preinstalled
 |===
 
@@ -306,9 +308,6 @@ Each line was checked by running the tool, not by reading its documentation. The
 [cols="6,6,4", options="header"]
 |===
 | Step | Why it is not automated | Needed for
-| Install the GKE authentication plugin and the Compose provider | Administrator rights | First connection to the cluster; the local platform
-| Enable the Podman socket | Changes a user service of the workstation | First Testcontainers run
-| `gcloud auth login` | Interactive sign-in | Any Google Cloud access
 | Create the account that the sessions of the AI assistant run under | Administrator rights (document 08-02) | Development phase
 | Install the Claude Code plugins and tool servers, in the session account | Changes the assistant's own configuration; done under the account of the previous line, through the shared settings of the project | Development phase
 | Choose the IntelliJ IDEA license | Personal or company account | Advanced Spring tooling only
