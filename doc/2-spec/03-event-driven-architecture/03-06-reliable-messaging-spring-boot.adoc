@@ -1,6 +1,6 @@
 = Reliable Messaging in Spring Boot: Outbox, Idempotent Consumers and Deadlines
 :doc-id: 03-06
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How producers and consumers are built so that no business operation is lost, none is applied twice, and none waits forever.
@@ -84,12 +84,12 @@ plantuml::diagrams/outbox-relay.puml[format=svg, align=center]
 [cols="4,11", options="header"]
 |===
 | Subject | Rule
-| Eligible rows | A row is eligible when it is not published, not parked, and *no older unpublished row has the same ordering key*.
+| Eligible rows | A row is eligible when it is not published, not parked, and *no older unpublished row has the same destination and the same ordering key*. Order is a matter of one topic: a row that waits for one topic never holds back a message for another.
 | Claim | Each replica of a service runs a relay. A relay claims eligible rows in small batches, oldest first, with a lock that the other relays skip.
-| Order | The eligibility rule is what keeps the order across replicas: the second message of an order cannot be claimed by anyone while the first is unpublished, so two relays never hold two messages of one key at the same time. Inside a batch, the next row of a key is sent only when Pub/Sub has accepted the previous one.
+| Order | The eligibility rule is what keeps the order across replicas: the second message of an order for a topic cannot be claimed by anyone while the first is unpublished, so two relays never hold two messages of one key and one topic at the same time. Inside a batch, the next row of a key is sent only when Pub/Sub has accepted the previous one.
 | Publication | With the ordering key and the envelope as message attributes. Publication is confirmed by Pub/Sub before the row is marked.
 | Transient failure | A row that could not be published stays unpublished and is tried again. Nothing is lost; the only effect is delay.
-| Permanent refusal | A row that Pub/Sub refuses for a reason retrying cannot cure — it does not match the schema of the topic, it is too large, the right to publish is missing — is *parked*: marked with the error and no longer tried. An alert is raised. It keeps blocking the later rows of its key, on purpose: publishing what follows would break the order. Meanwhile the deadlines of the saga take the order concerned to a person, and the runbook of document 06-07 says how to correct and release a parked row, or discard it.
+| Permanent refusal | A row that Pub/Sub refuses for a reason retrying cannot cure — it does not match the schema of the topic, it is too large, the right to publish is missing — is *parked*: marked with the error and no longer tried. An alert is raised. It keeps blocking the later rows of its key for the same topic, on purpose: publishing what follows would break the order. Meanwhile the deadlines of the saga take the order concerned to a person, and the runbook of document 06-07 says how to correct and release a parked row, or discard it.
 | Crash after publishing, before marking | The row is published again on restart: the same message, with the same identifier, twice. Consumers handle that (next section).
 | Cleaning | Published rows are deleted after 7 days. They are kept that long to investigate incidents. The payload of a row that carried a secret is erased as soon as it is published (section "A secret in a message").
 | Measures | Number of unpublished rows, age of the oldest, number of parked rows. All three are near zero in a healthy service; alerts watch them ({NFR-REL-005}).

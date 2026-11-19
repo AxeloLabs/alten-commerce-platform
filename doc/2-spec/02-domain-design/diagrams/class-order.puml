@@ -93,7 +93,9 @@ class CancelOrderSaga <<aggregate root>> {
 enum KnownPayment {
   NOT_REQUESTED
   REQUESTED
+  UNKNOWN
   CAPTURED
+  REFUND_REQUESTED
   REFUSED
   CANCELED
   REFUNDED
@@ -105,6 +107,7 @@ enum KnownStock {
   CONFIRMED
   LOST
   RELEASED
+  RETURN_REQUESTED
   RETURNED
 }
 class Decision <<value object>> {

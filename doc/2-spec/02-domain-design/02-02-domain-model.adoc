@@ -1,6 +1,6 @@
 = Domain Model: Aggregates, Value Objects and the Data They Persist
 :doc-id: 02-02
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Class diagrams of the domain of each bounded context and entity-relationship diagrams of each service database.
@@ -62,6 +62,7 @@ plantuml::diagrams/class-order.puml[format=svg, align=center]
 | Deadlines lead to a decision | `onOrderDeadline`, `onReviewDeadline` of the sagas | {FR-ORD-015} {FR-ORD-016}
 | A late answer is never dropped: a suspended saga handles it as in the step it remembers | `on(event)` of the sagas | {FR-ORD-016} {NFR-REL-002}
 | An administrator's decision obeys the rules of the automatic flow | `retry`, `confirm`, `reject` of the sagas | {FR-ORD-018}
+| An order is never confirmed once the refund of its payment was requested | `PlaceOrderSaga`: `knownPayment` never returns from refund requested to captured | {FR-ORD-007}
 |===
 
 A saga and its order are saved in the same transaction, together with the messages the decision produces.
@@ -132,7 +133,7 @@ plantuml::diagrams/class-payment.puml[format=svg, align=center]
 |===
 | Invariant | Guarded by | Rules
 | One payment per order | Unique order identifier; a second charge request is answered from the status of that payment | {FR-PAY-001}
-| The amount is the order total, in EUR | `Payment` is created with the amount and never changes it | {FR-PAY-002}
+| The amount is the order total, in EUR | `Payment` is created with the amount and never changes it. Only a payment recorded as canceled before any charge was requested has none | {FR-PAY-002}
 | A payment is refunded only if captured, and only once | `Payment.canBeRefunded`, `recordRefund` | {FR-PAY-006}
 | A canceled payment can no longer be captured | `Payment.recordCancellation`; the provider is called with the same reference | {FR-PAY-005}
 | No card data is held | `Payment` has no field for it; the token is passed to the provider and never written by the payment service | {FR-PAY-003}

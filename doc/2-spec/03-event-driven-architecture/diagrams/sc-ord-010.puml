@@ -11,8 +11,9 @@ O -> O : order deadline reached
 note over O : two handlers load the saga\nat version 3, at the same time
 note over O : deadline handler saves first:\nCOMPENSATED, version 4,\nReleaseReservation to send
 O ->> I : ReleaseReservation
-note over O : StockReserved handler tries to save:\nversion conflict, nothing is saved,\nthe message is not acknowledged
-I ->> O : StockReserved (delivered again)
-note over O : saga is COMPENSATED:\nReleaseReservation is sent again
+note over O : StockReserved handler tries to save:\nversion conflict, nothing is saved
+note over O : it runs again at once on the fresh state:\nthe saga is COMPENSATED,\nReleaseReservation is sent again (P20)
+O ->> I : ReleaseReservation
+note over O : saved at version 5,\nmessage acknowledged
 note over P : never called
 @enduml

@@ -1,6 +1,6 @@
 = Command and Event Catalog: Everything That Is Asked and Everything That Is Announced
 :doc-id: 03-02
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The complete list of commands and events of the platform, with their sender, receiver, transport, key and content.
@@ -57,7 +57,7 @@ Their interfaces are specified in document 04-05.
 | [[CMD-ORD-003]]CMD-ORD-003 | `ShipOrder` | Administrator | Order | {UC-ORD-006}. Publishes {EVT-ORD-005}.
 | [[CMD-ORD-004]]CMD-ORD-004 | `DeliverOrder` | Administrator | Order | {UC-ORD-006}. Publishes {EVT-ORD-006}.
 | [[CMD-ORD-005]]CMD-ORD-005 | `RetryOrderUnderReview` | Administrator | Order | {UC-ORD-007}. The request of the remembered step is sent again.
-| [[CMD-ORD-006]]CMD-ORD-006 | `ConfirmOrderUnderReview` | Administrator | Order | {UC-ORD-007}. Refused unless the payment is known as captured; refused for an order that was being canceled.
+| [[CMD-ORD-006]]CMD-ORD-006 | `ConfirmOrderUnderReview` | Administrator | Order | {UC-ORD-007}. Refused unless the payment is known as captured and no refund of it was requested; refused for an order that was being canceled.
 | [[CMD-ORD-007]]CMD-ORD-007 | `RejectOrderUnderReview` | Administrator | Order | {UC-ORD-007}. The payment is refunded or canceled first, then the stock is released or returned; refused for an order that was being canceled.
 |===
 
@@ -90,6 +90,11 @@ The complete tables of answers, status by status, are in document 02-03.
 |===
 
 The key of every command is the order identifier.
+
+The last column gives the answers to a request that is performed.
+A request that finds its work already done, or impossible, is answered by the event that states where things stand.
+`RefundPayment` is thus answered `PaymentCanceled` or `PaymentRefused` when there is nothing to refund, and `PaymentOutcomeUnknown` when nothing is established; any request about a payment that is already refunded is answered `PaymentRefunded`.
+Document 02-03 gives the answer to every request in every status.
 
 Two commands carry an instant after which they must not be executed.
 A request that waited too long in a subscription, because its receiver was down, reserves nothing and charges nothing when it is finally read: an order is never charged days after the customer gave up.

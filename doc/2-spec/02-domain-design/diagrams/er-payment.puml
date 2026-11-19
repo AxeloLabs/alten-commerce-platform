@@ -8,7 +8,7 @@ entity payment {
   --
   * order_id : uuid <<unique>>
   * placement_saga_id : uuid
-  * amount : numeric(12,2)
+  amount : numeric(12,2)
   * currency : char(3)
   * status : text
   * provider_reference : text
@@ -43,6 +43,8 @@ payment ||--o{ provider_attempt
 
 note bottom of payment
   unique (order_id): one payment per order.
+  amount is empty for a payment recorded as
+  CANCELED before any charge was requested.
   No card data is stored. The payment token
   is passed to the provider and never written.
 end note

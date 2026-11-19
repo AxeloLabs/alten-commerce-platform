@@ -181,6 +181,7 @@ _Available_ is the difference, and the only quantity customers can buy.
 | [[FR-INV-006]]FR-INV-006 | The system shall refuse a stock adjustment that would bring the stock on hand below the reserved quantity. | {must}
 | [[FR-INV-007]]FR-INV-007 | The system shall announce every change of an available quantity, so that the catalog can refresh its copy. | {must}
 | [[FR-INV-008]]FR-INV-008 | The system shall record every stock movement with its quantity, its cause and, for an adjustment, its author and reason. | {must}
+| [[FR-INV-009]]FR-INV-009 | The system shall refuse to create stock for a SKU that the catalog does not know; the check is made the first time stock is entered for that SKU. | {must}
 |===
 
 A reservation goes through a small lifecycle of its own:

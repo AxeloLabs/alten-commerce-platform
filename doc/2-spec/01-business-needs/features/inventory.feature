@@ -20,6 +20,14 @@ Feature: Inventory
       Then the adjustment is refused
       And "KB-001" still has 5 units on hand
 
+    @BDD-INV-006 @UC-INV-001 @FR-INV-009 @error
+    Scenario: Stock cannot be entered for a product the catalog does not know
+      Given a signed-in administrator
+      And no product "KB-999" exists in the catalog
+      When the administrator adds 10 units to "KB-999" with the reason "delivery received"
+      Then the adjustment is refused
+      And no stock exists for "KB-999"
+
     @BDD-INV-003 @UC-INV-001 @FR-INV-002 @FR-INV-003 @invariant
     Scenario: Concurrent reservations never make the available quantity negative
       Given the product "KB-001" with 5 units on hand and 0 reserved

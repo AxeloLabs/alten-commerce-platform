@@ -1,6 +1,6 @@
 = State Machines: Every State, Every Event, Every Guard
 :doc-id: 02-03
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The state machines of the order, of the two order sagas, of a payment, of a reservation and of a product, as diagrams, complete state and event grids, and transition tables.
@@ -94,21 +94,22 @@ plantuml::diagrams/saga-place-order-review.puml[format=svg, align=center]
 | Field | Content | Used for
 | State | One of the eight states | Choosing the column of the grid
 | Remembered step | The working state the saga was in when it was suspended; kept until the saga ends | Handling a late answer; knowing what "retry" means
-| Known payment | The last thing the payment service said: not requested, requested, captured, refused, canceled, refunded | Guards of the administrator's requests; what the administrator is shown
-| Known stock | The last thing the inventory said: requested, held, rejected, confirmed, lost, released, returned | Choosing between `ReleaseReservation` and `ReturnStock`; what the administrator is shown
+| Known payment | What the saga last asked of the payment service or was told by it: not requested, requested, unknown, captured, refund requested, refused, canceled, refunded. Once a refund is requested, the payment is never known as captured again. | Rule 5; guards of the administrator's requests; what the administrator is shown
+| Known stock | What the saga last asked of the inventory or was told by it: requested, held, rejected, confirmed, lost, released, return requested, returned | Rule 4; what the administrator is shown
 | Decided rejection | Empty, or the reason of a rejection that is decided but must wait until no payment is held: `OUT_OF_STOCK` or `ADMIN_DECISION` | Transitions P08 to P10 and P14
 | Order deadline, review deadline | Two instants; either may be empty | The deadlines below
 | Last failure | What the last failed answer said | The history shown to the administrator
 | Version | A counter checked at each save | Two events handled at once (document 03-06)
 |===
 
-Four rules hold in every state.
+Five rules hold in every state.
 They are what makes the grid below short enough to read.
 
 . *Facts are never dropped.* Whatever the state, an answer updates what the saga knows about the payment and about the stock. What differs from state to state is only what the saga does next.
 . *A suspended saga stops asking; it does not stop listening.* In `SUSPENDED` the saga sends nothing by itself and has no deadline. But the request it was waiting on is still in the subscription of the service that was silent, and that service executes it when it comes back. The saga handles that answer exactly as it would have in the remembered step: it follows what really happened, with or without an administrator.
 . *A rejection waits for the money.* The saga rejects the order only in a transition where it has just learned that no payment is held: never requested, refused, canceled or refunded. A rejection decided earlier — by an administrator, or because the stock is lost — is recorded as _decided_ and carried out by that transition ({FR-ORD-008}, {FR-ORD-018}).
-. *Stock is undone after the money, according to what the inventory said.* A reservation known as held is released; a reservation known as confirmed is returned. A release that finds the stock already taken says so, and the saga then sends the return (P21).
+. *Stock is undone after the money, according to what the inventory said.* "Undoes the stock" means: sends `ReturnStock` if the stock is known as confirmed, `ReleaseReservation` if it is known as held or requested, nothing otherwise. A release that finds the stock already taken says so, and the saga then sends the return (P21).
+. *An order is confirmed only on money that is there to stay.* The saga sends `ConfirmReservation`, and confirms the order, only while it knows the payment as captured and has never asked for its refund. A refund that was requested cannot be recalled: the request waits in the subscription of the payment service and may be executed at any time, even days later. From then on the saga can only finish the rejection ({FR-ORD-007}).
 
 .Place-order saga: every event in every state
 [cols="7,8*^2", options="header"]
@@ -120,10 +121,10 @@ They are what makes the grid below short enough to read.
 | `ReservationConfirmationFailed` | – | – | – | P13 | – ^(a)^ | step | – | –
 | `ReservationReleased`, `StockReturned` | – | – | – | – | – | step | – | –
 | `PaymentCaptured` | – | P05 | P10 | – | – | step | – | P22
-| `PaymentRefused` | – | P06 | P09 | – | P14 | step | – | –
+| `PaymentRefused` | – | P06 | P09 | P23 | P14 | step | P23 | –
 | `PaymentOutcomeUnknown` | – | P07 | P11 | – | P15 | step | – | –
-| `PaymentCanceled` | – | P08 | P08 | – | P14 | step | – | –
-| `PaymentRefunded` | – | – | – | – | P14 | step | – | –
+| `PaymentCanceled` | – | P08 | P08 | P23 | P14 | step | P23 | –
+| `PaymentRefunded` | – | – | P08 | P23 | P14 | step | P23 | –
 | `PaymentRefundFailed` | – | – | – | – | P15 | step | – | –
 | Order deadline | P04 | P07 | – | – | – | – | – | –
 | Review deadline | – ^(b)^ | – ^(b)^ | P16 | P16 | P16 | – | – | –
@@ -133,10 +134,10 @@ They are what makes the grid below short enough to read.
 |===
 
 [horizontal]
-P02 … P22:: The transition of that number, in the table below.
+P02 … P23:: The transition of that number, in the table below.
 –:: No effect. The fact is recorded in the history of the saga; nothing is sent and the state does not change. This covers duplicates, answers that no longer matter, and events that should never occur in that state; the last are also counted and logged as unexpected.
 step:: Handled as in the remembered step (rule 2): as the column CAN, CNF or REF says.
-refused:: The request is refused: the order is not under review.
+refused:: The request is refused, and the answer says why: the order is not under review, or it is, but a step asked earlier is still in progress.
 (a):: The fact matters later: P14 returns a stock known as confirmed, and releases nothing for a stock known as lost.
 (b):: In RES and CHG the order deadline is always due before the review deadline and is handled first; it takes the saga out of these states.
 
@@ -154,11 +155,11 @@ refused:: The request is refused: the order is not under review.
 | CHG
 
 | P03 | RES | `StockReservationRejected`
-| Rejects the order: `OUT_OF_STOCK`.
+| Rejects the order: `OUT_OF_STOCK`. Publishes `OrderRejected`.
 | CMP
 
 | P04 | RES | Order deadline
-| Sends `ReleaseReservation`, in case the reservation is made after all. Rejects the order: `TIMED_OUT`.
+| Sends `ReleaseReservation`, in case the reservation is made after all. Rejects the order: `TIMED_OUT`. Publishes `OrderRejected`.
 | CMP
 
 | P05 | CHG | `PaymentCaptured`
@@ -166,19 +167,19 @@ refused:: The request is refused: the order is not under review.
 | CNF
 
 | P06 | CHG | `PaymentRefused`
-| Sends `ReleaseReservation`. Rejects the order: `PAYMENT_REFUSED`.
+| Sends `ReleaseReservation`. Rejects the order: `PAYMENT_REFUSED`. Publishes `OrderRejected`.
 | CMP
 
 | P07 | CHG | `PaymentOutcomeUnknown`, or the order deadline
 | Sends `CancelPayment`. When the payment service itself reports that nothing is established, the saga does not wait for the deadline.
 | CAN
 
-| P08 | CHG, CAN | `PaymentCanceled`
-| Sends `ReleaseReservation`. Rejects the order: `ADMIN_DECISION` if an administrator decided the rejection, `TIMED_OUT` otherwise. In `CHARGING_PAYMENT` this is the answer to a charge that reached the payment service after the order deadline.
+| P08 | CHG, CAN | `PaymentCanceled`; in CAN also `PaymentRefunded`
+| Undoes the stock (rule 4): as a rule, sends `ReleaseReservation`. Rejects the order: `ADMIN_DECISION` if an administrator decided the rejection, `TIMED_OUT` otherwise. Publishes `OrderRejected`. In `CHARGING_PAYMENT` this is the answer to a charge that reached the payment service after the order deadline.
 | CMP
 
 | P09 | CAN | `PaymentRefused`
-| The charge, executed late, was declined: there is nothing to cancel. Sends `ReleaseReservation`. Rejects the order: `ADMIN_DECISION` if an administrator decided the rejection, `PAYMENT_REFUSED` otherwise.
+| The charge, executed late, was declined: there is nothing to cancel. Undoes the stock (rule 4): as a rule, sends `ReleaseReservation`. Rejects the order: `ADMIN_DECISION` if an administrator decided the rejection, `PAYMENT_REFUSED` otherwise. Publishes `OrderRejected`.
 | CMP
 
 | P10 | CAN | `PaymentCaptured`
@@ -190,7 +191,7 @@ refused:: The request is refused: the order is not under review.
 | CAN, or SUS
 
 | P12 | CNF | `ReservationConfirmed`
-| Confirms the order. Publishes `OrderConfirmed`.
+| Confirms the order and publishes `OrderConfirmed`, provided rule 5 holds: the payment is known as captured and no refund was requested. Otherwise the fact is recorded and nothing else happens.
 | CPL
 
 | P13 | CNF | `ReservationConfirmationFailed`
@@ -198,11 +199,11 @@ refused:: The request is refused: the order is not under review.
 | REF
 
 | P14 | REF | `PaymentRefunded`; or `PaymentCanceled` or `PaymentRefused`, which say that there was nothing to refund
-| Undoes the stock: sends `ReturnStock` if it is known as confirmed, `ReleaseReservation` if it is known as held, nothing if it is lost. Rejects the order with the decided reason. Publishes `OrderRejected`, which says whether a refund was made.
+| Undoes the stock (rule 4). Rejects the order with the decided reason. Publishes `OrderRejected`, which says whether a refund was made.
 | CMP
 
 | P15 | REF | `PaymentRefundFailed`, or `PaymentOutcomeUnknown`
-| Records the failure. Puts the order under review, or leaves it there. Raises an alert. The payment is still captured, and the saga knows it.
+| Records the failure. Puts the order under review and publishes `OrderPutUnderReview`, unless it is already under review. Raises an alert. The money is still held, and the refund stays requested: the order can no longer be confirmed (rule 5).
 | SUS
 
 | P16 | CAN, CNF, REF | Review deadline
@@ -210,15 +211,15 @@ refused:: The request is refused: the order is not under review.
 | SUS
 
 | P17 | SUS | The administrator retries
-| Records the decision, its author and the comment. Sends again the request of the remembered step. Sets a new review deadline.
+| Records the decision, its author and the comment. Sends again the request of the remembered step; `ConfirmReservation` only under rule 5, otherwise the retry is refused. Sets a new review deadline.
 | The step
 
 | P18 | SUS | The administrator confirms
-| Refused unless the payment is known as captured. Records the decision; drops a rejection that was decided. Sends `ConfirmReservation`. Sets a new review deadline.
+| Refused unless the payment is known as captured and no refund was ever requested (rule 5). Records the decision. Sends `ConfirmReservation`. Sets a new review deadline.
 | CNF
 
 | P19 | SUS | The administrator rejects
-| Records the decision and the rejection as decided: `ADMIN_DECISION`. Payment known as captured: sends `RefundPayment`. Otherwise: sends `CancelPayment`. Sets a new review deadline. Nothing is released yet (rule 4).
+| Records the decision and the rejection as decided: `ADMIN_DECISION`. Payment known as captured, or refund already requested: sends `RefundPayment`. Otherwise: sends `CancelPayment`. Sets a new review deadline. Nothing is released yet (rule 4).
 | REF, or CAN
 
 | P20 | CMP | `StockReserved`
@@ -226,12 +227,16 @@ refused:: The request is refused: the order is not under review.
 | CMP
 
 | P21 | CMP | `ReservationConfirmed`
-| The units were taken for an order that is rejected: a confirmation requested before the rejection was executed after it, or a release found the stock already taken. Sends `ReturnStock`, unless the stock is already known as returned. Returning is harmless when repeated.
+| The units were taken for an order that is rejected: a confirmation requested before the rejection was executed after it, or a release found the stock already taken. Sends `ReturnStock`, unless a return was already requested.
 | CMP
 
 | P22 | CMP | `PaymentCaptured`, when the saga does not know the payment as refunded
 | Should never happen: see below. Raises a critical alert. Sends `RefundPayment`.
 | CMP
+
+| P23 | CNF, CPL | `PaymentRefunded`, `PaymentCanceled` or `PaymentRefused`
+| Should never happen: see below. The payment service says that no payment is held for an order that relies on one. Raises a critical alert. In `CONFIRMING_STOCK` the saga is suspended at once and the order put under review, with `OrderPutUnderReview` unless it already is. In `COMPLETED` nothing else changes.
+| SUS, or CPL
 |===
 
 .What an administrator's decision does, according to the remembered step
@@ -240,12 +245,13 @@ refused:: The request is refused: the order is not under review.
 | Remembered step | Retry (P17) | Confirm (P18) | Reject (P19)
 | `CANCELING_PAYMENT`: nobody knows whether the payment was captured | `CancelPayment` again | Refused: the payment is not known as captured | `CancelPayment`; the rejection is decided
 | `CONFIRMING_STOCK`: paid, stock not confirmed | `ConfirmReservation` again | The same as a retry | `RefundPayment`; the rejection is decided
-| `REFUNDING_PAYMENT`: paid, the refund failed | `RefundPayment` again; the reason already decided is kept | `ConfirmReservation`: the order is given another chance, for instance after a restocking | `RefundPayment` again; the reason becomes `ADMIN_DECISION`
+| `REFUNDING_PAYMENT`: paid, a refund was requested | `RefundPayment` again; the reason already decided is kept | Refused: a refund that was requested cannot be recalled (rule 5) | `RefundPayment` again; the reason becomes `ADMIN_DECISION`
 |===
 
 The three requests of an administrator are addressed to the order and apply to its suspended saga.
 An order never has two sagas at work: a cancellation can start only on a confirmed order, whose placement saga is completed.
 An administrator who acts a moment after the missing answer arrived is refused, because the order is no longer under review; nothing is done twice.
+A request is also refused while the saga is at work again after an earlier request: the answer says that a step is in progress, and the saga is suspended again at its new review deadline at the latest.
 
 .Deadlines of the place-order saga
 [%unbreakable, cols="4,11", options="header"]
@@ -254,18 +260,23 @@ An administrator who acts a moment after the missing answer arrived is refused, 
 | Order deadline | Set once, when the saga starts: 2 minutes. It matters in `RESERVING_STOCK` and `CHARGING_PAYMENT` only and is never set again ({FR-ORD-015}).
 | Review deadline | Set when the saga starts: 5 minutes ({FR-ORD-016}). Set again, to the current instant plus the review delay, each time the saga leaves `SUSPENDED` for a working state: after a request of an administrator, or after a late answer that calls for one more step.
 | Both are due at once | This happens when the order service was stopped. The order deadline is handled first, then the review deadline, against the state the first one produced.
+| A deadline that is handled | It is emptied, whatever the cell of the grid says, including when it has no effect. The task looks only for deadlines that are set and passed: none is handled twice.
 | `SUSPENDED`, `COMPLETED`, `COMPENSATED` | No deadline runs.
 |===
 
 A saga can be suspended only from `CANCELING_PAYMENT`, `CONFIRMING_STOCK` or `REFUNDING_PAYMENT`: the order deadline always takes it out of the first two states before the review deadline is due.
 The remembered step is therefore one of these three, and "retry" never means reserving or charging again.
 
-Transition P22 is defensive.
+Transitions P22 and P23 are defensive: neither can occur unless a defect exists somewhere.
 The status machine of a payment makes a capture impossible once its order is rejected: an order is rejected only on a payment that is refused, canceled or refunded, and none of the three can be captured afterwards — not even by a charge request that comes back days later (section "Payment" below).
-If the event arrives all the same, a defect exists somewhere.
-The saga stays `COMPENSATED`, because nothing leaves `REJECTED`; it records the fact, raises a critical alert and asks for the refund.
+If the event arrives all the same, the saga stays `COMPENSATED`, because nothing leaves `REJECTED`; it records the fact, raises a critical alert and asks for the refund.
 `PaymentRefunded` closes the alert.
 `PaymentRefundFailed` leaves it open, and the on-call engineer follows the runbook of document 06-07: the order is listed among the anomalies until the money is returned.
+
+P23 is its mirror.
+Rule 5 makes it impossible for the money of an order to leave while the saga confirms it or after it is confirmed: the saga never confirms once it has asked for a refund, and a cancellation asks for its refund under its own saga identifier, so that answer never reaches the placement saga.
+If the payment service says all the same that the payment is gone, a saga that is still confirming stops and waits for a person, who can only reject the order: a retry or a confirmation is refused by rule 5, and a rejection ends through P08 or P09.
+A completed saga stays completed, and the order is listed among the anomalies.
 
 == Cancel-order saga
 
@@ -276,7 +287,7 @@ What strategy undoes a confirmed order with the same guarantees as placing it?
 
 plantuml::diagrams/saga-cancel-order.puml[format=svg, align=center]
 
-The cancel-order saga follows the same four rules, with fewer states.
+The cancel-order saga follows the same rules, with fewer states.
 It remembers the same things as the place-order saga, except the order deadline and the decided rejection, which it does not need.
 
 .States of the cancel-order saga
@@ -307,12 +318,14 @@ It remembers the same things as the place-order saga, except the order deadline 
 |===
 | # | In | On | The saga does | Next
 | C01 | (start) | The cancellation is accepted | Sets the order to `CANCELING` and the review deadline. Sends `ReturnStock`. | RET
-| C02 | RET | `StockReturned` | Sends `RefundPayment`. | REF
+| C02 | RET | `StockReturned` | Sends `RefundPayment`. When it comes from `SUSPENDED`, sets a new review deadline. | REF
 | C03 | REF | `PaymentRefunded` | Sets the order to `CANCELED`. Publishes `OrderCanceled`. | CPL
-| C04 | REF | `PaymentRefundFailed`, or any other payment event | Records the failure. Puts the order under review, or leaves it there. Raises an alert. | SUS
+| C04 | REF | `PaymentRefundFailed`, or any other payment event | Records the failure. Puts the order under review and publishes `OrderPutUnderReview`, unless it is already under review. Raises an alert. | SUS
 | C05 | RET, REF | Review deadline | Remembers the step. Puts the order under review and publishes `OrderPutUnderReview`, unless it is already under review. Raises an alert. | SUS
 | C06 | SUS | The administrator retries | Records the decision. Sends again the request of the remembered step. Sets a new review deadline. | The step
 |===
+
+The review deadline of a cancellation follows the rules of a placement: set at C01, set again each time the saga leaves `SUSPENDED` for a working state — by C06, or by a late `StockReturned` — and emptied when it is handled.
 
 The stock is returned before the refund is asked, so that a refund in difficulty never keeps units out of sale.
 A retry of the return cannot count the stock twice: the inventory returns the units of a reservation once, and answers a repeated request from what it recorded (section "Reservation and product").

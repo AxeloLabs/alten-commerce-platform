@@ -20,10 +20,10 @@ The inventory is the only place that knows what can really be sold.
 | Postconditions on success | The stock on hand is changed by the quantity given. The movement is recorded with its reason, author and date. The storefront availability follows within seconds.
 | Postconditions in every case | The stock on hand never goes below the quantity reserved for orders in progress, and never below zero.
 | Authorization | {allowed} Administrator. {denied} Visitor and customer.
-| Business rules | {FR-INV-001} {FR-INV-002} {FR-INV-006} {FR-INV-007} {FR-INV-008}
+| Business rules | {FR-INV-001} {FR-INV-002} {FR-INV-006} {FR-INV-007} {FR-INV-008} {FR-INV-009}
 | Quality attributes | {NFR-SEC-006} {NFR-REL-001}
 | Stories | {US-INV-001} {US-INV-003}
-| Acceptance | {BDD-INV-001} {BDD-INV-002} {BDD-INV-003}
+| Acceptance | {BDD-INV-001} {BDD-INV-002} {BDD-INV-003} {BDD-INV-006}
 |===
 
 .Main success scenario
@@ -38,6 +38,8 @@ The inventory is the only place that knows what can really be sold.
 .Exception flows
 2a. The adjustment would bring the stock on hand below the reserved quantity:: The adjustment is refused; the reserved quantity is shown.
 1b. The quantity is zero or the reason is missing:: The adjustment is refused.
+1c. The catalog does not know the product:: The adjustment is refused: stock is never created for a SKU that is not in the catalog. The check is made the first time stock is entered for a product.
+1d. Stock is entered for a product for the first time and the catalog cannot be reached:: The adjustment is refused and can be made again later. Adjustments of products already in stock are not affected.
 
 [[UC-INV-002]]
 === UC-INV-002 — Review stock levels

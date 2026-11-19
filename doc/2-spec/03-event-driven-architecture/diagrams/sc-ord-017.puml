@@ -24,6 +24,8 @@ I ->> O : ReservationConfirmed
 note over O : saga ended, but the fact is kept:\nstock taken for a rejected order
 O ->> I : ReturnStock
 note over I : ReleaseReservation: nothing held,\nthe stock was taken
+I ->> O : ReservationConfirmed
+note right of O : return already requested:\nrecorded, no effect
 note over I : ReturnStock: units back on hand,\nreservation RETURNED
 I ->> O : StockReturned
 note right of O : recorded

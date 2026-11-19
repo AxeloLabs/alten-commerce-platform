@@ -254,7 +254,7 @@ When an order is put under review the customer is told that the store is checkin
 [%unbreakable, cols="6,5,5", options="header"]
 |===
 | Situation | Payment | Stock
-| A refund keeps failing | Captured | Released or lost
+| A refund keeps failing | Captured | Lost, or still reserved until the refund is done
 | The payment outcome cannot be established before the review delay | Unknown | Reserved
 | The payment is captured but the stock is not confirmed before the review delay | Captured | Reserved
 | The refund of a cancellation keeps failing | Captured | Returned
@@ -270,10 +270,10 @@ When an order is put under review the customer is told that the store is checkin
 .Alternative flows
 3a. The administrator decides to reject the order:: The system refunds the payment if it is captured, or cancels it if its outcome is unknown. Once the order holds no payment, the stock is released — or returned, if it was confirmed in the meantime — and the order becomes `REJECTED` with the reason `ADMIN_DECISION`.
 *a. The answer that was missing arrives before the administrator decides:: The system applies it as it would have at first, and the order leaves `UNDER_REVIEW` for the outcome it would have had. A decision taken afterwards is refused: the order is no longer under review.
-3b. The administrator decides to confirm the order:: Allowed only when the payment is captured. The system confirms the reservation and sets the order to `CONFIRMED`.
+3b. The administrator decides to confirm the order:: Allowed only when the payment is captured and no refund of it was requested. The system confirms the reservation and sets the order to `CONFIRMED`.
 
 .Exception flows
-3c. The administrator asks to confirm an order whose payment is not captured:: The decision is refused.
+3c. The administrator asks to confirm an order whose payment is not captured, or whose refund was already requested:: The decision is refused. A refund that was requested cannot be recalled.
 3d. No comment is given:: The decision is refused.
 3e. The administrator asks to confirm or to reject an order that was being canceled:: The decision is refused. The customer's cancellation can only be completed: a retry is the only request accepted.
 4a. The retry, the refund or the confirmation fails again:: The order stays `UNDER_REVIEW`; the new failure is added to its history.

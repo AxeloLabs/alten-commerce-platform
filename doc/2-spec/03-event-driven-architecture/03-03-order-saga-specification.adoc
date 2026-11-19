@@ -1,6 +1,6 @@
 = Order Saga Specification: Steps, Compensations and Every Way It Can Go Wrong
 :doc-id: 03-03
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The orchestrated sagas of the order service, the saga identifier, the deadlines, and one sequence diagram per scenario, failures included.
@@ -60,7 +60,7 @@ Two exceptions remain, and neither is a decision of the saga alone.
 * An administrator decides to reject a paid order under review. The saga then undoes the pivot first, by a refund, and the stock afterwards: a release, or a return if the confirmation went through in the meantime ({SC-ORD-017}).
 
 The states of the saga, what it remembers, and its answer to every event in every state are specified in document 02-03.
-The scenarios below refer to its transitions by their number, P01 to P22 for a placement and C01 to C06 for a cancellation.
+The scenarios below refer to its transitions by their number, P01 to P23 for a placement and C01 to C06 for a cancellation.
 
 == Saga identifier
 
@@ -147,7 +147,7 @@ What strategy tells us, in production, that sagas are healthy without reading a 
 | Sagas suspended, by remembered step | How many orders wait for a person, and for what? Any value above zero raises an alert ({NFR-OBS-004}).
 | Suspended sagas settled by a late answer | How often does a review end by itself? A high share means the review delay is short for the outages we really have.
 | Events recorded with no effect, by state and type | Is something answering what nobody asked? Duplicates are normal; an event that should never occur in its state deserves a look.
-| Captures on rejected orders | Has transition P22 ever fired? Any value above zero raises a critical alert.
+| Captures on rejected orders, refunds on confirmed orders | Has transition P22 or P23 ever fired? Any value above zero raises a critical alert.
 | Compensations sent and completed | Do releases, returns and refunds actually finish?
 | Messages waiting to be published, and the age of the oldest | Is a service saving work it does not announce ({NFR-REL-005})?
 | Messages set aside after repeated failures | Is a consumer unable to handle something? Any value above zero raises an alert.
@@ -422,7 +422,7 @@ plantuml::diagrams/sc-ord-016.puml[format=svg, align=center]
 |===
 | Trigger | An order is under review, paid, its stock not yet confirmed because the inventory is silent. An administrator decides to reject it.
 | Ends | Saga `COMPENSATED`, order `REJECTED` with `ADMIN_DECISION`, payment refunded once, and the units back on sale — even though the inventory confirmed the reservation after the rejection.
-| Guarantee | The rejection is recorded as decided, and carried out only when the refund is done. The confirmation asked earlier is still waiting in the subscription of the inventory and is executed first when the inventory returns: the units leave the stock for an order that is rejected. The saga, although ended, does not drop that fact: it asks for the return of the stock. The inventory returns the units of a reservation once, so a repeated request changes nothing. When the inventory is up and the stock simply held, the release frees it and nothing else happens.
+| Guarantee | The rejection is recorded as decided, and carried out only when the refund is done. The confirmation asked earlier is still waiting in the subscription of the inventory and is executed first when the inventory returns: the units leave the stock for an order that is rejected. The saga, although ended, does not drop that fact: it asks for the return of the stock. The release, read next, finds the stock taken and says so; the return being already requested, nothing more is sent. The inventory returns the units of a reservation once, so a repeated request changes nothing. When the inventory is up and the stock simply held, the release frees it and nothing else happens.
 | Transitions | P19, P14, then P21 from `COMPENSATED`
 | Acceptance | {BDD-ORD-021} {BDD-ORD-037}
 |===

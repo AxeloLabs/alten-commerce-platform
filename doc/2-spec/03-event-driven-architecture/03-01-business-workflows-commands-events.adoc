@@ -1,6 +1,6 @@
 = Business Workflows to Commands and Events: From What Happens to What Is Exchanged
 :doc-id: 03-01
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How each business workflow becomes commands, events and reactions between services, and where orchestration or choreography applies.
@@ -133,7 +133,7 @@ What strategy handles what happens to an order after it is confirmed?
 |===
 | # | Who decides | Command | Handled by | What follows
 | 1 | Administrator | `RetryOrderUnderReview` (REST) | Order | The saga sends again the request of the step it remembers
-| 2 | Administrator | `ConfirmOrderUnderReview` (REST) | Order | The saga sends `ConfirmReservation`, if the payment is known as captured
+| 2 | Administrator | `ConfirmOrderUnderReview` (REST) | Order | The saga sends `ConfirmReservation`, if the payment is known as captured and no refund of it was requested
 | 3 | Administrator | `RejectOrderUnderReview` (REST) | Order | The saga sends `RefundPayment` or `CancelPayment`; once no payment is held, it sends `ReleaseReservation` or `ReturnStock` and rejects the order
 |===
 

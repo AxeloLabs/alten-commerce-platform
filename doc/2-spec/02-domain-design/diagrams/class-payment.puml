@@ -6,7 +6,7 @@ class Payment <<aggregate root>> {
   paymentId : PaymentId
   orderId : OrderId
   placementSagaId : SagaId
-  amount : Money
+  amount : Money [0..1]
   status : PaymentStatus
   providerReference : String
   refusalReason : String [0..1]
