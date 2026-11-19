@@ -1,0 +1,34 @@
+@startuml
+title Two errors, two paths: a refusal of the business and a failing dependency
+actor Customer as C
+participant "Storefront" as SPA
+participant "Web gateway" as GW
+participant "Order service\ninbound adapter" as IN
+participant "Use case\nand domain" as UC
+participant "Cart and\ncatalog" as DEP
+
+== a refusal: the cart changed since it was reviewed ==
+C -> SPA : submits the checkout
+SPA -> GW : POST /api/v1/orders
+GW -> IN : forwards
+IN -> UC : place the order
+UC -> DEP : reads cart and prices
+DEP --> UC : a price changed
+UC --> IN : refusal "checkout outdated",\nwith the differences
+note over IN : a result, not an exception:\nlogged as information, counted
+IN --> SPA : 409, problem details,\ncode ERR-ORD-003, trace identifier
+SPA --> C : "A price changed. Review your cart."\nthe differences, a reference
+
+== a failure: the catalog does not answer ==
+C -> SPA : submits the checkout
+SPA -> GW : POST /api/v1/orders
+GW -> IN : forwards
+IN -> UC : place the order
+UC -> DEP : reads prices
+note over DEP #ECEFF1 : time limit reached,\ncircuit open
+DEP --> UC : failure "catalog unavailable"
+UC --> IN : failure of a dependency;\nnothing was created
+note over IN : logged as a warning, counted;\nan alert watches the rate
+IN --> SPA : 503, problem details,\ncode ERR-PLT-008, when to retry
+SPA --> C : "We cannot take your order right now.\nNothing was charged. Try again in a moment."
+@enduml

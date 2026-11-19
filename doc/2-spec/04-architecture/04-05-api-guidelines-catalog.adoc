@@ -117,7 +117,7 @@ Each carries a stable code from the error catalog of document 05-01, and the ide
   "type": "https://alten-commerce.example/problems/checkout-outdated",
   "title": "The cart changed since it was reviewed",
   "status": 409,
-  "code": "ERR-ORD-nnn",
+  "code": "ERR-ORD-003",
   "detail": "One price changed. Review the cart and submit again.",
   "instance": "/v1/orders",
   "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
@@ -128,7 +128,7 @@ Each carries a stable code from the error catalog of document 05-01, and the ide
 }
 ----
 
-The code is a placeholder: the catalog of codes is defined in document 05-01.
+The catalog of codes is in document 05-01.
 
 == Safe retries and concurrent changes
 

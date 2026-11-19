@@ -1,0 +1,268 @@
+= Error Handling Strategy: From the Rule That Says No to the Message the Customer Reads
+:doc-id: 05-01
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The kinds of error, where each is handled, the form of an error answer, the catalog of error codes, and how errors are shown, logged and tested.
+include::../_shared/attributes.adoc[]
+
+== Four kinds of error
+
+.Strategy question
+****
+What strategy stops "an error occurred" from covering a customer's typing mistake, a business rule and a crashed database alike?
+****
+
+"Error" names four different things.
+They differ in who can do something about them, and everything else follows from that: how they travel, whether they are retried, whether anyone is woken up.
+
+.The four kinds
+[cols="3,5,4,4,4", options="header"]
+|===
+| Kind | Example | Who can fix it | Retried? | Alert?
+| A refusal of the business | The cart changed since it was reviewed; the order can no longer be canceled | The person, by doing something else | No: the answer would be the same | No. It is counted, as a business measure
+| An invalid request | A missing address, a negative quantity | The caller, by correcting the request | No | No, unless the rate suggests a defect of the storefront
+| A failing dependency | The catalog does not answer; the database refuses connections | Nobody at once: it passes, or operations act | Yes, within limits (document 05-02) | Yes, on the rate and on the duration
+| A defect | A state that should not exist; a null where none was expected | An engineer | No: it would fail again | Yes, at the first occurrence
+|===
+
+The first kind is not an error for the system: it is a rule doing its work.
+It is designed, named and tested like any other outcome, and it never appears as an exception or as an error in a log (document 03-06).
+
+The same four kinds exist for messages, with one difference: nobody is waiting on the other end.
+A refusal becomes an event; a failing dependency means the message comes back later; an invalid or impossible message ends in a dead-letter topic.
+
+Owner: {role-arch} {role-swe}
+
+== Where errors are handled
+
+.Strategy question
+****
+What strategy gives each layer one job with errors, so that none is handled twice or swallowed?
+****
+
+.Layer by layer
+[cols="4,11", options="header"]
+|===
+| Layer | What it does with an error
+| Domain | Returns a refusal as a result, with its reason. Throws only when an invariant is broken, which is a defect. Knows nothing of HTTP or of codes.
+| Use case | Passes refusals on. Turns what a port reports — absent, changed since read, dependency unavailable — into a result the adapter can map. Catches nothing it cannot handle ({AR-PLT-023}).
+| Inbound adapter, REST | Validates the form of the request against the contract before any use case runs. Maps each result to a status and an error code. Holds no `try` around the use case: one handler does it for all.
+| Inbound adapter, messages | Applies the acknowledgement rules of document 03-06: acknowledge a refusal, leave a failure for redelivery, let an impossible message go to its dead-letter topic.
+| Outbound adapters | Apply time limits, retries and circuit breakers, then report a typed failure. A provider's own error vocabulary stops here.
+| Shared starter | One handler turns every result and every exception into the same error answer, with the code and the trace identifier. An exception nobody expected becomes the generic unexpected error, and its detail goes to the log, never to the answer.
+| Web gateway | Passes the error answers of services through unchanged. Produces its own for what it decides: no session, anti-forgery check, service unreachable.
+| Storefront | Chooses what to show from the code, never from the text or the status alone. Shows the reference.
+|===
+
+plantuml::diagrams/error-flow.puml[format=svg, align=center]
+
+== The error answer
+
+.Strategy question
+****
+What strategy gives a program something to branch on, a person something to do, and support something to search for, in one answer?
+****
+
+Every refusal and every failure of a REST interface is answered in the standard problem-details format (document 04-05).
+
+.Fields of an error answer
+[cols="3,3,9", options="header"]
+|===
+| Field | Present | Content
+| `type` | Always | A stable address that identifies the kind of problem
+| `title` | Always | A short sentence in English, the same for every occurrence of the code
+| `status` | Always | The HTTP status, repeated
+| `code` | Always | The error code of the catalog below. This is what a client branches on.
+| `detail` | Usually | What is specific to this occurrence, safe to show to the person
+| `instance` | Always | The address that was called
+| `traceId` | Always | The identifier of the trace: the reference a person gives to support ({NFR-USAB-002})
+| `errors` | For an invalid request | One entry per faulty field: its name, what is wrong, the limit that applies. Every faulty field, not the first only.
+| Others | By code | What the person needs to act: the differences of a checkout, the maximum quantity, the number of the pending order
+|===
+
+.What an error answer never contains
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Never | Why
+| A stack trace, a class name, a query, the name of a table or of a host | It helps an attacker and nobody else ({NFR-SEC-008})
+| Whether something exists when the caller may not see it | Another customer's order is "not found", exactly like one that does not exist ({FR-IAM-004})
+| Which of the e-mail address or the password was wrong | {FR-IAM-007}
+| The reason a payment provider gave, word for word | The customer gets a general explanation; the provider's reason is recorded ({FR-PAY-004})
+| A password, a token, a card datum | {NFR-SEC-007}
+|===
+
+== Error codes
+
+.Strategy question
+****
+What strategy lets the storefront, the tests and support talk about the same error with the same name for years?
+****
+
+An error code has the form of every identifier of this specification: `ERR`, the context, a number.
+A code names one situation that a caller can tell apart and act on.
+It never changes meaning and is never reused; a status code may be shared by many codes.
+
+A field that is merely invalid has no code of its own: it is reported under the one code for invalid requests, with the name of the field.
+
+.Platform
+[cols="3,7,2,7", options="header"]
+|===
+| Code | Situation | Status | What the person is told to do
+| [[ERR-PLT-001]]ERR-PLT-001 | The request is malformed, a field is invalid, or a parameter is unknown | 400 | Correct the fields listed
+| [[ERR-PLT-002]]ERR-PLT-002 | No valid session or token | 401 | Sign in again
+| [[ERR-PLT-003]]ERR-PLT-003 | The role does not allow the function. The refusal is recorded. | 403 | Nothing: the function is not available to this account
+| [[ERR-PLT-004]]ERR-PLT-004 | The resource does not exist, or is not visible to the caller | 404 | Check the address or the number
+| [[ERR-PLT-005]]ERR-PLT-005 | The version given is outdated: someone else changed the resource | 412 | Review the current content, returned with the answer, and apply the change again
+| [[ERR-PLT-006]]ERR-PLT-006 | A change that requires a version was sent without one | 428 | Nothing: a defect of the client
+| [[ERR-PLT-007]]ERR-PLT-007 | Too many requests | 429 | Wait for the time given
+| [[ERR-PLT-008]]ERR-PLT-008 | A service this request needs is unavailable. Nothing was changed. | 503 | Try again in a moment
+| [[ERR-PLT-009]]ERR-PLT-009 | Unexpected error | 500 | Try again; if it persists, give the reference to support
+| [[ERR-PLT-010]]ERR-PLT-010 | The anti-forgery check failed | 403 | Reload the page and try again
+|===
+
+.Identity
+[%unbreakable, cols="3,7,2,7", options="header"]
+|===
+| Code | Situation | Status | What the person is told to do
+| [[ERR-IAM-001]]ERR-IAM-001 | The identity provider is unavailable: nobody can sign in or register for now | 503 | Try again later; browsing keeps working
+|===
+
+Wrong credentials, an address already registered and a password that breaks the policy are answered by the pages of the identity provider, under its own rules ({FR-IAM-006}, {FR-IAM-007}).
+
+.Catalog and inventory
+[cols="3,7,2,7", options="header"]
+|===
+| Code | Situation | Status | What the person is told to do
+| [[ERR-CAT-001]]ERR-CAT-001 | A product with this SKU already exists | 409 | Choose another SKU, or open the existing product
+| [[ERR-CAT-002]]ERR-CAT-002 | The draft is incomplete and cannot be published | 409 | Complete the information listed
+| [[ERR-CAT-003]]ERR-CAT-003 | The product is retired: it cannot be changed or published again | 409 | Create a new product with a new SKU
+| [[ERR-INV-001]]ERR-INV-001 | The adjustment would bring the stock on hand below the quantity reserved | 409 | Adjust by less; the reserved quantity is given
+| [[ERR-INV-002]]ERR-INV-002 | The catalog does not know this product: stock cannot be entered for it | 404 | Create the product first, or check the SKU
+|===
+
+.Cart and favorites
+[%unbreakable, cols="3,7,2,7", options="header"]
+|===
+| Code | Situation | Status | What the person is told to do
+| [[ERR-CART-001]]ERR-CART-001 | The product cannot be added: it is out of stock, retired or unknown | 409 | Choose another product
+| [[ERR-CART-002]]ERR-CART-002 | The quantity exceeds the maximum per line or the quantity available | 409 | Choose at most the maximum given
+| [[ERR-CART-003]]ERR-CART-003 | The cart already holds the maximum number of lines | 409 | Remove a line first
+| [[ERR-CART-004]]ERR-CART-004 | The list of favorites is full | 409 | Remove a favorite first
+|===
+
+.Order
+[cols="3,7,2,7", options="header"]
+|===
+| Code | Situation | Status | What the person is told to do
+| [[ERR-ORD-001]]ERR-ORD-001 | The cart is empty, or holds a line that can no longer be bought | 409 | Remove or adjust the lines named
+| [[ERR-ORD-002]]ERR-ORD-002 | The customer already has an order being processed | 409 | Wait for its outcome; its number is given
+| [[ERR-ORD-003]]ERR-ORD-003 | The cart changed since it was reviewed: a price, a product withdrawn, a quantity no longer available | 409 | Review the differences given and submit again
+| [[ERR-ORD-004]]ERR-ORD-004 | The order cannot be canceled in its current status | 409 | Nothing: the status is given
+| [[ERR-ORD-005]]ERR-ORD-005 | The fulfillment step is not allowed in the current status of the order | 409 | Nothing: the status is given
+| [[ERR-ORD-006]]ERR-ORD-006 | No decision can be taken now: the order is not under review, or a step asked earlier is still in progress | 409 | Reload the order; decide again if it is still under review
+| [[ERR-ORD-007]]ERR-ORD-007 | The order cannot be confirmed: its payment is not captured, or its refund was already requested | 409 | Retry the failed step, or reject the order
+| [[ERR-ORD-008]]ERR-ORD-008 | The order was being canceled: it can only be retried | 409 | Retry the failed step
+|===
+
+The payment and notification services have no REST interface and therefore no code: what goes wrong there is told by events and statuses.
+
+.Outcomes that are not errors
+[cols="4,11", options="header"]
+|===
+| Outcome | How the person learns it
+| The order is rejected: out of stock, payment refused, timed out, decided by an administrator | The order itself says so: status `REJECTED` and its reason, shown on the order page in plain language and sent by e-mail, with whether anything was charged and refunded ({FR-ORD-008}, {FR-NOT-004})
+| The order is under review | Status `UNDER_REVIEW`: "we are checking your order and will come back to you"
+| The payment was refused | The reason of the rejection; a general explanation only ({FR-PAY-004})
+|===
+
+An order that is rejected was _accepted_ as a request: its creation answered `201`.
+What happened afterwards is the life of the order, not the failure of a call.
+
+== Errors in messages
+
+.Strategy question
+****
+What strategy handles an error when there is no caller left to answer?
+****
+
+A consumer cannot answer "400".
+Each kind of error has its own treatment, specified in document 03-06 and summarized here.
+
+.Errors while handling a message
+[cols="4,6,5", options="header"]
+|===
+| Kind | Treatment | Seen by
+| A refusal of the business | Saved, announced by an event, message acknowledged | The saga, then the customer through the order
+| A failing dependency | Not acknowledged; redelivered with growing delays | Metrics; an alert if it lasts
+| A version conflict | Run again at once, then redelivered | Nobody, unless frequent
+| A message that cannot be understood | Dead-letter topic after 10 attempts | An alert on every dead letter ({NFR-OBS-004})
+| A type the consumer does not know | Acknowledged and counted | A metric
+| A defect while handling | Same as a failing dependency, then the dead-letter topic | An alert at the first occurrence, and on the dead letter
+|===
+
+There are no error events.
+A service never publishes "something went wrong": it publishes what is true — the payment is refused, the outcome is unknown — and the receiver decides.
+
+When a message is stuck, the order it concerns does not stay stuck with it: the deadlines of its saga hand it to a person ({NFR-REL-003}).
+
+== What a person sees
+
+.Strategy question
+****
+What strategy turns a code into a sentence that helps?
+****
+
+.Rules of an error message on screen
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Rule | Meaning
+| Three parts | What happened, what to do now, and a reference for support ({NFR-USAB-002}).
+| Written for the code | The storefront holds one message per code, in the language of the person. It never shows the text of the answer as is.
+| Honest about money | A message about an order always says whether something was charged.
+| Next to its cause | A field error is shown at the field; a refusal at the action that caused it.
+| Accessible | Announced to assistive technologies; never by color alone ({NFR-USAB-001}).
+| A code it does not know | Shown as the unexpected error, with the reference. A storefront older than a service must not break.
+|===
+
+.Examples
+[cols="3,12", options="header"]
+|===
+| Code | On screen
+| {ERR-ORD-003} | "The price of Mechanical keyboard changed from 89.90 to 94.90. Review your cart and confirm again. Nothing was charged."
+| {ERR-PLT-008} | "We cannot take your order right now. Nothing was charged. Please try again in a moment. Reference: 4bf92f35."
+| {ERR-CART-002} | "You can add up to 3 more of this product."
+| {ERR-PLT-009} | "Something went wrong on our side. Please try again. If it happens again, give this reference to support: 4bf92f35."
+|===
+
+== Logging, measuring and testing errors
+
+.Strategy question
+****
+What strategy keeps the error log for what deserves an engineer's attention?
+****
+
+.Trace left by each kind
+[%unbreakable, cols="4,3,4,5", options="header"]
+|===
+| Kind | Log level | Measured as | Alert
+| A refusal of the business | Information | Refusals by code | None
+| An invalid request | Information | Invalid requests by endpoint | On an abnormal rate
+| A failing dependency | Warning | Failures by dependency | On the rate and the duration (document 05-03)
+| A defect | Error, with the stack trace | Unexpected errors | At the first occurrence
+|===
+
+Every such line carries the code, the trace identifier and, when there is one, the saga and the order identifiers ({NFR-OBS-002}).
+It never carries the body of the request.
+
+.Tests
+[%unbreakable, cols="4,11", options="header"]
+|===
+| What | How
+| Every code | At least one test produces it and checks the status, the code and the fields the person needs (document 07-02)
+| The contract | Each OpenAPI document lists the error answers of each endpoint, with an example per code; conformance tests verify them
+| What must not leak | A test provokes an unexpected error and checks that the answer holds nothing but the generic code and the reference
+| The screen | End-to-end tests of the error paths of the critical journeys read the message shown
+|===
+
+Owner: {role-arch} {role-qa}
