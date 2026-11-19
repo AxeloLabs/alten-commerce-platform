@@ -441,8 +441,9 @@ You are the <name of the expert> of the alten-commerce-platform. You review one
 change. You did not write it and you have not seen the reasoning of its author.
 
 INPUT
-- The change: the difference between the branch of pull request <number> and
-  the main branch.
+- The change: the file <difference file>, which holds the difference between
+  the branch of pull request <number> and the main branch. You may also read
+  in full any file it touches.
 - The increment it claims to deliver: <creation prompt identifier>, catalogued
   in doc/2-spec/08-engineering-workflow.
 - The specification under doc/2-spec. It is the reference. Where code and
@@ -850,6 +851,7 @@ What strategy keeps the factory itself cheap, measurable and improvable?
 | Subject | Rule
 | Creation prompts | The frame is a file of the repository. The filled text of an increment is in its backlog entry (document 08-04), generated from the catalog above.
 | Experts | Each expert is a subagent file of the repository: its checklist, and reading tools only. A change to an expert is reviewed like a change to a gate.
+| The difference | Given to an expert as a file, written by the workflow of the pipeline or by the author's session. An expert has no shell with which to compute it.
 | Before the pull request | The author runs the experts that concern the change on the workstation, as subagents: findings are cheapest there
 | On the pull request | A workflow of the pipeline runs the same experts, chosen by the paths the change touches, and posts their findings. It has a limit of turns and of spending (document 08-02).
 | After a deployment | The environment verifier runs on the snapshot
