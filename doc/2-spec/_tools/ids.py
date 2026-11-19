@@ -67,7 +67,6 @@ RULES = [
     ("TC", "CRE"),
     ("TI", "CRE"),
     ("TE2E", "CRE"),
-    ("CRE", "VER"),
 ]
 
 _T = "|".join(sorted(TYPES, key=len, reverse=True))
