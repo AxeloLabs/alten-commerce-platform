@@ -1,0 +1,39 @@
+@startuml
+title One service: three rings, dependencies pointing inwards
+
+skinparam rectangle {
+  roundCorner 12
+}
+skinparam packageStyle rectangle
+
+rectangle "Adapters in\nREST controllers\nmessage subscribers\nscheduled tasks" as IN #E3F2FD
+rectangle "Adapters out\nunit of work and persistence\nmessage encoding\nclients of services and providers" as OUT #E3F2FD
+
+rectangle "Application" as APP #FFF8E1 {
+  rectangle "Inbound ports\nwhat the service offers" as PIN #FFFFFF
+  rectangle "Use cases" as UC #FFFFFF
+  rectangle "Outbound ports\nwhat the service needs" as POUT #FFFFFF
+}
+
+rectangle "Domain\naggregates, value objects,\ndomain services\nplain Java" as DOM #C8E6C9
+
+rectangle "Configuration\nwiring only" as CFG #ECEFF1
+
+IN --> PIN : calls
+UC -up-|> PIN : implements
+UC --> DOM : loads, asks,\ngets a decision
+UC --> POUT : calls
+OUT -up-|> POUT : implements
+IN ..> DOM : value types,\nfor mapping
+OUT ..> DOM : value types,\nfor mapping
+CFG ..> IN
+CFG ..> APP
+CFG ..> OUT
+
+legend right
+  Solid arrow: call or implementation
+  Dotted arrow: use of types only
+  No arrow leaves the domain.
+  No arrow links the two kinds of adapter.
+endlegend
+@enduml

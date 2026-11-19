@@ -1,0 +1,294 @@
+= Code Architecture and ArchUnit Rules: One Structure for Every Service, Checked at Every Build
+:doc-id: 04-03
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The layout of the repository, the inner structure common to every service, the coding conventions, and the catalog of architecture rules enforced automatically.
+include::../_shared/attributes.adoc[]
+
+== The repository
+
+.Strategy question
+****
+What strategy lets one team change a contract, three services and their documentation in a single reviewed step?
+****
+
+Everything the platform is made of lives in one repository and is built by one Maven build of several modules ({ADR-PLT-023}).
+
+.Layout of the repository
+[source,text]
+----
+alten-commerce-platform/
+├── contracts/               the source of truth of every interface
+│   ├── openapi/             one document per service with a REST interface
+│   ├── asyncapi/            one document per service that sends or receives messages
+│   └── proto/               one schema per topic
+├── platform-starter/        the shared technical library: no business type
+├── services/
+│   ├── catalog-service/
+│   ├── inventory-service/
+│   ├── cart-service/
+│   ├── order-service/
+│   ├── payment-service/
+│   └── notification-service/
+├── web/
+│   ├── storefront/          the Angular application
+│   └── web-gateway/         the edge service; its image carries the storefront files
+├── deploy/
+│   ├── terraform/           cloud resources
+│   └── helm/                Kubernetes packages
+├── doc/                     this specification
+└── pom.xml                  parent build: versions, plugins, quality gates
+----
+
+.Modules of the build
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Module | Rule
+| Parent | Declares every version once, from the platform bills of materials of Spring Boot, Spring Cloud and Spring Cloud GCP, and configures the quality gates for all modules. A module never declares a version.
+| `platform-starter` | Built first. Every service depends on it; it depends on no service.
+| A service | Depends on the starter and on the contracts it implements or consumes. Never on another service.
+| `web-gateway` | Depends on Spring Cloud Gateway. Not on the starter's messaging or persistence parts.
+|===
+
+Services share contracts, never code: a service that calls another generates its client from the other's OpenAPI document, in its own module.
+
+Owner: {role-arch} {role-devops}
+
+== Three rings
+
+.Strategy question
+****
+What strategy keeps business rules where a plain unit test can reach them, whatever the framework does around them?
+****
+
+Every service is built as three rings ({ADR-PLT-002}).
+The domain is at the center and knows nothing of the rest.
+The application ring orchestrates the domain and states, as interfaces called _ports_, what it offers and what it needs.
+Adapters connect those ports to the world.
+
+plantuml::diagrams/hexagon.puml[format=svg, align=center, pdfwidth=62%]
+
+.Packages of a service, here the inventory
+[source,text]
+----
+com.altencommerce.inventory
+├── domain                   aggregates, value objects, domain services
+├── application
+│   ├── port.in              use cases offered: one interface per use case
+│   ├── port.out             needs: unit of work, clock, other services
+│   └── usecase              implementations of the inbound ports
+├── adapter
+│   ├── in.rest              controllers and mapping of requests and responses
+│   ├── in.messaging         subscribers
+│   ├── in.scheduling        scheduled tasks
+│   ├── out.persistence      unit of work, entities, repositories, mappers
+│   ├── out.messaging        encoding of outgoing messages
+│   └── out.client           clients of other services and of providers
+└── config                   wiring of use cases, configuration properties
+----
+
+.What each ring may depend on
+[cols="3,6,5,6", options="header"]
+|===
+| Ring | Contains | May use | Must not use
+| Domain | Aggregates, value objects, domain services, the decisions they return | The Java platform; nullness annotations | Any framework, any other ring, the clock, random identifiers, logging
+| Application | Ports and use cases | The domain; the Java platform | Any framework, any adapter. Use cases are plain classes, declared as beans by the configuration.
+| Adapters | Everything that touches a technology | The ports of the application; domain types, to map them; frameworks and generated contract classes | Another adapter. An inbound adapter never reaches an outbound one except through a use case.
+| Configuration | Wiring | Everything | Business logic
+|===
+
+.The shape of every use case
+[%unbreakable, cols="1,14", options="header"]
+|===
+| # | Step
+| 1 | It receives a request or a message already decoded and validated in form by the inbound adapter.
+| 2 | It loads the aggregate concerned through an outbound port.
+| 3 | It calls one method of the aggregate, giving it the current time and any identifier it needs. The aggregate returns a decision: its new state, the messages to send.
+| 4 | It hands the incoming message identifier, the aggregate and the outgoing messages to the unit of work, which saves all or nothing (document 03-06).
+| 5 | It returns a result. It never opens a transaction, never publishes, never calls a provider inside a transaction.
+|===
+
+A use case holds no business rule.
+If a condition appears in a use case that is not about loading or saving, it belongs to the domain.
+
+== Modules inside a service
+
+.Strategy question
+****
+What strategy stops two concepts living in one service from growing into each other?
+****
+
+Two services hold two concepts each.
+Their top-level packages are modules, each with its own three rings, and Spring Modulith verifies at build time that a module uses another only through its published interface ({ADR-PLT-004}).
+
+.Modules
+[%unbreakable, cols="3,3,9", options="header"]
+|===
+| Service | Modules | Allowed dependency
+| Order | `orders`, `sagas` | `sagas` uses `orders`: a saga decides for an order and both are saved together. `orders` knows nothing of sagas: an order can be read, shipped and delivered without them.
+| Cart | `cart`, `favorites` | None in either direction.
+| The other four | One module | –
+|===
+
+Modules never talk to each other, or to another service, through Spring application events.
+Between services the only asynchronous channel is the outbox; inside a service a module calls the interface of the other.
+
+== The shared starter
+
+.Strategy question
+****
+What strategy avoids writing the same plumbing six times without tying six services together?
+****
+
+The starter is a Spring Boot starter: adding it to a service configures the technical conventions of the platform.
+It contains mechanisms, never meanings.
+
+.Content of the starter
+[cols="4,11", options="header"]
+|===
+| Part | What it provides
+| Messaging | The envelope: mapping between CloudEvents attributes and Pub/Sub; the subscriber skeleton with the acknowledgement rules; the check that envelope type and payload case agree (document 03-04)
+| Outbox and inbox | The tables, the unit of work for PostgreSQL, the relay with its claiming rule, the cleaning tasks, their metrics (document 03-06)
+| Errors | The translation of exceptions into problem details with an error code (document 05-01)
+| Security | The resource-server defaults: token validation, role mapping, deny by default; the relay of the actor's token to outgoing calls ({ADR-PLT-021})
+| Observability | Trace and saga identifiers in logs and spans; the standard metrics; masking of fields marked as secret (document 05-03)
+| Time and identifiers | The clock and the generator of time-ordered identifiers given to use cases
+| Tests | The container setup for PostgreSQL and the Pub/Sub emulator; the architecture rules below, packaged so that every service runs the same set
+|===
+
+What the starter must never contain: an aggregate, a value object of the business, a data transfer object, a class generated from a contract.
+A rule below checks it.
+
+== Conventions
+
+.Strategy question
+****
+What strategy makes code written by six people, or six agents, read as if it had one author?
+****
+
+.Coding conventions
+[cols="3,12", options="header"]
+|===
+| Subject | Convention
+| Language | English everywhere: names, comments, messages of commits, log messages.
+| Style | Google Java Style, applied by the formatter at each build ({NFR-MAINT-005}). Nobody formats by hand, nobody argues about it.
+| Value objects | Java records, validated in their constructor. A value that exists is valid.
+| Closed sets | Sealed interfaces and enumerations; `switch` over them is exhaustive, so that a new case does not compile until it is handled everywhere.
+| Absence | No `null` crosses a public method. Optional results say so in their type; nullness annotations are checked at compilation.
+| Mapping | Explicit, at the edge: one mapper per adapter, generated by MapStruct {v-mapstruct}. A domain object is never serialized, persisted or returned as is.
+| Lombok | Allowed in adapters for entities and builders. Forbidden in the domain and the application.
+| Errors | A business refusal is a result of the domain, not an exception (document 03-06). Exceptions are for what should not happen; they are specific, never generic.
+| Time | Instants in UTC. The current time is given, never read, outside adapters.
+| Money | `Money`, never a bare number, never a floating-point type.
+| Names | A use case is named after what the actor wants: `PlaceOrder`, `AdjustStock`. A port says what is needed, not how: `OrderStore`, not `OrderJpaRepository`. An adapter names its technology.
+| Logging | In adapters and use cases, structured, with the identifiers of the trace, the saga and the order. Never a token, a password, an e-mail address or a payment datum ({NFR-SEC-007}).
+| Tests | Next to the code they test, named after the behavior. A domain test uses nothing but the domain.
+|===
+
+== Architecture rules
+
+.Strategy question
+****
+What strategy keeps the structure true in a year, when nobody remembers why it was drawn that way?
+****
+
+A structure that is only documented erodes.
+Each rule below is an automated test written with ArchUnit {v-archunit}, named after its identifier, run by every service at every build.
+One violation fails the build ({NFR-MAINT-002}).
+There is no list of tolerated violations: the code is new, and it starts clean.
+
+.Rings and dependencies
+[cols="3,9,6", options="header"]
+|===
+| ID | Rule | Reason
+| [[AR-PLT-001]]AR-PLT-001 | Classes of `domain` depend only on `domain` and on the Java platform. | The domain is testable alone and survives any change of framework.
+| [[AR-PLT-002]]AR-PLT-002 | Classes of `application` depend only on `application`, `domain` and the Java platform. | Use cases are plain code; the technology is behind ports.
+| [[AR-PLT-003]]AR-PLT-003 | No class of `domain` or `application` depends on `adapter` or `config`. | Dependencies point inwards.
+| [[AR-PLT-004]]AR-PLT-004 | No class of `adapter.in` depends on `adapter.out`, nor the reverse. | Adapters meet only through a use case.
+| [[AR-PLT-005]]AR-PLT-005 | Packages are free of cycles. | A cycle is two things that can no longer change apart.
+| [[AR-PLT-006]]AR-PLT-006 | No class of a service depends on a class of another service. | Services share contracts, not code.
+| [[AR-PLT-007]]AR-PLT-007 | The starter depends on no service and contains no class of a business package. | The shared library holds mechanisms only.
+|===
+
+.Frameworks kept at the edge
+[cols="3,9,6", options="header"]
+|===
+| ID | Rule | Reason
+| [[AR-PLT-008]]AR-PLT-008 | No type of Spring, Jakarta Persistence, Jackson, Protocol Buffers, CloudEvents or the Google Cloud libraries is used in `domain` or `application`. | {NFR-MAINT-001}: tests without a framework.
+| [[AR-PLT-009]]AR-PLT-009 | Classes generated from contracts are used in `adapter` only. | A change of contract never reaches the domain unnoticed.
+| [[AR-PLT-010]]AR-PLT-010 | Persistence entities live in `adapter.out.persistence` and are used nowhere else. | The table model serves the adapter, not the domain (document 02-02).
+| [[AR-PLT-011]]AR-PLT-011 | Controllers live in `adapter.in.rest`, subscribers in `adapter.in.messaging`, scheduled tasks in `adapter.in.scheduling`. | One place per kind of entry point.
+| [[AR-PLT-012]]AR-PLT-012 | Transactions are declared in `adapter.out.persistence` only. | Atomicity belongs to the unit of work; a use case cannot get it wrong.
+| [[AR-PLT-013]]AR-PLT-013 | The Pub/Sub publisher is used by the outbox relay only. | Nothing is published except what was saved ({NFR-REL-001}).
+| [[AR-PLT-014]]AR-PLT-014 | Spring application events and the event registry of Spring Modulith are not used. | One asynchronous channel: the outbox ({ADR-PLT-007}).
+| [[AR-PLT-015]]AR-PLT-015 | No field injection: dependencies are constructor parameters. | Objects are complete when built and testable without a container.
+|===
+
+.Ports and use cases
+[cols="3,9,6", options="header"]
+|===
+| ID | Rule | Reason
+| [[AR-PLT-016]]AR-PLT-016 | Types of `application.port` are interfaces. | A port is a promise, not an implementation.
+| [[AR-PLT-017]]AR-PLT-017 | Inbound ports are implemented in `application.usecase` only; outbound ports in `adapter.out` only. | Each side of the hexagon implements its own ports.
+| [[AR-PLT-018]]AR-PLT-018 | Inbound adapters call inbound ports only: never an outbound port, a repository or an aggregate method. | Every entry goes through a use case.
+| [[AR-PLT-019]]AR-PLT-019 | In the order service, `orders` does not depend on `sagas`; in the cart service, `cart` and `favorites` do not depend on each other. | The module boundaries of this document, also verified by Spring Modulith.
+|===
+
+.Purity of the domain
+[cols="3,9,6", options="header"]
+|===
+| ID | Rule | Reason
+| [[AR-PLT-020]]AR-PLT-020 | No class of `domain` or `application` reads the system clock or generates a random identifier. | Deadlines and expiries are testable; a test controls time.
+| [[AR-PLT-021]]AR-PLT-021 | No class of `domain` has a field of a floating-point type. | Amounts and quantities are exact.
+| [[AR-PLT-022]]AR-PLT-022 | No class of `domain` holds a logger or writes to a standard stream. | The domain returns decisions; what is logged is decided outside it.
+| [[AR-PLT-023]]AR-PLT-023 | No class throws a generic exception, and no class of `domain` or `application` catches one. | A failure has a name; an unexpected failure is not swallowed.
+| [[AR-PLT-024]]AR-PLT-024 | The legacy date types of the Java platform are not used. | Instants and durations only.
+|===
+
+.Tests
+[cols="3,9,6", options="header"]
+|===
+| ID | Rule | Reason
+| [[AR-PLT-025]]AR-PLT-025 | Tests of `domain` classes use no Spring test support, no container and no mocking library. | A domain test needs the domain and nothing else ({NFR-MAINT-001}).
+| [[AR-PLT-026]]AR-PLT-026 | Every aggregate and every domain service has a test class. | No part of the domain is left untested by omission; coverage is measured separately.
+|===
+
+.Rules that other tools enforce
+[cols="5,4,7", options="header"]
+|===
+| Rule | Tool | Why not ArchUnit
+| No Lombok in `domain` and `application` | Checkstyle {v-checkstyle}, import control | Lombok annotations disappear at compilation; ArchUnit reads compiled classes.
+| One code style | Spotless {v-spotless} with google-java-format {v-google-java-format} | A matter of source text.
+| No `null` across public methods | NullAway {v-nullaway} with Error Prone {v-error-prone} | A matter of data flow, checked by the compiler.
+| Domain covered at 100 % of lines and branches | JaCoCo {v-jacoco} | A measure, not a structure.
+| Domain tests detect regressions | PIT {v-pitest}, mutation testing | Coverage says a line ran, not that a test would notice its change.
+| Outbox, relay and locking are tested on PostgreSQL, never on H2 | Test categories of document 07-01 | Depends on the test setup ({ADR-PLT-015}).
+| Contracts stay compatible | buf {v-buf}, oasdiff {v-oasdiff} | Applies to contracts, not to classes.
+|===
+
+A rule is changed the way a contract is: by a pull request that changes this document and the rule together.
+A rule is never switched off to let a change through.
+
+Owner: {role-arch} {role-qa}
+
+== Front end and edge
+
+.Strategy question
+****
+What strategy gives the two parts that are not services a structure of their own?
+****
+
+.Structure of the storefront
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Organization | One folder per feature: catalog, cart, checkout, orders, account, administration. A feature does not import from another feature; what is shared sits in a common folder.
+| Interfaces | The client of each service is generated from its OpenAPI document. No address or payload is written by hand.
+| Identity | The application holds no token ({ADR-PLT-018}). It asks the web gateway who is signed in and with which roles, and shows or hides screens accordingly; the server decides in every case.
+| State | Local to a feature. The order being placed is read from the server, never kept as the truth in the browser.
+| Boundaries | Checked by the lint rules of the build, as architecture rules are for services.
+|===
+
+The web gateway has no domain.
+It consists of routes, security configuration and session configuration; the rules above that concern rings do not apply to it, and the rules about frameworks, injection and generic exceptions do.
