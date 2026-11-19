@@ -1,0 +1,48 @@
+@startnwdiag
+nwdiag {
+  internet [shape = cloud, description = "Internet"];
+  internet -- lb;
+
+  network public_addresses {
+    address = "public"
+    color = "#FFCDD2"
+    lb [address = "203.0.113.20", description = "Load balancer\nCloud Armor"];
+    natgw [address = "203.0.113.10", description = "Cloud NAT\noutgoing only"];
+  }
+  network pod_range {
+    address = "10.20.0.0/17"
+    color = "#E3F2FD"
+    lb;
+    natgw;
+    webgw [address = "10.20.x.x", description = "web gateway\n3 namespaces"];
+    svc [address = "10.20.x.x", description = "six services\n3 namespaces"];
+    idp [address = "10.20.x.x", description = "identity\nprovider"];
+  }
+  network node_range {
+    address = "10.10.0.0/24"
+    color = "#FFF8E1"
+    svc;
+    workers [address = "10.10.0.x", description = "Autopilot\nnodes"];
+  }
+  network service_range {
+    address = "10.30.0.0/22"
+    color = "#F4F7F9"
+    webgw;
+    svc;
+    dns [address = "10.30.0.10", description = "cluster DNS"];
+  }
+  network private_services {
+    address = "10.40.0.0/24"
+    color = "#C8E6C9"
+    svc;
+    idp;
+    sql [address = "10.40.0.3", shape = database, description = "Cloud SQL\nPostgreSQL"];
+  }
+  network google_apis {
+    address = "199.36.153.8/30"
+    color = "#ECEFF1"
+    svc;
+    apis [description = "Pub/Sub\nSecret Manager\ntelemetry"];
+  }
+}
+@endnwdiag

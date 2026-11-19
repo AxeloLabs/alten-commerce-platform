@@ -1,0 +1,265 @@
+= GCP and GKE Architecture: The Project, the Network and Its Addresses, the Cluster
+:doc-id: 06-02
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The Google Cloud resources of the platform, the network with its address plan, the paths of traffic, the cluster and the managed services, and how the layout can grow.
+include::../_shared/attributes.adoc[]
+
+== The project at a glance
+
+.Strategy question
+****
+What strategy keeps the cloud side of the platform small enough to draw on one page?
+****
+
+Everything runs in one Google Cloud project and one region ({ADR-PLT-026}).
+The platform uses managed services wherever one exists, so that the only thing the team operates is its own software.
+
+.Resources of the project
+[cols="4,4,8", options="header"]
+|===
+| Resource | Service | Role
+| Cluster | GKE Autopilot | Runs the web gateway, the six services and the identity provider, in three namespaces
+| Entry point | Global external Application Load Balancer, declared through the Gateway API | One public address; TLS; routing by host name ({ADR-PLT-019})
+| Firewall at the edge | Cloud Armor | Rules against web attacks; rate limits (document 05-04)
+| Certificates | Certificate Manager | Issued and renewed automatically for the three host names
+| Names | Cloud DNS | The public zone of the store
+| Databases | Cloud SQL for PostgreSQL {v-postgresql} | One instance, highly available, private address ({ADR-PLT-012})
+| Messages | Pub/Sub | Topics, subscriptions, schemas (document 03-05)
+| Documents | Firestore | Only where a service is configured for it: the contract tests of the catalog and the cart ({ADR-PLT-013})
+| Secrets | Secret Manager | Document 05-04
+| Images | Artifact Registry | One repository; images signed and scanned
+| Outgoing traffic | Cloud NAT | One known address for calls to providers
+| Observability | Cloud Logging, Cloud Trace, Managed Service for Prometheus | Document 05-03
+| Delivery | Cloud Deploy | Promotion between environments (document 06-05)
+|===
+
+.Fixed choices
+[%unbreakable, cols="4,4,8", options="header"]
+|===
+| Choice | Value | Reason
+| Region | `europe-west1` | Three zones, every service above available, a low price tier. A configuration value: any region with three zones suits.
+| Zones | Three | The cluster and the database spread over them ({NFR-AVAIL-002})
+| Creation | Terraform only | Nothing is created by hand or by a service (document 06-04)
+|===
+
+Owner: {role-cloud} {role-platform}
+
+== The network and its addresses
+
+.Strategy question
+****
+What strategy gives every component an address that says where it is and who may reach it?
+****
+
+One private network holds everything.
+No node and no pod has a public address; two public addresses exist in all, one to come in and one to go out.
+
+.Network of the platform: ranges and addresses
+plantuml::diagrams/network.puml[format=svg, align=center, pdfwidth=78%]
+
+.Address plan
+[cols="4,3,8", options="header"]
+|===
+| Range | Addresses | Use
+| `10.10.0.0/24` | 256 | Nodes of the cluster: the primary range of the subnet
+| `10.20.0.0/17` | 32,768 | Pods, of the three namespaces together: a secondary range of the subnet
+| `10.30.0.0/22` | 1,024 | Kubernetes services: a secondary range of the subnet
+| `10.40.0.0/24` | 256 | Managed services reached privately: the database instance
+| `10.50.0.0/16` to `10.90.0.0/16` | – | Reserved for the company layout of document 06-01: one block per future environment or network, so that ranges never overlap
+| `199.36.153.8/30` | 4 | Google APIs through private access. Fixed by Google.
+| `35.191.0.0/16`, `130.211.0.0/22` | – | The load balancer and its health checks, as seen by the pods. Fixed by Google.
+|===
+
+.Addresses that matter
+[%unbreakable, cols="4,4,7", options="header"]
+|===
+| Address | Kind | What it is
+| `203.0.113.20` | Public, reserved, global | The store: the three host names resolve to it
+| `203.0.113.10` | Public, reserved, regional | The address our calls to providers come from: what a provider would put on its allow list
+| `10.40.0.3` | Private | The database instance
+| `10.30.0.10` | Private | The name service of the cluster
+| A pod | Private, from the pod range | Changes at every restart. Nothing refers to a pod by address: services are reached by name.
+|===
+
+The two public addresses above are examples from the range reserved for documentation; the real ones are reserved by Terraform and published in its outputs.
+Private ranges are final.
+
+.Names
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Name | Resolves to
+| The host name of the store, and those of `integration` and `test` | The public address. The load balancer routes on the host name to the namespace of that environment.
+| `<service>.<namespace>.svc.cluster.local` | The service of that name in that environment: how the web gateway reaches a service, and a service another. A name never crosses a namespace.
+| The Google APIs | The private-access range: calls to Pub/Sub, the secret manager and telemetry never leave Google's network
+|===
+
+.Why pods of three environments share one range
+****
+Namespaces are not networks: the pods of `test` and `prod` take their addresses from the same range.
+What separates them is the network policy of each namespace, which denies everything by default and then allows named neighbors of the same namespace (document 05-04).
+A range per environment belongs to the company layout, where each environment has its own cluster.
+****
+
+== The three paths of traffic
+
+.Strategy question
+****
+What strategy makes it obvious which traffic may come in, which may go out, and which never leaves?
+****
+
+plantuml::diagrams/request-path.puml[format=svg, align=center]
+
+.Paths
+[cols="3,8,6", options="header"]
+|===
+| Path | Route | Controls
+| Incoming | Browser, Google's front end at the public address, then straight to a pod of the web gateway: the load balancer knows the pods themselves, not the nodes | TLS ends at the front end; Cloud Armor filters; only the web gateway and the sign-in pages of the identity provider are behind the load balancer
+| Private | A pod to the database on its private address; a pod to the Google APIs through private access | No public address involved. Each call is authenticated by the identity of the workload.
+| Outgoing | A pod to a provider, through Cloud NAT | Outgoing only: nothing can open a connection inwards through it. Network policies allow it for the payment and notification services only.
+|===
+
+.Firewall rules of the network
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Rule | Content
+| Default | Incoming traffic is denied.
+| From the load balancer | Allowed from Google's two ranges to the pods of the web gateway and of the identity provider, on their serving ports. Created with the Gateway.
+| Between pods | Decided by network policies, per namespace.
+| Administration access to nodes | None. Nodes are managed by Autopilot; nobody connects to them.
+|===
+
+== The cluster
+
+.Strategy question
+****
+What strategy gives a small team a production-grade cluster without a platform team to run it?
+****
+
+GKE Autopilot is imposed by the brief.
+Google manages the nodes, their upgrades and their scaling; the team declares workloads and pays for what they request.
+
+.Settings of the cluster
+[cols="4,4,8", options="header"]
+|===
+| Setting | Value | Reason
+| Mode | Autopilot | Imposed. No node pool to size or patch.
+| Location | Regional, three zones | The control plane and the workloads survive the loss of a zone
+| Version | Release channel {v-gke-channel}, Kubernetes {v-kubernetes} at the time of writing | Upgrades are automatic, within a maintenance window outside business hours
+| Nodes | Private | No node has a public address
+| Control plane | Reached by the pipeline and by operators through its authenticated endpoint | No administration from an arbitrary address
+| Network policies | Enforced | The separation of namespaces depends on it
+| Identity of workloads | Workload Identity Federation for GKE | No key files (document 05-04)
+| Gateway API | Enabled, with the class of the global external load balancer | The entry point is declared like any other Kubernetes object
+| Secret Manager integration | Enabled | Secrets mounted as files
+| Managed Prometheus | Enabled | Metrics collected without anything to run
+| Admission of images | Only images signed by the pipeline, from our registry | Document 06-05
+|===
+
+.What Autopilot imposes, and what it changes for us
+[cols="5,10", options="header"]
+|===
+| Constraint | Consequence
+| Every container states the processor and memory it requests | Requests are what is billed and what is guaranteed. They are sized in document 06-03 and watched in document 06-06.
+| No privileged container, no access to the node | Tools that inject faults or inspect the kernel cannot be installed (document 05-02). Our own workloads need neither.
+| Nodes appear when pods need them | The first pod of an environment scaled to nothing starts in tens of seconds, not instantly. Acceptable for `test` and `integration`; production never scales to nothing.
+| Pods can be moved for maintenance | Every service tolerates the loss of a replica: two replicas, a disruption budget, a clean shutdown (document 05-02).
+|===
+
+.Namespaces
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Namespace | Content
+| `test`, `integration`, `prod` | The web gateway, the six services and the identity provider of that environment; its network policies, quotas and service accounts
+| `edge` | The Gateway: the one entry point, with a route per environment
+| `observability` | The collector of traces; Grafana
+|===
+
+== Managed services
+
+.Strategy question
+****
+What strategy sets up each managed service so that it is private, recoverable and no larger than needed?
+****
+
+.Cloud SQL
+[cols="4,11", options="header"]
+|===
+| Subject | Choice
+| Engine | PostgreSQL {v-postgresql}
+| Availability | A primary and a standby in two zones, with automatic failover (document 05-02)
+| Address | Private only, in the range reserved for managed services
+| Access | Through the Cloud SQL connector, with the Google identity of each service; a database account per service and per environment, with a limit on its connections (document 04-04)
+| Databases | One per service and per environment, plus those of the three identity providers and of the three web gateways
+| Backups | Daily, and recovery to a point in time over the last 7 days ({NFR-AVAIL-004})
+| Size | Small at first: two processors, eight gigabytes of memory, storage that grows by itself. Reviewed after the load tests.
+| Maintenance | A window outside business hours
+|===
+
+.Other services
+[cols="4,11", options="header"]
+|===
+| Service | Setup
+| Pub/Sub | Per environment: 5 topics with their schema, 7 subscriptions, 7 dead-letter topics with their inspection subscriptions (document 03-05). Storage in the region.
+| Secret Manager | One secret per need and per environment; versions; access per identity
+| Artifact Registry | One repository in the region; tags cannot be moved once pushed; images scanned on arrival
+| Certificate Manager | One certificate for the three host names, validated through the DNS zone
+| Cloud Armor | One policy on the entry point: managed rules, rate limits, a stricter limit on sign-in and checkout
+| Cloud NAT | One reserved address; used by the payment and notification services only
+| Firestore | One database in native mode, used by the contract tests of `test`; none in production as long as PostgreSQL is the store
+|===
+
+== Rights
+
+.Strategy question
+****
+What strategy grants each identity exactly what it uses, and nothing broader?
+****
+
+.Rights of a service identity
+[cols="4,6,5", options="header"]
+|===
+| Need | Right | Granted on
+| Publish its messages | Pub/Sub publisher | Each topic it publishes to
+| Read its messages | Pub/Sub subscriber | Each of its subscriptions
+| Connect to the database | Cloud SQL client and instance user | The project, restricted by a condition to the instance; the database account then limits it to its own database
+| Read its secrets | Secret accessor | Each of its secrets
+| Send traces and metrics | Trace agent, metric writer | The project
+|===
+
+Three rights exist only at the level of the project: connecting to the database instance, sending traces, sending metrics. None of them gives access to any data.
+Logs need no right: they are written to standard output and collected by the cluster.
+
+.Other identities
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Identity | Rights
+| The build pipeline | Push images to the registry; create releases in Cloud Deploy. Authenticated from GitHub without a stored key (document 06-05).
+| The delivery pipeline | Deploy to the cluster; apply migrations with an account that may change schemas
+| Terraform | Create and change the resources of this document, from the pipeline only
+| Engineers | Read logs, metrics and traces of every environment; nothing else in production
+| Emergency access | Granted for a limited time, on request, and recorded
+|===
+
+== How the layout grows
+
+.Strategy question
+****
+What strategy names today the limits of this layout and the step that removes each one?
+****
+
+[cols="5,5,5", options="header"]
+|===
+| Limit of this release | Step that removes it | When it becomes worth it
+| Production shares a database instance with tests | A second instance for `test` and `integration` | Before real customers, or the first time a load test disturbs production
+| One cluster for three environments | A cluster per environment | Before real payments
+| One region | A second region for production, the database replicated, the entry point already global | When an outage of a region costs more than a second region
+| Traffic between pods is not encrypted | Transparent encryption between nodes, or a service mesh | When a rule or an audit requires it
+| Encryption keys are managed by Google | Keys managed by us | When a rule or an audit requires it
+| Engineers reach the control plane from anywhere, authenticated | Access from a private network only | With the company layout
+|===
+
+Each step is a change of the infrastructure code and a migration, not a redesign: names, identities and the per-environment module already allow it (document 06-01).
+
+Owner: {role-cloud} {role-net}

@@ -1,0 +1,23 @@
+@startuml
+title The three paths of traffic
+
+skinparam componentStyle rectangle
+left to right direction
+
+actor "Browser" as B
+component "Google front end\npublic address 203.0.113.20\nTLS, Cloud Armor" as GFE #ECEFF1
+component "Web gateway pod\n10.20.x.x" as GW #E3F2FD
+component "Service pod\n10.20.x.x" as S #E3F2FD
+database "Cloud SQL\n10.40.0.3" as SQL #C8E6C9
+component "Google APIs\n199.36.153.8/30" as API #ECEFF1
+component "Cloud NAT\n203.0.113.10" as NAT #FFCDD2
+component "Payment and e-mail\nproviders" as P
+
+B --> GFE : 1. incoming\nHTTPS
+GFE --> GW : straight to the pod
+GW --> S : inside the cluster
+S --> SQL : 2. private\nnever leaves the network
+S --> API : 2. private access\nPub/Sub, secrets, telemetry
+S --> NAT : 3. outgoing
+NAT --> P : HTTPS, from one\nknown address
+@enduml
