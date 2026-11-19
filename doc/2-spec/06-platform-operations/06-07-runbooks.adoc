@@ -1,6 +1,6 @@
 = Runbooks: What to Do When an Alert Fires, Step by Step
 :doc-id: 06-07
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How an incident is handled, one runbook per alert of the platform, the operations jobs that replace manual commands, routine procedures, the first setup of a project, and the review that follows an incident.
@@ -14,6 +14,7 @@ What strategy lets someone woken at night do the right thing without having desi
 ****
 
 Every alert of document 05-03 names a runbook of this document.
+Three runbooks have no alert of their own and start from the judgment of a person: R16, R18 and R19.
 A runbook does not explain the architecture; it says what to look at and what to do, in order, and when to stop and call someone.
 
 .The same six steps, whatever the incident
@@ -46,7 +47,8 @@ What strategy repairs production without ever typing a command against it?
 ****
 
 Document 06-06 forbids changing production by hand.
-Repairs that need more than a button of the administration are therefore _operations jobs_: small programs kept in the repository, tested like the rest, and run by the pipeline with their parameters, after an approval for production.
+Repairs that need more than a button of the administration are therefore _operations jobs_: small programs kept in the repository and tested like the rest.
+Each is started as a manual run of the pipeline, bound to the environment it targets — hence, for production, to an approval — and executed in the cluster under the operations identity of that environment, which can do what the jobs need and nothing else (document 06-02).
 Each run is recorded: who asked, with what parameters, what it did.
 
 .Operations jobs
@@ -54,10 +56,17 @@ Each run is recorded: who asked, with what parameters, what it did.
 |===
 | Job | Does | Used by
 | Wake or sleep an environment | Sets the replicas of every workload of `test` or `integration` to their normal value, or to nothing | Pipelines; the evening schedule; level 1 of the budget procedure
-| Replay dead letters | Publishes the messages of one dead-letter subscription again to their original topic, with their envelope, then acknowledges them | R03
+| Replay dead letters | Publishes the messages of one dead-letter subscription again to their original topic, with their envelope, then acknowledges them | R02
 | Release a parked message | Clears the parked mark of one outbox row, after its cause is fixed; or discards it, with a reason | R04
-| Send an e-mail again | Sends once more an e-mail recorded as not sent | R08
-| Replay a consumer from a point in time | Moves one subscription back to an instant, so that a repaired consumer handles again what it mishandled | R03, after a defect that acknowledged messages wrongly
+| Send an e-mail again | Sends once more an e-mail recorded as not sent | R07
+| Replay a consumer from a point in time | Moves one subscription back to an instant, so that a repaired consumer handles again what it mishandled | R02, after a defect that acknowledged messages wrongly
+| Restart a workload | Replaces the pods of one workload, one at a time | R11, R18
+| Quarantine a workload | Scales one workload to nothing, and back | R19
+| End sessions | Ends the sessions of named accounts at the identity provider and requires a new password at their next sign-in | R17
+| Create an administrator | Creates an account with the role `ADMIN` at the identity provider | First setup
+| Reconcile after a restore | Lists the payments and reservations whose order is unknown to the order service or is in an earlier state, and the reverse | R14
+| Close and reopen the store | Closes the entry, waits until no order is in progress, scales production to nothing; and the reverse | Level 2 of the budget procedure
+| Restore drill | Clones the database instance at a past instant, checks the clone, deletes it | Routine procedures
 | Load synthetic data | Fills an empty `test` or `integration` | After a rebuild
 |===
 
@@ -138,7 +147,7 @@ What strategy restores service fast when the cause is not yet known?
 
 | R14 | The database failed over, or must be restored
 | The instance: is the standby serving? Is data damaged?
-| A failover needs nothing: services resume within a minute. Damaged data — a faulty release wrote wrong rows — is a restore to a point in time: into a new instance, checked, then switched, by a procedure that the owner approves; at most 5 minutes of data are lost ({NFR-AVAIL-004}). Messages handled since that instant are replayed from the topics.
+| A failover needs nothing: services resume within a minute. Damaged data — a faulty release wrote wrong rows in one database — is repaired without touching the others. The instance is cloned as it was just before the damage, into a temporary instance that only the procedure can reach. The damaged database alone is copied from the clone into the live instance, during a short stop of its service. The clone is deleted. At most 5 minutes of that service's data are lost ({NFR-AVAIL-004}). The service is then behind its neighbors: it publishes again what its outbox held, the others answer from their status (document 03-06), and the reconciliation job lists what an administrator must still settle. The owner starts the procedure.
 
 | R15 | The identity provider is down
 | Its pods; its database.
@@ -146,7 +155,7 @@ What strategy restores service fast when the cause is not yet known?
 
 | R16 | The region is lost
 | The provider's status. Nothing of ours answers.
-| Wait if the outage is announced as short. Otherwise rebuild in another region: apply the infrastructure code with the other region, restore the database from its backups — kept outside the region for this purpose — deploy the last release, point the name of the store to the new address. Hours, not minutes: an accepted risk (document 05-02).
+| Wait if the outage is announced as short. Otherwise rebuild in another region: apply the infrastructure code with the other region, restore the database from its backups, deploy the last release, point the name of the store to the new address. Backups, images and the states of the infrastructure are kept in locations that span regions for this purpose. What was written since the last backup — up to a day — is lost, and messages in flight with it: the 5 minutes of {NFR-AVAIL-004} cover the loss of the instance, not of the region. Hours, not minutes: an accepted risk (document 05-02).
 |===
 
 == Runbooks for security and money
@@ -173,15 +182,32 @@ What strategy limits the damage of an intrusion or of an overspend in the first 
 
 | R20 | A budget alert
 | The breakdown of spending by environment and by service; what changed since yesterday.
-| Follow the four levels of document 06-06. Levels 2 to 4 are for the owner. Find the cause before waking anything again.
+| Proof of concept: destroy it now, without waiting for its deadline. Full profile: follow the four levels of document 06-06; levels 2 to 4 are for the owner. Find the cause before waking anything again.
+
+| R21 | Unexpected errors, or an abnormal rate of invalid requests
+| The traces of the errors: which release, which endpoint, which input.
+| An unexpected error is a defect: open it with its trace, and return to the previous release if customers are affected. Invalid requests coming from our own storefront are a defect of the storefront; coming from elsewhere, go to R17.
+
+| R22 | Drift: the nightly plan is not empty, or the inventory lists a resource the code did not create
+| What differs; who did it, in the audit log.
+| If the change was right, make it in the code. In every case let the pipeline bring reality back to the code. A resource nobody declared is removed once its author is found.
 |===
 
 .Commands reserved to the owner, for levels 2 to 4
 [source,shell]
 ----
-# Level 2 — close the store: scale production to nothing.
-#   Lost: nothing. Kept: data, messages, configuration. Untouched: the database, the two other environments.
-#   Run as the operations job "sleep" on prod, from the pipeline, with the owner's approval.
+# Proof of concept — destroy everything now, without waiting for the deadline.
+#   Run the pipeline job "destroy the proof of concept".
+#   Lost: the data of the demonstration. Kept: the repository, the project, the bucket of the states, the budget.
+#   If the pipeline itself cannot run, the last resort removes the project and everything in it:
+gcloud projects delete <project>
+#   Lost: everything, the states and the budget included; the project can be restored for 30 days.
+
+# Level 2 — close the store.
+#   Run the operations job "close the store" on prod, with the owner's approval:
+#   it closes the entry, waits until no order is in progress, then scales production to nothing.
+#   Lost: nothing if the store reopens within 7 days. Beyond, the bus drops the messages still waiting.
+#   Kept: data and configuration. Untouched: the database, the two other environments.
 
 # Level 3 — stop the database instance.
 #   Lost: nothing. Kept: all data and backups. Billed: storage only. Every environment stops working.
@@ -207,9 +233,10 @@ What strategy keeps rare procedures from being improvised the day they are neede
 | Procedure | When | How
 | Wake and sleep an environment | Every evening, and around test runs | The operations job. Production only by the owner.
 | Rotate a secret | On a schedule, and after any suspicion | New version, progressive restart, old version disabled
-| Restore drill | At a fixed rhythm, on `integration` | Restore the database to a point in time, start the services on it, run the end-to-end tests, time it, keep the report
-| Failover drill | Before a release that touches the platform | Trigger the failover of the instance on `integration` during a load test; measure the errors
-| Rebuild an environment | After a change of the infrastructure modules | Destroy and recreate `integration` from the repository, then load synthetic data
+| Restore drill | At a fixed rhythm, in the full profile | The operations job clones the instance at a past instant into a temporary instance that only the job can reach — it holds production data and stays under the rules of production — checks that each database opens and that its counts match, times the whole, deletes the clone, keeps the report
+| Failover drill | Rarely, in an announced window outside business hours | There is one instance: the drill fails over production too, for about a minute, and that is what it proves. Never automatic, never nightly. Impossible in the proof of concept, which has no standby.
+| Rebuild an environment | After a change of the infrastructure modules | The job _rebuild integration_ of document 06-04, after an approval; then load synthetic data
+| Destroy the proof of concept | At its deadline, automatically; earlier at the owner's request | The job of document 06-04; then read the list of what remains in the project
 | Review of costs | Weekly | Spending by environment and by service against the estimate (document 06-06)
 | Review of exceptions | Monthly | Vulnerabilities accepted with an expiry date (document 06-05); emergency accesses granted
 | Upgrade of the cluster | Automatic | Read the notes of the new version when it reaches `test`; nothing else, unless an alert fires
@@ -228,16 +255,17 @@ Done once, by the owner of the project (document 06-04).
 |===
 | # | Step | Why by the owner
 | 1 | Create the project and link it to a billing account | Spending authority
-| 2 | Create the budget, its thresholds and who is alerted | The first guardrail exists before anything can spend
+| 2 | Apply the `owner` root of the infrastructure code: the budget, its thresholds and who is alerted | The first guardrail exists before anything can spend, and only the owner has rights on the billing account
 | 3 | Create the bucket of the infrastructure states, with versions | The tool needs it before it can create anything
 | 4 | Establish the trust between the repository and the project, and the identity of the pipeline with its rights | A pipeline cannot grant itself rights
-| 5 | Register the domain name of the store, and delegate its zone | A purchase
+| 5 | Full profile only: register the domain name of the store, and delegate its zone | A purchase
 | 6 | Run the pipeline: the four infrastructure roots, then a first release | From here on, everything is automatic
-| 7 | Give the secrets that come from outside their first value: the credential of the e-mail provider | Only the owner holds them
-| 8 | Create the first administrator account at the identity provider | The role `ADMIN` is never obtained by a screen of the store
+| 7 | Give the secrets that come from outside their first value. None in this release: both providers are simulated | Only the owner would hold them
+| 8 | Create the first administrator account, with the operations job | The role `ADMIN` is never obtained by a screen of the store
 |===
 
-Steps 1 to 5 and 7 can be done from the command line; the exact commands are kept with the infrastructure code, next to the module they prepare, and are run by a person, not by an agent.
+Steps 1 to 5 can be done from the command line; the exact commands are kept with the infrastructure code, next to the module they prepare, and are run by a person, not by an agent.
+In the proof of concept, step 6 is the run in which the owner gives the deadline of destruction (document 06-06).
 
 == After an incident
 

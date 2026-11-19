@@ -225,6 +225,8 @@ An alert that asks for no action is deleted.
 | Subscription backlog | Oldest unacknowledged message older than 2 minutes | Ticket | A consumer slow or down
 | Database connections | Above 80 % of the budget for 10 minutes | Ticket | The next outage
 | Pod restarting | A pod restarted more than 3 times in 10 minutes | Ticket | A defect or a wrong limit
+| Database failed over | The instance changed its primary | Ticket | Knowing why it happened
+| Infrastructure drift | The nightly plan is not empty, or a resource was not created by the code (document 06-04) | Ticket | A change nobody reviewed
 | Unexpected errors | Each occurrence of the generic code | Ticket; page if the rate is sustained | A defect shipped
 | Invalid requests | An abnormal rate on one endpoint | Ticket | A defect of the storefront, or an attack
 | Probe failing | Two consecutive failures of the outside probe | Page | The store unreachable while our own metrics see nothing
@@ -251,6 +253,9 @@ What strategy gives each reader one screen that answers their question?
 | Bus | The person on call | Backlog and age per subscription; dead letters
 | Platform | The platform engineers | Pods, restarts, scaling, capacity (document 06-03)
 |===
+
+Alerts are sent to a notification channel declared with the infrastructure: an e-mail address of the team in this release.
+In the proof of concept ({ADR-PLT-030}) Grafana is not deployed; the views of the provider show the same metrics, and the alerts are the same.
 
 Dashboards and alert rules are files of the repository, reviewed and deployed like code.
 A dashboard edited by hand in production is overwritten at the next deployment.

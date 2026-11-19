@@ -49,6 +49,8 @@ What strategy finds, before production does, the one thing whose loss stops ever
 ****
 
 Each part of the platform is examined with one question: _if this disappears now, what stops?_
+The analysis describes the full deployment profile.
+The proof of concept ({ADR-PLT-030}) runs one replica of everything and a database without standby: it gives up the redundancy described here for two days of low cost, knowingly.
 
 plantuml::diagrams/redundancy-zones.puml[format=svg, align=center]
 
@@ -256,7 +258,7 @@ What strategy turns "we have backups" into "we know we can restore"?
 | Database | Automated backups and recovery to a point in time, giving at most 5 minutes of data lost; a restore brings the service back within 60 minutes ({NFR-AVAIL-004}).
 | Messages | Topics keep events 7 days; a consumer repaired after a defect can be replayed from a point in time. Consumers being idempotent, a replay is safe.
 | Infrastructure | Everything is created by code (document 06-04): an environment can be rebuilt from the repository.
-| Drill | A restore is rehearsed in the integration environment at a fixed rhythm, timed, and its report kept. A backup that was never restored is a hope.
+| Drill | A restore is rehearsed at a fixed rhythm, into a temporary copy that is then deleted, timed, and its report kept (document 06-07). A backup that was never restored is a hope.
 |===
 
 .How resilience is tested
@@ -267,7 +269,7 @@ What strategy turns "we have backups" into "we know we can restore"?
 | Loss of a service | Each service is stopped in turn; the functions that must survive are checked ({NFR-AVAIL-003}).
 | Slow and failing provider | The simulated payment provider is scripted by its tokens: time-out, late capture, blackout, failing refund ({FR-PAY-007}).
 | Slow neighbor | A simulated catalog answers late; the time limit, the circuit breaker and the fallback are observed.
-| Database failover | Triggered on the integration environment; duration and errors are measured.
+| Database failover | Triggered in an announced window: the three environments share the instance, so production fails over too (document 06-07). Duration and errors are measured.
 | Poison message | A malformed message is published; it must reach its dead-letter topic, raise the alert, and not block other orders.
 |===
 

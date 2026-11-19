@@ -182,7 +182,7 @@ Services reach the database, the bus and the secret manager with their own ident
 | Client secret of the web gateway at the identity provider | Web gateway | Rotated on a schedule and after any suspicion
 | Key that encrypts the tokens in sessions | Web gateway | Rotation keeps the previous key until existing sessions end
 | Administration credentials of the identity provider | Operators, deployment | Never used by a service
-| Credential of the e-mail provider | Notification service | –
+| Credential of the e-mail provider | Notification service | None in this release: the provider is simulated
 | Credential of the payment provider | Payment service | None in this release: the provider is simulated
 |===
 
@@ -220,7 +220,7 @@ What strategy limits what an attacker gains by taking over one pod?
 | Subject | Rule
 | Exposed | The load balancer, and nothing else. Nodes and pods have private addresses.
 | Firewall at the edge | Managed rules against common web attacks; limits on the rate of requests by address; a stricter limit on the sign-in and checkout addresses ({NFR-SEC-008}).
-| Inside a namespace | Denied by default. Allowed: the web gateway to the four services with a REST interface; the cart, the order and the inventory services to the catalog; the order service to the cart; the web gateway and every service to the identity provider; every pod to the name service of the cluster.
+| Inside a namespace | Denied by default. Allowed: the web gateway to the four services with a REST interface; the cart, the order and the inventory services to the catalog; the order service to the cart; the web gateway and every service to the identity provider; every pod to the name service, at the address local to its node, and to the metadata server of its node, where it obtains the credential of its identity (document 06-02).
 | Into a namespace from outside it | Allowed: the load balancer and its health checks to the web gateway and to the identity provider; the collection of metrics to the management port of every pod. Nothing else.
 | Between namespaces | Denied, with one exception: every pod may send its traces to the collector. The test environment cannot reach the pods of production.
 | Outgoing | To the managed services of Google Cloud, to the database — for the services, the web gateway and the identity provider — and to the two providers. A pod cannot open a connection to an arbitrary address.
