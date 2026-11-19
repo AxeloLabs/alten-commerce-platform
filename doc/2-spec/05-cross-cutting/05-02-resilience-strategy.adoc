@@ -1,0 +1,253 @@
+= Resilience Strategy: What Fails, What Happens Then, and What Never Stops
+:doc-id: 05-02
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The single points of failure and their answers, the settings of every synchronous call, the behavior of asynchronous processing, and what the platform does in each failure scenario.
+include::../_shared/attributes.adoc[]
+
+== Principles
+
+.Strategy question
+****
+What strategy makes failure an ordinary event that the platform expects, instead of a surprise it suffers?
+****
+
+Something is always failing somewhere: a pod is being replaced, a provider is slow, a zone is degraded.
+Resilience is not the absence of failure; it is the list of what happens next, written in advance.
+
+.Six principles
+[cols="4,11", options="header"]
+|===
+| Principle | Meaning here
+| Fail fast when someone waits | A synchronous call has a time limit shorter than its caller's. A person gets a clear refusal in a moment rather than a spinner for a minute.
+| Wait when nobody does | Work that travels as messages is not failed by an outage: it waits in a subscription and is done when the service returns, or decided by a deadline.
+| Bound everything | Time, attempts, concurrent calls, connections, messages in hand. An unbounded resource is the next outage.
+| Lose a function, not the store | Browsing and carts survive the loss of orders, payments or e-mails ({NFR-AVAIL-003}).
+| Recover without a person | Restart, retry, redelivery and failover are automatic. A person is asked last, and told exactly what is stuck ({NFR-REL-003}).
+| No single instance of anything | Every part that the platform runs has at least two replicas in production, in two zones ({NFR-AVAIL-002}).
+|===
+
+.Objectives the strategy serves
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Requirement | Target
+| {NFR-AVAIL-001} | Catalog, product and cart reads available 99.5 % of a month
+| {NFR-AVAIL-005} | A valid checkout accepted 99.0 % of a month
+| {NFR-AVAIL-004} | After the loss of the database: at most 5 minutes of data lost, service back within 60 minutes
+| {NFR-REL-003} | Every order settled within the review delay
+| {NFR-REL-004} | A new version deployed without interrupting orders in progress
+|===
+
+Owner: {role-sre} {role-arch}
+
+== Single points of failure
+
+.Strategy question
+****
+What strategy finds, before production does, the one thing whose loss stops everything?
+****
+
+Each part of the platform is examined with one question: _if this disappears now, what stops?_
+
+plantuml::diagrams/redundancy-zones.puml[format=svg, align=center]
+
+.Analysis
+[cols="4,5,6,5", options="header"]
+|===
+| Part | Redundancy | If one instance or one zone is lost | What remains a risk
+| Load balancer and firewall | Managed by Google, global | Nothing visible | A configuration error of ours; changes go through review and the test environment first
+| Web gateway | Two replicas or more, two zones; sessions in a shared store | Requests go to the other replica; sessions survive | It is on the path of everything: a defect in it stops the store. It holds no logic, to keep that unlikely
+| Each of the six services | Two replicas or more, spread over zones; stateless ({NFR-SCAL-001}) | The other replica serves; messages in hand are redelivered | A defect shipped to all replicas at once: progressive delivery limits it (document 06-05)
+| Identity provider | Two replicas | Sign-in continues | Its outage stops sign-in and registration, not browsing; signed-in users continue until their token expires
+| Database instance | Primary and standby in two zones, synchronous replication | Automatic failover in about a minute; requests fail meanwhile and are retried | It is shared by every service: its loss stops the store. Backups allow recovery to a point in time ({NFR-AVAIL-004})
+| Pub/Sub | Managed, regional, across zones | Nothing visible | A regional outage delays every order; messages already saved in outboxes are not lost
+| Secrets | Managed | None: secrets are read when a pod starts | New pods cannot start during an outage of the secret service
+| Image registry | Managed | None for running pods | New pods cannot start during an outage of the registry
+| Payment provider | Not ours | Orders are not charged late; they are rejected or handed to a person (document 03-03) | Its availability bounds that of order placement
+| E-mail provider | Not ours | E-mails are late, then recorded as not sent | Customers are not told; orders are unaffected
+| The cluster | One, with a regional control plane | Workloads keep running if the control plane is briefly unreachable | One cluster for three environments ({ADR-PLT-026}): an incident at cluster level reaches production
+| The region | One | Everything stops | Accepted for this release. Recovery in another region is a documented, manual procedure from backups and from the infrastructure code (document 06-07)
+|===
+
+Three risks are accepted knowingly and written down: one region, one cluster, one database instance shared by all services.
+Each is the price of a cost bounded for a platform of this size, and each has an evolution path in document 06-02.
+
+== Synchronous calls
+
+.Strategy question
+****
+What strategy stops one slow dependency from spending the time and the threads of everything that calls it?
+****
+
+Synchronous calls are few ({ADR-PLT-025}).
+Each has the four protections of document 04-06, with the settings below.
+The figures are starting values, to be confirmed by the load tests of document 07-04; what is fixed is that every call has all four.
+
+.Time budget of a request
+[%unbreakable, cols="5,3,7", options="header"]
+|===
+| Step | Limit | Reason
+| A request at the web gateway | 5 s | Above it, the person has left
+| A read between services | 400 ms in total, 100 ms to connect | Reads answer in tens of milliseconds ({NFR-PERF-001}); a read that takes longer is failing
+| A call to the payment provider | 3 s | A provider is slower than a neighbor; the caller is a message handler, nobody waits on screen
+| A call to the e-mail provider | 5 s | Same
+| A database statement | 2 s | A longer statement is a defect or a lock; it must not hold a connection
+| Obtaining a database connection | 500 ms | A service whose pool is exhausted should refuse, not queue
+|===
+
+A limit is always shorter than the limit of the caller above it, so that the caller is the one that decides what to answer.
+
+.Settings by call
+[cols="4,3,4,4,5", options="header"]
+|===
+| Call | Retries | Circuit breaker | Concurrent calls | When it fails
+| Cart to catalog: product references | 1, on a connection failure or a `503` | Opens at 50 % of failures over 20 calls; stays open 10 s | 20 per replica | The cart is returned with the last known prices, marked as possibly outdated; no checkout ({UC-CART-002})
+| Order to cart and to catalog, at checkout | 1, same conditions | Same | 20 per replica | The checkout is refused with {ERR-PLT-008}; nothing was created
+| Inventory to catalog, first stock of a SKU | None | Same | 5 per replica | The adjustment is refused and can be made again ({UC-INV-001})
+| Payment to provider: charge | 2, with the same reference, 200 ms then 400 ms, randomized | Opens at 50 % over 20 calls; stays open 30 s | 10 per replica | The payment is recorded as unknown; the saga cancels it ({SC-ORD-005}). While the circuit is open, charges are answered "unknown" at once ({UC-PAY-001})
+| Payment to provider: cancel, refund | 2, same | Shared with the charge | Shared | Cancellation: "unknown" again, then a person at the review deadline ({SC-ORD-015}). Refund: reported as failed; the order goes under review ({SC-ORD-013})
+| Notification to e-mail provider | None in the call; the message is redelivered | Opens at 50 % over 10 calls; stays open 60 s | 5 per replica | The message comes back with growing delays; after the last attempt the e-mail is recorded as not sent and an alert is raised ({FR-NOT-003})
+| Web gateway to a service | None | None: the gateway forwards what the service answers | Bounded by its own limits | The service's answer, or {ERR-PLT-008} if it is unreachable
+| Any service to the identity provider, for signing keys | 2 | None | – | A running replica keeps the keys it has; a replica that cannot obtain them is not ready and receives no traffic
+|===
+
+.Rules for retries
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Rule | Reason
+| Only what is safe to repeat | Reads, and provider calls that carry a reference. Never a call that could act twice.
+| Few, with growing and randomized delays | A retry adds load to a service that is struggling; many clients retrying together must not arrive together.
+| Inside the time limit of the caller | A retry never makes a request outlive its budget.
+| One layer retries | The service that calls. The web gateway does not retry on top of it, nor does the storefront, except on the person's own action.
+|===
+
+.The database as a bounded resource
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Choice
+| Pool | Small and fixed per replica (document 04-04). With virtual threads it is the bulkhead of the service: at most that many requests work on the database at once ({ADR-PLT-003}).
+| Exhaustion | A request that cannot get a connection in time is refused with {ERR-PLT-008}; a message is left for redelivery.
+| Failover | During a failover every statement fails for about a minute. Requests are refused cleanly, messages wait, and the readiness of the pods turns false until the database answers again.
+|===
+
+== Asynchronous processing
+
+.Strategy question
+****
+What strategy lets an order survive the outage of a service it needs?
+****
+
+Most of the work of an order travels as messages, and messages wait.
+The mechanisms are specified in documents 03-05 and 03-06; this section gathers the settings and what they give.
+
+.Settings
+[%unbreakable, cols="5,4,7", options="header"]
+|===
+| Setting | Value | Effect
+| Redelivery | From 5 s to 5 min, growing | A consumer in difficulty is not hammered
+| Attempts before a dead letter | 10 | A message that cannot be handled stops blocking its order after about half an hour
+| Messages in hand per replica | Bounded | A burst cannot exhaust the database connections
+| Reservation lifetime | 15 minutes | Stock held for an order that will not complete comes back by itself
+| Order deadline | 2 minutes | An unpaid order is decided
+| Review deadline | 5 minutes | An order the system cannot decide reaches a person
+| Limits carried by requests | The two instants above | A request that waited too long takes neither stock nor money
+|===
+
+.When a service is down
+[cols="3,6,6", options="header"]
+|===
+| Service down | What happens to orders | When it comes back
+| Inventory | Stock requests wait. An order not reserved at its deadline is rejected, uncharged ({SC-ORD-004}). An order already paid waits, then is shown under review ({SC-ORD-011}). | Waiting requests are executed in order; late answers settle the orders, with or without an administrator
+| Payment | Charge requests wait. Past its deadline an order is never charged ({SC-ORD-016}). | Late charge requests are answered "canceled"; the orders are rejected
+| Order | No checkout. Answers of the inventory and the payment wait in their subscriptions. | Answers are handled; deadlines that passed are handled, the order deadline first
+| Notification | Nothing happens to orders. Order events wait. | E-mails are sent, late
+| Catalog | No browsing, no checkout; carts show last known prices. Sagas in progress continue: they do not call the catalog. | Immediately
+| Cart | No cart, no checkout. Sagas in progress continue. | Immediately
+| Pub/Sub | Messages accumulate in the outboxes; consumers receive nothing. Orders stay pending until their deadlines, which need only the database. | The relays publish what was saved, in order
+|===
+
+The outbox is what makes the last row possible: a service that cannot publish keeps saving, and nothing is lost ({NFR-REL-001}).
+
+== Deployments and capacity
+
+.Strategy question
+****
+What strategy makes the most frequent disturbance of all — our own deployments — invisible?
+****
+
+.Mechanisms
+[cols="4,11", options="header"]
+|===
+| Mechanism | Rule
+| Readiness | A pod receives traffic and messages only when it can do its work: database reachable, signing keys obtained, relay started. Readiness reflects the pod's own dependencies.
+| Liveness | Says only "this process is stuck". It never looks at a dependency: a database outage must not restart every pod.
+| Startup | A separate check gives a slow start the time it needs without weakening the other two.
+| Shutdown | A pod asked to stop first leaves the load balancer and stops pulling messages, finishes what it has in hand within a grace period, then exits ({NFR-REL-004}). The grace period is longer than the longest request and the longest message handling.
+| Rolling update | A new pod must be ready before an old one stops. Never fewer ready replicas than before the update.
+| Disruption budget | Maintenance of nodes may take one replica of a service at a time, never all.
+| Spread | Replicas of a service are placed in different zones.
+| Schema changes | Compatible with the version still running (document 04-04).
+| Scaling | Replicas are added on load, between a minimum of two in production and a maximum that the connection budget of the database allows. The cluster adds nodes by itself.
+|===
+
+Sizing, limits and the Kubernetes objects are in document 06-03.
+
+== Failure scenarios
+
+.Strategy question
+****
+What strategy answers "what happens if…" before the question is asked at three in the morning?
+****
+
+.What the platform does
+[cols="4,5,6,3", options="header"]
+|===
+| Failure | Automatic reaction | For the customer | Proven by
+| A pod of a service dies | The other replica serves; a new pod starts; messages it held are redelivered | Nothing, or one request to repeat | Instance-kill test
+| A zone is lost | Replicas in the other zone serve; the database fails over; pods are rescheduled | A minute of refusals during the failover | Zone test in the integration environment
+| The database fails over | Requests refused, messages wait, pods not ready, then everything resumes | A minute of {ERR-PLT-008} | Failover drill
+| The payment provider is down | Circuit opens; charges answered "unknown"; payments canceled when the provider returns | Orders rejected as timed out, uncharged, or shown under review | {SC-ORD-005}, {SC-ORD-015}
+| The payment service is down | Requests wait; nothing is charged past the deadline | The same | {SC-ORD-016}
+| The inventory is down | Requests wait; deadlines decide | Unpaid orders rejected; paid orders confirmed late | {SC-ORD-004}, {SC-ORD-011}
+| The e-mail provider is down | Redelivery, then recorded as not sent, alert | No e-mail; the order page tells the truth | {FR-NOT-003}
+| The identity provider is down | Running services keep validating tokens | Nobody can sign in; browsing works | Resilience test
+| A message cannot be handled | Ten attempts, then its dead-letter topic and an alert; the saga's deadline hands the order to a person | The order is under review | Poison-message test
+| A burst of traffic | Rate limits at the entry; replicas added; bulkheads refuse the excess | Some requests told to retry | Load test (document 07-04)
+| A faulty version is deployed | Readiness fails, or the error rate rises: the rollout stops and is rolled back | Limited to the share of traffic exposed | Delivery pipeline (document 06-05)
+| The clock of a service drifts | Requests carrying an instant are judged a few seconds off | None beyond seconds; nodes are synchronized by the platform | –
+|===
+
+== Recovery and tests
+
+.Strategy question
+****
+What strategy turns "we have backups" into "we know we can restore"?
+****
+
+.Recovery
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Database | Automated backups and recovery to a point in time, giving at most 5 minutes of data lost; a restore brings the service back within 60 minutes ({NFR-AVAIL-004}).
+| Messages | Topics keep events 7 days; a consumer repaired after a defect can be replayed from a point in time. Consumers being idempotent, a replay is safe.
+| Infrastructure | Everything is created by code (document 06-04): an environment can be rebuilt from the repository.
+| Drill | A restore is rehearsed in the integration environment at a fixed rhythm, timed, and its report kept. A backup that was never restored is a hope.
+|===
+
+.How resilience is tested
+[cols="4,11", options="header"]
+|===
+| Test | Method
+| Loss of an instance | A pod of each service is deleted during a load test; no error beyond the requests in hand.
+| Loss of a service | Each service is stopped in turn; the functions that must survive are checked ({NFR-AVAIL-003}).
+| Slow and failing provider | The simulated payment provider is scripted by its tokens: time-out, late capture, blackout, failing refund ({FR-PAY-007}).
+| Slow neighbor | A simulated catalog answers late; the time limit, the circuit breaker and the fallback are observed.
+| Database failover | Triggered on the integration environment; duration and errors are measured.
+| Poison message | A malformed message is published; it must reach its dead-letter topic, raise the alert, and not block other orders.
+|===
+
+A fault-injection product is not installed: the tools of that kind need privileges that the Autopilot mode of the cluster does not grant.
+Deleting pods, stopping services and scripting the simulated provider cover the scenarios above; the detail is in document 07-03.
+
+Owner: {role-sre} {role-qa}

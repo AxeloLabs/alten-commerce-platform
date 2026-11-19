@@ -1,0 +1,45 @@
+@startuml
+title Production: what is redundant, and across what
+
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+cloud "Google front end, global" as EDGE #ECEFF1 {
+  component "Load balancer\nCloud Armor" as LB
+}
+
+package "One region" {
+  package "Zone A" as ZA #F4F7F9 {
+    component "Web gateway" as GWA
+    component "Each service,\none replica" as SA
+    database "Cloud SQL\nprimary" as DBA
+  }
+  package "Zone B" as ZB #F4F7F9 {
+    component "Web gateway" as GWB
+    component "Each service,\none replica" as SB
+    database "Cloud SQL\nstandby" as DBB
+  }
+  package "Zone C" as ZC #F4F7F9 {
+    component "Room for\nrescheduled pods" as SC
+  }
+  queue "Pub/Sub\nregional, managed\nacross zones" as PS
+}
+
+LB --> GWA
+LB --> GWB
+GWA --> SA
+GWB --> SB
+SA --> DBA
+SB --> DBA
+DBA ..> DBB : synchronous\nreplication
+SA <--> PS
+SB <--> PS
+
+note bottom of ZC
+  Losing one zone leaves every service
+  with a replica, and the database
+  fails over to its standby.
+  Losing the region stops the platform:
+  an accepted risk, with a recovery plan.
+end note
+@enduml
