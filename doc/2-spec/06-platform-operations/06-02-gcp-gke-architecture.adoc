@@ -192,7 +192,7 @@ What strategy sets up each managed service so that it is private, recoverable an
 | Address | Private only, in the range reserved for managed services
 | Access | Through the Cloud SQL connector, with the Google identity of each service; a database account per service and per environment, with a limit on its connections (document 04-04)
 | Databases | One per service and per environment, plus those of the three identity providers and of the three web gateways
-| Backups | Daily, and recovery to a point in time over the last 7 days ({NFR-AVAIL-004})
+| Backups | Daily, and recovery to a point in time over the last 7 days ({NFR-AVAIL-004}). Stored in a location that spans several regions, so that they survive the loss of the region (document 06-07)
 | Size | Small at first: two processors, eight gigabytes of memory, storage that grows by itself. Reviewed after the load tests.
 | Maintenance | A window outside business hours
 |===

@@ -1,0 +1,265 @@
+= Runbooks: What to Do When an Alert Fires, Step by Step
+:doc-id: 06-07
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: How an incident is handled, one runbook per alert of the platform, the operations jobs that replace manual commands, routine procedures, the first setup of a project, and the review that follows an incident.
+include::../_shared/attributes.adoc[]
+
+== How an incident is handled
+
+.Strategy question
+****
+What strategy lets someone woken at night do the right thing without having designed the system?
+****
+
+Every alert of document 05-03 names a runbook of this document.
+A runbook does not explain the architecture; it says what to look at and what to do, in order, and when to stop and call someone.
+
+.The same six steps, whatever the incident
+[cols="1,3,11", options="header"]
+|===
+| # | Step | Meaning
+| 1 | Acknowledge | Say that you have it, so that nobody else starts in parallel.
+| 2 | Measure the harm | Two dashboards: objectives, and order flow. Are customers affected, how many, since when?
+| 3 | Stop the harm | Before understanding. If a release went out in the last hour, return to the previous one first (document 06-05).
+| 4 | Say it | One message where the team looks: what is seen, what is being done, when the next news comes.
+| 5 | Repair | Follow the runbook. Change nothing by hand in production: every action below is a button of the administration, a job of the pipeline, or a command reserved to the owner.
+| 6 | Close | Check the signal that fired is back to normal; write down what happened while it is fresh.
+|===
+
+.Urgency
+[%unbreakable, cols="3,6,6", options="header"]
+|===
+| Level | Means | Expected
+| Page | Customers are harmed now, or money or data is at risk | Someone acts within minutes, at any hour
+| Ticket | Something will become a problem, or one customer is affected | Handled the next working day
+|===
+
+Owner: {role-sre}
+
+== Operations jobs
+
+.Strategy question
+****
+What strategy repairs production without ever typing a command against it?
+****
+
+Document 06-06 forbids changing production by hand.
+Repairs that need more than a button of the administration are therefore _operations jobs_: small programs kept in the repository, tested like the rest, and run by the pipeline with their parameters, after an approval for production.
+Each run is recorded: who asked, with what parameters, what it did.
+
+.Operations jobs
+[cols="4,7,4", options="header"]
+|===
+| Job | Does | Used by
+| Wake or sleep an environment | Sets the replicas of every workload of `test` or `integration` to their normal value, or to nothing | Pipelines; the evening schedule; level 1 of the budget procedure
+| Replay dead letters | Publishes the messages of one dead-letter subscription again to their original topic, with their envelope, then acknowledges them | R03
+| Release a parked message | Clears the parked mark of one outbox row, after its cause is fixed; or discards it, with a reason | R04
+| Send an e-mail again | Sends once more an e-mail recorded as not sent | R08
+| Replay a consumer from a point in time | Moves one subscription back to an instant, so that a repaired consumer handles again what it mishandled | R03, after a defect that acknowledged messages wrongly
+| Load synthetic data | Fills an empty `test` or `integration` | After a rebuild
+|===
+
+Every job relies on what the design already guarantees: consumers are idempotent, so replaying a message that was handled does nothing (document 03-06).
+
+== Runbooks for the order flow
+
+.Strategy question
+****
+What strategy brings every order to an outcome when the system could not get there alone?
+****
+
+[cols="1,4,6,7", options="header"]
+|===
+| # | Alert | Look at | Do
+| R01 | Orders under review, many or old
+| The order-flow dashboard: under review by remembered step. Which service was silent? Is it back?
+| If a service is down, restore it first: orders whose answer was missing settle by themselves when it returns (document 02-03). For those that remain, an administrator decides order by order in the administration: retry, confirm or reject. Never change an order in the database.
+
+| R02 | A message in a dead-letter subscription
+| The message: its type, its saga identifier, its trace. The logs of the consumer for that trace: why did it fail ten times?
+| Fix the cause: usually a defect, so a release. Then run the job that replays the dead letters of that subscription. The order concerned is under review meanwhile, by its deadline: after the replay, check that it settled (R01).
+
+| R03 | Outbox late
+| The dashboard of the service: is the relay running? Is the database answering? Is Pub/Sub accepting messages?
+| A relay stopped with its pod restarts with it. If Pub/Sub refuses everything, there is nothing to do but wait: messages are saved and will leave in order. Tell the team: every order is delayed.
+
+| R04 | A parked message in an outbox
+| The reason recorded on the row: schema, size, right to publish.
+| A parked row blocks the later messages of the same order for the same topic, on purpose. Fix the cause — a schema and a release that disagree, a missing right — then run the job that releases the row. Discarding it is a decision of the product owner, since a message of an order is lost.
+
+| R05 | A capture on a rejected order, or a refund on a confirmed order
+| The order, its saga, its payment. This should never happen: a defect exists.
+| For a capture on a rejected order, the refund was asked automatically: check that it arrived. If it failed, the owner refunds at the payment provider and the fact is recorded on the order. For a refund on a confirmed order, the product owner decides with the customer: cancel the order, or take the payment again. In both cases open a defect at the highest priority.
+
+| R06 | A refund failed
+| The order, under review; the reason given by the payment provider.
+| Retry in the administration when the provider works again. If it keeps failing, contact the provider with the payment reference. Tell the customer what is happening: they are waiting for money.
+
+| R07 | An e-mail not sent
+| The reason; the state of the e-mail provider.
+| When the provider works again, run the job that sends the e-mail again. The order itself is unaffected.
+|===
+
+== Runbooks for services and dependencies
+
+.Strategy question
+****
+What strategy restores service fast when the cause is not yet known?
+****
+
+[cols="1,4,6,7", options="header"]
+|===
+| # | Alert | Look at | Do
+| R08 | Error budget burning
+| Which objective, since when. Was there a release? Is a dependency failing: database, payment provider, identity provider?
+| A release in the last hour: return to the previous one, then investigate. A dependency: go to its runbook. Load: check that replicas were added; if they are at their maximum, the entry point is limiting requests as designed, and the team decides whether to raise a maximum (document 06-03).
+
+| R09 | Probe failing: the store cannot be reached from outside
+| The load balancer: are pods of the web gateway healthy? The certificate, the name of the store, the firewall: is it blocking everyone?
+| No healthy pod: R11. A certificate or a name: they are managed and renew themselves; a failure there is a change of ours, to revert. A firewall rule blocking legitimate traffic: revert the change that introduced it.
+
+| R10 | Payment provider unavailable
+| The circuit breaker of the payment service; the provider's own status page.
+| Nothing to repair on our side. Orders placed meanwhile are not charged; they are rejected when the provider returns, and shown under review if that takes more than a few minutes. Tell the team and, if it lasts, the customers. Afterwards: R01 for what remains.
+
+| R11 | A pod restarting, or a rollout that does not finish
+| The events of the pod and its last log lines: a setting or a secret missing, memory exceeded, a migration failed, an image refused?
+| A rollout that fails stops by itself and the previous version keeps serving: let the pipeline return to the previous release. Memory exceeded on a version that was fine: a leak or a load never seen; raise the request by a reviewed change, not by hand.
+
+| R12 | A subscription backlog
+| The consumer: are its pods ready? Is it failing on one message, or slow on all?
+| One message failing: it will become a dead letter (R02). Slow on all: look at what it calls — database, provider — and go to that runbook.
+
+| R13 | Database connections high
+| Which service holds them; slow statements.
+| A defect that keeps connections, or a maximum of replicas raised without revisiting the budget of document 06-03. Return to the previous release, or lower the maximum, by a reviewed change.
+
+| R14 | The database failed over, or must be restored
+| The instance: is the standby serving? Is data damaged?
+| A failover needs nothing: services resume within a minute. Damaged data — a faulty release wrote wrong rows — is a restore to a point in time: into a new instance, checked, then switched, by a procedure that the owner approves; at most 5 minutes of data are lost ({NFR-AVAIL-004}). Messages handled since that instant are replayed from the topics.
+
+| R15 | The identity provider is down
+| Its pods; its database.
+| Restore it like any workload (R11). Meanwhile nobody can sign in and, within five minutes, signed-in users can only browse; sessions resume when it returns (document 05-04).
+
+| R16 | The region is lost
+| The provider's status. Nothing of ours answers.
+| Wait if the outage is announced as short. Otherwise rebuild in another region: apply the infrastructure code with the other region, restore the database from its backups — kept outside the region for this purpose — deploy the last release, point the name of the store to the new address. Hours, not minutes: an accepted risk (document 05-02).
+|===
+
+== Runbooks for security and money
+
+.Strategy question
+****
+What strategy limits the damage of an intrusion or of an overspend in the first quarter of an hour?
+****
+
+[cols="1,4,6,7", options="header"]
+|===
+| # | Alert | Look at | Do
+| R17 | A burst of refused sign-ins or of forbidden requests
+| Where from; which accounts; which addresses.
+| Tighten the rate limit, or block the source, at the firewall of the entry point, by a reviewed change applied at once. If accounts were entered: end their sessions at the identity provider and force a new password.
+
+| R18 | A secret was exposed
+| Which secret, where, since when.
+| Treat it as stolen, even if the exposure was removed. Add a new version, restart the workloads that use it, disable the old version (document 05-04). Then look at the audit log for its use during the exposure.
+
+| R19 | A workload behaves as if taken over
+| What it called, what it published, since when.
+| Scale it to nothing: its work waits in its subscriptions. Keep its logs. Rotate what it could read. Rebuild it from a clean image; review what it wrote to its database and to its topics before letting consumers continue.
+
+| R20 | A budget alert
+| The breakdown of spending by environment and by service; what changed since yesterday.
+| Follow the four levels of document 06-06. Levels 2 to 4 are for the owner. Find the cause before waking anything again.
+|===
+
+.Commands reserved to the owner, for levels 2 to 4
+[source,shell]
+----
+# Level 2 — close the store: scale production to nothing.
+#   Lost: nothing. Kept: data, messages, configuration. Untouched: the database, the two other environments.
+#   Run as the operations job "sleep" on prod, from the pipeline, with the owner's approval.
+
+# Level 3 — stop the database instance.
+#   Lost: nothing. Kept: all data and backups. Billed: storage only. Every environment stops working.
+gcloud sql instances patch <instance> --activation-policy=NEVER
+#   To restart:
+gcloud sql instances patch <instance> --activation-policy=ALWAYS
+
+# Level 4 — detach billing. Last resort.
+#   Everything stops at once. Resources may be deleted by the provider if billing stays off.
+#   Untouched: the repository, from which the platform can be rebuilt; backups only as long as the project lives.
+gcloud billing projects unlink <project>
+----
+
+== Routine procedures
+
+.Strategy question
+****
+What strategy keeps rare procedures from being improvised the day they are needed?
+****
+
+[cols="4,4,8", options="header"]
+|===
+| Procedure | When | How
+| Wake and sleep an environment | Every evening, and around test runs | The operations job. Production only by the owner.
+| Rotate a secret | On a schedule, and after any suspicion | New version, progressive restart, old version disabled
+| Restore drill | At a fixed rhythm, on `integration` | Restore the database to a point in time, start the services on it, run the end-to-end tests, time it, keep the report
+| Failover drill | Before a release that touches the platform | Trigger the failover of the instance on `integration` during a load test; measure the errors
+| Rebuild an environment | After a change of the infrastructure modules | Destroy and recreate `integration` from the repository, then load synthetic data
+| Review of costs | Weekly | Spending by environment and by service against the estimate (document 06-06)
+| Review of exceptions | Monthly | Vulnerabilities accepted with an expiry date (document 06-05); emergency accesses granted
+| Upgrade of the cluster | Automatic | Read the notes of the new version when it reaches `test`; nothing else, unless an alert fires
+|===
+
+== First setup of a project
+
+.Strategy question
+****
+What strategy turns an empty cloud account into a working platform, with the few manual steps in the right hands?
+****
+
+Done once, by the owner of the project (document 06-04).
+
+[cols="1,7,7", options="header"]
+|===
+| # | Step | Why by the owner
+| 1 | Create the project and link it to a billing account | Spending authority
+| 2 | Create the budget, its thresholds and who is alerted | The first guardrail exists before anything can spend
+| 3 | Create the bucket of the infrastructure states, with versions | The tool needs it before it can create anything
+| 4 | Establish the trust between the repository and the project, and the identity of the pipeline with its rights | A pipeline cannot grant itself rights
+| 5 | Register the domain name of the store, and delegate its zone | A purchase
+| 6 | Run the pipeline: the four infrastructure roots, then a first release | From here on, everything is automatic
+| 7 | Give the secrets that come from outside their first value: the credential of the e-mail provider | Only the owner holds them
+| 8 | Create the first administrator account at the identity provider | The role `ADMIN` is never obtained by a screen of the store
+|===
+
+Steps 1 to 5 and 7 can be done from the command line; the exact commands are kept with the infrastructure code, next to the module they prepare, and are run by a person, not by an agent.
+
+== After an incident
+
+.Strategy question
+****
+What strategy makes each incident the last of its kind?
+****
+
+Every page, and every incident a customer noticed, is followed by a short written review within a week.
+It looks for causes in the system, never for a culprit.
+
+.Content of a review
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Part | Content
+| What happened | The timeline, from the first signal to the return to normal, with the identifiers of traces and sagas
+| The harm | Who was affected, for how long, what it cost of the error budget
+| Why | The causes, down to why the system allowed them
+| What worked, what did not | Did the alert fire in time? Did the runbook help? What had to be improvised?
+| What changes | Actions with an owner and a date: a test, an alert, a guardrail, a line of a runbook
+|===
+
+A runbook that had to be improvised is corrected the same week: this document is expected to change after every incident.
+
+Owner: {role-sre} {role-sec}
