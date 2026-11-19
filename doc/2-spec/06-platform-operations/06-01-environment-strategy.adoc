@@ -61,7 +61,7 @@ plantuml::diagrams/environments.puml[format=svg, align=center]
 | Databases | One database per service and per environment, each with its own account and a limit on its connections | `<env>_<service>`
 | Identity provider | One deployment and one realm per environment: an account of `test` does not exist in `prod` | –
 | Secrets | Separate secrets; an identity reads those of its environment only | `<env>-<service>-<name>`
-| Entry point | One host name per environment, routed to the web gateway of that environment only | See document 06-02
+| Entry point | Two host names per environment, one for the store and one for the sign-in pages of its identity provider, routed to that environment only | See document 06-02
 | Quotas | A quota of processor and memory per namespace, so that a runaway test cannot starve production | –
 | Images | Not separated, on purpose: the same image is promoted from one environment to the next | One registry
 |===
@@ -72,7 +72,7 @@ plantuml::diagrams/environments.puml[format=svg, align=center]
 | Shared | Consequence, accepted by the product owner on 2026-11-19
 | The cluster | An incident at cluster level — an upgrade gone wrong, a cluster-wide misconfiguration — reaches production. Upgrades follow the regular release channel and maintenance windows.
 | The database instance | A load test on `integration` uses the same processors and disks as production. Connections are limited per account; load tests are announced, bounded in time and run outside busy hours.
-| The project | Project-wide quotas and rights are shared. Rights are granted on resources, never on the project (document 05-04).
+| The project | Project-wide quotas and rights are shared. Rights are granted on resources; the few that exist only at the level of the project give access to no data (document 06-02).
 | The region | One region for all three (document 05-02).
 |===
 

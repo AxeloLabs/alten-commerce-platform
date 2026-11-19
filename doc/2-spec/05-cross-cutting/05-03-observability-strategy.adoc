@@ -1,6 +1,6 @@
 = Observability Strategy: Following One Order, Watching Every Service
 :doc-id: 05-03
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The questions observability must answer, the identifiers that tie signals together, logs, metrics and traces, the service level objectives, the alerts and the dashboards.
@@ -63,8 +63,9 @@ What strategy lets one value pulled from a customer's e-mail lead to every log l
 A message is published by the relay some time after the transaction that wrote it.
 The trace context is saved with the message in the outbox and restored at publication, so that the trace of a request continues through the bus instead of stopping at the database.
 
-A saga spans several traces: one per exchange, and one per administrator request.
-The saga identifier is what links them; searching logs or traces on it gives the whole life of an order.
+The placement of an order is therefore one trace, from the checkout request through every message it causes.
+A saga gets other traces when something else sets it in motion: a deadline that fires, a request of an administrator.
+The saga identifier is what links them all; searching logs or traces on it gives the whole life of an order.
 
 == Logs
 
@@ -113,7 +114,7 @@ What strategy chooses a few numbers that say whether things are well, instead of
 | Requests served | Rate, errors and duration of each endpoint, by status ({NFR-OBS-003})
 | Calls made | Rate, errors and duration of each outgoing call; state of each circuit breaker; refusals of each bulkhead
 | Messages | Handled, refused, failed and redelivered, by type; time between publication and handling
-| Outbox | Rows waiting, age of the oldest, rows parked ({NFR-REL-005})
+| Outbox | Rows waiting, age of the oldest, rows parked; time between the saving of a message and its publication ({NFR-REL-005})
 | Database | Connections in use and waiting; duration of statements
 | Runtime | Memory, garbage collection, threads, restarts
 |===
@@ -123,7 +124,7 @@ What strategy chooses a few numbers that say whether things are well, instead of
 |===
 | Family | Measures
 | Orders | Placed; settled by outcome and by reason; time from placement to outcome ({NFR-PERF-003})
-| Sagas | In progress by state; suspended by remembered step; settled by a late answer; defensive transitions fired (document 03-03)
+| Sagas | In progress by state; suspended by remembered step; settled by a late answer; events recorded with no effect; compensations sent and completed; defensive transitions fired (document 03-03)
 | Checkout | Accepted; refused by error code
 | Payments | By outcome: captured, refused, unknown, canceled, refunded; refunds failed
 | Stock | Reservations held, rejected, expired; delay between a stock change and the catalog ({NFR-PERF-005})
@@ -154,7 +155,7 @@ What strategy shows where the time of a request went, across services and across
 | Spans | One per request served, per outgoing call, per database transaction, per message published and per message handled. Created by the framework's instrumentation, not by hand.
 | Attributes | The saga and order identifiers, the transition of a saga, the error code. Never personal data.
 | Across the bus | The context travels in the envelope; the handling of a message is a child of its publication.
-| Sampling | Every trace that places, cancels or decides an order is kept, with everything it causes: these are few and they are the ones that matter. Reads are sampled at 10 % in production. Everything is kept in the test and integration environments.
+| Sampling | Every trace that places, cancels or decides an order is kept, with everything it causes: these are few and they are the ones that matter. Reads are sampled at 10 % in production. Everything is kept in the test and integration environments. The decision is taken once, where a trace starts — the web gateway for a request, the task for a deadline — and every service that continues the trace follows it.
 | Errors | A sampled-out request that fails is still found: its log lines carry the trace identifier, and the error answer gives it to the person.
 | Retention | 30 days.
 |===
@@ -174,6 +175,8 @@ What is left is the _error budget_: the room for failures and for risk.
 |===
 | Function | A request is good when | Objective | Requirement
 | Catalog, product and cart reads | It is answered without a server error | 99.5 % | {NFR-AVAIL-001}
+| Order history and order detail | It is answered in less than 300 ms | 95 % | {NFR-PERF-001}
+| Publication of a saved message | It is published in less than 5 s | 99 % | {NFR-REL-005}
 | Same | It is answered in less than 300 ms; 200 ms for the cart | 95 % | {NFR-PERF-001} {NFR-PERF-004}
 | Checkout | A valid checkout is accepted | 99.0 % | {NFR-AVAIL-005}
 | Checkout | It is acknowledged in less than 500 ms | 95 % | {NFR-PERF-002}
@@ -181,15 +184,16 @@ What is left is the _error budget_: the room for failures and for risk.
 | Displayed availability | A stock change reaches the catalog in less than 5 s | 95 % | {NFR-PERF-005}
 |===
 
-Availability is measured at the entry point, where a customer would see the failure; durations of the order flow come from the saga metrics.
+Availability is measured where a customer would see the failure: on the request metrics of the load balancer, which still count when no pod of ours answers, and by a probe that calls the storefront and a catalog read from outside every minute.
+Durations of the order flow come from the saga metrics.
 A refusal of the business is a good answer: a checkout refused because a price changed did not fail.
 
 .Using the error budget
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Situation | Action
-| The budget burns fast: at this rate it is gone in two days | The person on call is paged
-| The budget burns slowly: at this rate it is gone before the end of the month | A ticket is opened for the next working day
+| The budget burns fast: over the last hour, and still over the last 5 minutes, at a rate that would spend it in two days | The person on call is paged
+| The budget burns slowly: over the last 6 hours, and still over the last 30 minutes, at a rate that would spend it before the end of the month | A ticket is opened for the next working day
 | The budget of a month is spent | Deliveries of features to the function concerned stop until it is restored; reliability work comes first
 |===
 
@@ -221,7 +225,9 @@ An alert that asks for no action is deleted.
 | Subscription backlog | Oldest unacknowledged message older than 2 minutes | Ticket | A consumer slow or down
 | Database connections | Above 80 % of the budget for 10 minutes | Ticket | The next outage
 | Pod restarting | A pod restarted more than 3 times in 10 minutes | Ticket | A defect or a wrong limit
-| Unexpected errors | Any error of the generic code after a deployment; a sustained rate otherwise | Ticket | A defect shipped
+| Unexpected errors | Each occurrence of the generic code | Ticket; page if the rate is sustained | A defect shipped
+| Invalid requests | An abnormal rate on one endpoint | Ticket | A defect of the storefront, or an attack
+| Probe failing | Two consecutive failures of the outside probe | Page | The store unreachable while our own metrics see nothing
 | Access refused | A burst of refused sign-ins or of forbidden requests | Ticket | An attack in progress (document 05-04)
 |===
 

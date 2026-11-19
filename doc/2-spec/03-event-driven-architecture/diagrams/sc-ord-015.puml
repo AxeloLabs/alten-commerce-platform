@@ -13,9 +13,8 @@ note over PSP #ECEFF1 : unreachable
 P ->> O : PaymentOutcomeUnknown
 note over O : CANCELING_PAYMENT
 O ->> P : CancelPayment
-P -> PSP : cancel (retries)
-P ->> O : PaymentOutcomeUnknown
-note over O : failure recorded;\nnothing sent
+P -> PSP : cancel
+note over P : no answer: the request is kept\nand tried again, with growing delays
 ... review deadline ...
 O -> O : review deadline reached
 note over O #FFF8E1 : SUSPENDED, remembers CANCELING_PAYMENT\norder UNDER_REVIEW\npayment unknown, stock held

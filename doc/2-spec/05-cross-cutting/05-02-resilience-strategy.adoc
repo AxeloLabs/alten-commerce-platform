@@ -1,6 +1,6 @@
 = Resilience Strategy: What Fails, What Happens Then, and What Never Stops
 :doc-id: 05-02
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The single points of failure and their answers, the settings of every synchronous call, the behavior of asynchronous processing, and what the platform does in each failure scenario.
@@ -59,7 +59,7 @@ plantuml::diagrams/redundancy-zones.puml[format=svg, align=center]
 | Load balancer and firewall | Managed by Google, global | Nothing visible | A configuration error of ours; changes go through review and the test environment first
 | Web gateway | Two replicas or more, two zones; sessions in a shared store | Requests go to the other replica; sessions survive | It is on the path of everything: a defect in it stops the store. It holds no logic, to keep that unlikely
 | Each of the six services | Two replicas or more, spread over zones; stateless ({NFR-SCAL-001}) | The other replica serves; messages in hand are redelivered | A defect shipped to all replicas at once: progressive delivery limits it (document 06-05)
-| Identity provider | Two replicas | Sign-in continues | Its outage stops sign-in and registration, not browsing; signed-in users continue until their token expires
+| Identity provider | Two replicas | Sign-in continues | Its outage stops sign-in and registration at once and, within five minutes — the life of an access token — everything that needs a token: carts, checkout, administration. Sessions are kept and resume when it returns. Browsing never stops
 | Database instance | Primary and standby in two zones, synchronous replication | Automatic failover in about a minute; requests fail meanwhile and are retried | It is shared by every service: its loss stops the store. Backups allow recovery to a point in time ({NFR-AVAIL-004})
 | Pub/Sub | Managed, regional, across zones | Nothing visible | A regional outage delays every order; messages already saved in outboxes are not lost
 | Secrets | Managed | None: secrets are read when a pod starts | New pods cannot start during an outage of the secret service
@@ -71,6 +71,7 @@ plantuml::diagrams/redundancy-zones.puml[format=svg, align=center]
 |===
 
 Three risks are accepted knowingly and written down: one region, one cluster, one database instance shared by all services.
+The product owner accepted them on 2026-11-19.
 Each is the price of a cost bounded for a platform of this size, and each has an evolution path in document 06-02.
 
 == Synchronous calls
@@ -85,32 +86,55 @@ Each has the four protections of document 04-06, with the settings below.
 The figures are starting values, to be confirmed by the load tests of document 07-04; what is fixed is that every call has all four.
 
 .Time budget of a request
-[%unbreakable, cols="5,3,7", options="header"]
+[cols="6,3,7", options="header"]
 |===
 | Step | Limit | Reason
-| A request at the web gateway | 5 s | Above it, the person has left
-| A read between services | 400 ms in total, 100 ms to connect | Reads answer in tens of milliseconds ({NFR-PERF-001}); a read that takes longer is failing
-| A call to the payment provider | 3 s | A provider is slower than a neighbor; the caller is a message handler, nobody waits on screen
-| A call to the e-mail provider | 5 s | Same
-| A database statement | 2 s | A longer statement is a defect or a lock; it must not hold a connection
-| Obtaining a database connection | 500 ms | A service whose pool is exhausted should refuse, not queue
+| A request at the web gateway | 5 s | Above it, the person has left. A request that reaches this limit is answered {ERR-PLT-011}: its outcome is unknown.
+| A checkout in the order service, in total | 2 s | Its two reads and its transaction fit several times in it
+| The order service reading the cart | 900 ms | The cart itself reads the catalog: this limit must contain that read and the fallback of the cart
+| Any service reading the catalog | 300 ms, of which 100 ms to connect | Reads answer in tens of milliseconds ({NFR-PERF-001}); one that takes longer is failing
+| A database statement behind such a read | 200 ms | Shorter than the read it serves
+| A database statement of a message handler or of a task | 2 s | Nobody waits; a longer statement is a defect or a lock
+| Obtaining a database connection | 100 ms for a request, 500 ms for a message | A service whose pool is exhausted should refuse, not queue
+| The web gateway calling the identity provider | 2 s | Renewing a token must not hold a request
+| A call to the payment provider | 10 s | A slow answer inside it is accepted: the order deadline, not this limit, bounds what a customer waits ({UC-ORD-001})
+| A call to the e-mail provider | 5 s | Nobody waits
 |===
 
-A limit is always shorter than the limit of the caller above it, so that the caller is the one that decides what to answer.
+Each limit contains the limits of what it calls, retries included, so that the caller is always the one that decides what to answer.
 
 .Settings by call
-[cols="4,3,4,4,5", options="header"]
+[cols="4,3,4,3,6", options="header"]
 |===
 | Call | Retries | Circuit breaker | Concurrent calls | When it fails
-| Cart to catalog: product references | 1, on a connection failure or a `503` | Opens at 50 % of failures over 20 calls; stays open 10 s | 20 per replica | The cart is returned with the last known prices, marked as possibly outdated; no checkout ({UC-CART-002})
-| Order to cart and to catalog, at checkout | 1, same conditions | Same | 20 per replica | The checkout is refused with {ERR-PLT-008}; nothing was created
+| Cart to catalog: product references | 1, on a connection failure only, inside the 300 ms | Opens at 50 % of failures over 20 calls; stays open 10 s | 20 per replica | The cart is returned with the last known prices, marked as possibly outdated; no checkout ({UC-CART-002})
+| Order to cart and to catalog, at checkout | 1, same condition, inside each limit | Same | 20 per replica | The checkout is refused with {ERR-PLT-008}; nothing was created
 | Inventory to catalog, first stock of a SKU | None | Same | 5 per replica | The adjustment is refused and can be made again ({UC-INV-001})
-| Payment to provider: charge | 2, with the same reference, 200 ms then 400 ms, randomized | Opens at 50 % over 20 calls; stays open 30 s | 10 per replica | The payment is recorded as unknown; the saga cancels it ({SC-ORD-005}). While the circuit is open, charges are answered "unknown" at once ({UC-PAY-001})
-| Payment to provider: cancel, refund | 2, same | Shared with the charge | Shared | Cancellation: "unknown" again, then a person at the review deadline ({SC-ORD-015}). Refund: reported as failed; the order goes under review ({SC-ORD-013})
-| Notification to e-mail provider | None in the call; the message is redelivered | Opens at 50 % over 10 calls; stays open 60 s | 5 per replica | The message comes back with growing delays; after the last attempt the e-mail is recorded as not sent and an alert is raised ({FR-NOT-003})
-| Web gateway to a service | None | None: the gateway forwards what the service answers | Bounded by its own limits | The service's answer, or {ERR-PLT-008} if it is unreachable
-| Any service to the identity provider, for signing keys | 2 | None | – | A running replica keeps the keys it has; a replica that cannot obtain them is not ready and receives no traffic
+| Web gateway to the identity provider: sign-in, token renewal | 1 | Opens at 50 % over 10 calls; stays open 10 s | – | The session is kept; the request is answered {ERR-IAM-001} (document 05-04)
+| Payment to provider: charge | 2, with the same reference, after 200 ms then 400 ms, randomized | Opens at 50 % of failures or of calls slower than the limit, over 20 calls; stays open 30 s | 10 per replica | The payment is recorded as unknown; the saga cancels it ({SC-ORD-005}). While the circuit is open, charges are answered "unknown" at once ({UC-PAY-001})
+| Payment to provider: cancellation | 2, same | Shared with the charge | Shared | Nothing is answered: the request is left unacknowledged and comes back with growing delays until the provider answers. The order is then settled by itself; if that takes longer than the review delay, it is shown under review meanwhile ({SC-ORD-015})
+| Payment to provider: refund | 2, same | Shared | Shared | Reported as failed; the order goes under review and an administrator retries ({SC-ORD-013})
+| Notification to e-mail provider | None in the call; the message is redelivered | Opens at 50 % over 10 calls; stays open 60 s | 5 per replica | The service counts its own attempts. At the eighth failure it records the e-mail as not sent, acknowledges the message and raises the alert ({FR-NOT-003}): the message never becomes a dead letter
+| Web gateway to a service | None | None: the gateway forwards what the service answers | Bounded by its own limits | The answer of the service; {ERR-PLT-008} if the service refuses the connection; {ERR-PLT-011} if the answer does not come in time
+| Any service to the identity provider, for signing keys | 2 | None | – | A running replica keeps the keys it has; a replica that never obtained them is not ready and receives no traffic
 |===
+
+A provider that cannot be reached is treated in two ways, on purpose.
+A charge is answered "unknown" at once, because a customer is waiting and the order deadline must be able to decide.
+A cancellation waits and is tried again, because nobody is waiting for it and it must not be lost: it is what will settle the order.
+
+plantuml::diagrams/circuit-breaker.puml[format=svg, align=center, pdfwidth=70%]
+
+.The three states of a circuit breaker
+[%unbreakable, cols="3,6,6", options="header"]
+|===
+| State | Calls | Leaves it when
+| Closed | Pass, and are counted | The share of failures, or of calls slower than the limit, reaches the threshold over the last calls
+| Open | Are refused at once, without reaching the dependency | The waiting time has passed
+| Half-open | Three trial calls pass; the others are refused | The three succeed: closed. One fails: open again
+|===
+
+Each change of state is a log line and a metric (document 05-03).
 
 .Rules for retries
 [%unbreakable, cols="4,11", options="header"]
@@ -128,7 +152,7 @@ A limit is always shorter than the limit of the caller above it, so that the cal
 | Subject | Choice
 | Pool | Small and fixed per replica (document 04-04). With virtual threads it is the bulkhead of the service: at most that many requests work on the database at once ({ADR-PLT-003}).
 | Exhaustion | A request that cannot get a connection in time is refused with {ERR-PLT-008}; a message is left for redelivery.
-| Failover | During a failover every statement fails for about a minute. Requests are refused cleanly, messages wait, and the readiness of the pods turns false until the database answers again.
+| Failover | During a failover every statement fails for about a minute. Requests are refused with {ERR-PLT-008}, messages are left for redelivery, and pods stay in place: everything resumes when the database answers.
 |===
 
 == Asynchronous processing
@@ -180,7 +204,7 @@ What strategy makes the most frequent disturbance of all — our own deployments
 [cols="4,11", options="header"]
 |===
 | Mechanism | Rule
-| Readiness | A pod receives traffic and messages only when it can do its work: database reachable, signing keys obtained, relay started. Readiness reflects the pod's own dependencies.
+| Readiness | A pod receives traffic and messages only once it has what it needs to start working: signing keys obtained, relay started, a first connection to the database made. After that, readiness says only whether this pod, by itself, can work. A dependency that every replica shares — the database — does not make them unready when it fails: removing all replicas at once would replace a clear refusal by no answer at all.
 | Liveness | Says only "this process is stuck". It never looks at a dependency: a database outage must not restart every pod.
 | Startup | A separate check gives a slow start the time it needs without weakening the other two.
 | Shutdown | A pod asked to stop first leaves the load balancer and stops pulling messages, finishes what it has in hand within a grace period, then exits ({NFR-REL-004}). The grace period is longer than the longest request and the longest message handling.
@@ -206,12 +230,12 @@ What strategy answers "what happens if…" before the question is asked at three
 | Failure | Automatic reaction | For the customer | Proven by
 | A pod of a service dies | The other replica serves; a new pod starts; messages it held are redelivered | Nothing, or one request to repeat | Instance-kill test
 | A zone is lost | Replicas in the other zone serve; the database fails over; pods are rescheduled | A minute of refusals during the failover | Zone test in the integration environment
-| The database fails over | Requests refused, messages wait, pods not ready, then everything resumes | A minute of {ERR-PLT-008} | Failover drill
-| The payment provider is down | Circuit opens; charges answered "unknown"; payments canceled when the provider returns | Orders rejected as timed out, uncharged, or shown under review | {SC-ORD-005}, {SC-ORD-015}
+| The database fails over | Requests refused, messages wait, then everything resumes | A minute of {ERR-PLT-008} | Failover drill
+| The payment provider is down | The circuit opens; charges are answered "unknown" at once; the cancellation that follows each of them waits and is tried again until the provider answers | Orders are rejected as timed out, uncharged, as soon as the provider is back; they are shown under review meanwhile if that takes longer than the review delay | {SC-ORD-005}, {SC-ORD-015}
 | The payment service is down | Requests wait; nothing is charged past the deadline | The same | {SC-ORD-016}
 | The inventory is down | Requests wait; deadlines decide | Unpaid orders rejected; paid orders confirmed late | {SC-ORD-004}, {SC-ORD-011}
 | The e-mail provider is down | Redelivery, then recorded as not sent, alert | No e-mail; the order page tells the truth | {FR-NOT-003}
-| The identity provider is down | Running services keep validating tokens | Nobody can sign in; browsing works | Resilience test
+| The identity provider is down | Running services keep validating tokens; renewals fail; sessions are kept | Nobody can sign in; within five minutes signed-in users can only browse, until it returns | Resilience test
 | A message cannot be handled | Ten attempts, then its dead-letter topic and an alert; the saga's deadline hands the order to a person | The order is under review | Poison-message test
 | A burst of traffic | Rate limits at the entry; replicas added; bulkheads refuse the excess | Some requests told to retry | Load test (document 07-04)
 | A faulty version is deployed | Readiness fails, or the error rate rises: the rollout stops and is rolled back | Limited to the share of traffic exposed | Delivery pipeline (document 06-05)

@@ -68,6 +68,7 @@ What strategy lets a client guess an address and the meaning of a status code wi
 | `428` | A change that requires a version was sent without one.
 | `429` | Too many requests. The answer says when to try again.
 | `503` | A service that this request needs is unavailable. Nothing was changed; the answer says when to try again.
+| `504` | The answer did not come in time. The request may or may not have been carried out: the client asks again, with the same identifier for what it creates.
 |===
 
 A status code is never `200` with an error inside, and never `500` for something the caller could have avoided.
@@ -144,7 +145,7 @@ What strategy makes a double click, a retry after a time-out and two administrat
 | `GET`, `PUT`, `DELETE` | Idempotent by definition, and implemented so.
 | Creating an order | The storefront generates a checkout identifier when the review is shown, and sends it with the order. The same identifier always returns the same order ({FR-ORD-009}).
 | Every other `POST` that creates something | Carries an identifier chosen by the client for what it creates: an adjustment of stock, for instance. A repeated request returns the first result.
-| Commands on an order | A cancellation, a shipment, a decision asked twice returns the order in its current state; nothing is done twice.
+| Commands on an order | A cancellation or a fulfillment step asked again when it is already done returns the order in its current state; nothing is done twice. A decision on an order that is no longer under review is refused ({ERR-ORD-006}): the administrator reloads the order and sees its outcome.
 |===
 
 .Concurrent changes

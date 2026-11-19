@@ -1,6 +1,6 @@
 = Security Architecture: Who May Do What, and How Each Layer Enforces It
 :doc-id: 05-04
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: What is protected and against whom, sign-in and sessions, authorization in services, protection of data and secrets, identities of workloads, network controls, audit and security testing.
@@ -63,9 +63,10 @@ plantuml::diagrams/signin-bff.puml[format=svg, align=center]
 | Clients | One: the web gateway, a confidential client with a secret. The browser application is not a client ({ADR-PLT-018}).
 | Flow | Authorization code, with a proof of the challenge. No other flow is enabled.
 | Roles | `CUSTOMER` and `ADMIN`. A registration gives `CUSTOMER` and nothing else; `ADMIN` is granted by an operator, never by a screen of the store ({FR-IAM-002}).
-| Registration | On the pages of the identity provider, with verification of the e-mail address and its password policy ({UC-IAM-001}).
+| Registration | On the pages of the identity provider, under its password policy. A new customer can sign in at once ({UC-IAM-001}); verifying the e-mail address first is a setting of the provider that this release does not use.
 | Repeated failures | Detected by the identity provider, which slows further attempts on the account. The message never says which of the address or the password was wrong ({FR-IAM-007}).
-| Administrators | A second factor is required at sign-in.
+| Second factor | None in this release, for customers and administrators alike: a decision of the product owner on 2026-11-19. An administrator account therefore rests on its password, on the slowing of repeated failures and on the audit of what it does. A second factor is a setting of the identity provider and can be required later without any change of code.
+| Where it is reached | On a host name of its own, one per environment, distinct from that of the store: a script running in a page of the store is on another origin and cannot read what the identity provider answers. Only the addresses of sign-in, registration and sign-out of the realm of the environment are routed from outside; the administration console and the administration realm are not. The clients that the product creates by default for browsers are disabled.
 | Tokens | Access tokens live 5 minutes. Refresh tokens are single-use: each renewal replaces the previous one, and a reused one ends the session.
 | Session at the provider | Ends after 30 minutes without activity, and after 10 hours whatever the activity.
 | Sign-out | Ends the session at the web gateway and at the identity provider. A session ended at the provider is ended at the gateway too.
@@ -88,7 +89,8 @@ What strategy keeps a session safe when the browser around it cannot be trusted?
 | Store | Sessions, with their tokens, are kept in the database of the web gateway, so that every replica finds them and a restart loses none. Tokens are encrypted before they are stored, with a key from the secret manager.
 | New identifier | The session identifier changes at sign-in: one obtained before sign-in is worthless after.
 | Lifetime | The session ends with that of the identity provider. An expired session answers {ERR-PLT-002}; the storefront sends the person to sign in again and brings them back where they were.
-| Token renewal | Done by the web gateway, shortly before the access token expires. The browser never sees it.
+| Token renewal | Done by the web gateway, shortly before the access token expires; the browser never sees it. It is done once per session: the gateway locks the session in its store, renews, saves the new tokens and releases the lock. A request that arrived meanwhile, on this replica or on another, waits for the lock, reads the session again and uses the tokens just saved. A refresh token is therefore never presented twice.
+| Identity provider unreachable | A renewal that cannot be made does not end the session. Requests that need a token are answered {ERR-IAM-001} until the provider answers again, and so is the sign-in address. Browsing the catalog needs no token and keeps working.
 | Forged requests | A cookie is sent automatically, so every request that changes something must also carry an anti-forgery token, given to the storefront in a separate cookie and returned in a header. A request without it is refused with {ERR-PLT-010}.
 | Headers | The web gateway sets, on every answer: strict transport security; a content security policy that allows scripts from the store only; no framing by other sites; no guessing of content types; a restrained referrer.
 | What it forwards | The access token, and the trace context. Never the session cookie, never a header claiming an identity.
@@ -207,7 +209,7 @@ What strategy limits what an attacker gains by taking over one pod?
 |===
 | Subject | Rule
 | One identity per service and per environment | Each deployment runs under its own Kubernetes service account, bound to its own Google identity. No key file exists.
-| Rights | Granted on individual resources, never on the project: its database, its topics and subscriptions, its secrets, the right to write logs, metrics and traces. Nothing else.
+| Rights | Granted on individual resources: its database, its topics and subscriptions, its secrets. Three rights exist only at the level of the project and give access to no data: connecting to the database instance, sending traces, sending metrics (document 06-02). Nothing else.
 | Database | A database account per service, mapped to that identity, with rights on its own database and no right to change the schema (document 04-04).
 | People | Nobody has standing rights on production data. Deployment is done by the pipeline; an emergency access is granted for a limited time, and recorded.
 |===
@@ -218,14 +220,20 @@ What strategy limits what an attacker gains by taking over one pod?
 | Subject | Rule
 | Exposed | The load balancer, and nothing else. Nodes and pods have private addresses.
 | Firewall at the edge | Managed rules against common web attacks; limits on the rate of requests by address; a stricter limit on the sign-in and checkout addresses ({NFR-SEC-008}).
-| Inside a namespace | Denied by default. Allowed: the web gateway to the four services with a REST interface; the cart, the order and the inventory services to the catalog; the order service to the cart; every service to the identity provider.
-| Between namespaces | Denied. The test environment cannot reach the pods of production.
-| Outgoing | To the managed services of Google Cloud, to the database, and to the two providers. A pod cannot open a connection to an arbitrary address.
+| Inside a namespace | Denied by default. Allowed: the web gateway to the four services with a REST interface; the cart, the order and the inventory services to the catalog; the order service to the cart; the web gateway and every service to the identity provider; every pod to the name service of the cluster.
+| Into a namespace from outside it | Allowed: the load balancer and its health checks to the web gateway and to the identity provider; the collection of metrics to the management port of every pod. Nothing else.
+| Between namespaces | Denied, with one exception: every pod may send its traces to the collector. The test environment cannot reach the pods of production.
+| Outgoing | To the managed services of Google Cloud, to the database — for the services, the web gateway and the identity provider — and to the two providers. A pod cannot open a connection to an arbitrary address.
 | Management port | Health and metrics are reachable by the cluster's own components only.
 |===
 
-A pod that is taken over therefore holds one service's rights: it can corrupt that service's data and publish that service's messages.
-It cannot read another database, publish as another service, reach another environment, or call out to the internet.
+A pod that is taken over holds one service's rights: it can corrupt that service's data and publish that service's messages.
+It cannot read another database, publish as another service, or reach another environment.
+
+Two limits of that statement are accepted and named.
+Such a pod also sees the tokens of the people it is serving, for the five minutes they live, and can present them to the services it is allowed to call: a pod of the inventory sees the tokens of administrators.
+That is the price of relaying the person's token ({ADR-PLT-021}); narrowing each token to the service called is what token exchange would bring.
+And the restriction on outgoing connections does not cover the Google APIs, which answer for every project: stopping data from leaving that way needs a perimeter around the services of the project, listed as an evolution in document 06-02.
 
 == Common attacks and their answers
 
@@ -242,7 +250,7 @@ What strategy checks the design against the attacks that actually happen, one by
 | A script injected into a page | The front-end framework escapes what it displays; the content security policy forbids scripts from elsewhere; product descriptions are plain text
 | A forged request from another site | The session cookie is not sent across sites; the anti-forgery token is required
 | A stolen token | Tokens never reach the browser; access tokens live 5 minutes; refresh tokens are single-use
-| Guessing passwords | Slowed by the identity provider; a second factor for administrators; one message for every failure
+| Guessing passwords | Slowed by the identity provider; one message for every failure. No second factor in this release: see "Sign-in"
 | Making the server call an address chosen by the attacker | No interface takes an address as input; outgoing connections are restricted
 | A hostile message or body | Strict decoding against the schema; bounded sizes; no object is built from a type named by the input
 | A vulnerable dependency or image | Scanned at every build; critical and high findings block the release ({NFR-SEC-005})

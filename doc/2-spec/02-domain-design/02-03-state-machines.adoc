@@ -187,7 +187,7 @@ refused:: The request is refused, and the answer says why: the order is not unde
 | CNF, or REF
 
 | P11 | CAN | `PaymentOutcomeUnknown`
-| The cancellation could not be established either. Records the failure and sends nothing. Order still `PENDING`: the review deadline will decide. Order already `UNDER_REVIEW`: the saga is suspended at once.
+| The charge, still in progress when its cancellation was requested, ended without an established outcome. Records it and sends nothing: the cancellation already requested will settle the payment as soon as the provider can be reached, and the payment service keeps trying until then. Order still `PENDING`: the review deadline will call a person in if that takes too long. Order already `UNDER_REVIEW`: the saga is suspended at once.
 | CAN, or SUS
 
 | P12 | CNF | `ReservationConfirmed`
@@ -391,8 +391,8 @@ A refund that fails leaves the payment `CAPTURED`: the status always says where 
 | `PaymentCanceled`
 
 | `PENDING`, `UNKNOWN`
-| The provider is asked to cancel, with the same reference. Canceled: `CANCELED`. "Already captured": `CAPTURED`. No answer after the retries: `UNKNOWN`.
-| `PaymentCanceled`, `PaymentCaptured` or `PaymentOutcomeUnknown`
+| The provider is asked to cancel, with the same reference. Canceled: `CANCELED`. "Already captured": `CAPTURED`. No answer, or the provider cannot be reached: nothing is saved and nothing is answered; the request is left unacknowledged and comes back with growing delays until the provider answers (document 03-06).
+| `PaymentCanceled` or `PaymentCaptured`
 
 | `CAPTURED`
 | Nothing. A captured payment is never canceled ({FR-PAY-005}).

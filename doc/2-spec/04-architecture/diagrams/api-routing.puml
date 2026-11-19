@@ -13,7 +13,7 @@ component "Order service" as ORD
 component "Inventory service" as INV
 
 B --> LB : HTTPS
-LB --> KC : /auth/**\nsign-in and\nregistration pages
+LB --> KC : host name of the\nidentity provider:\nsign-in pages only
 LB --> GW : everything else
 GW --> CAT : /api/v1/products/**\n/api/v1/categories/**\n/api/v1/admin/products/**
 GW --> CART : /api/v1/cart/**\n/api/v1/favorites/**

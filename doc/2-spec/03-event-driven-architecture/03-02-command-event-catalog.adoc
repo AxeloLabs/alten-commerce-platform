@@ -85,7 +85,7 @@ The complete tables of answers, status by status, are in document 02-03.
 | [[CMD-INV-004]]CMD-INV-004 | `ReleaseReservation` | Inventory | Order identifier, reason | {EVT-INV-005}; {EVT-INV-003} when the stock was already taken
 | [[CMD-INV-005]]CMD-INV-005 | `ReturnStock` | Inventory | Order identifier | {EVT-INV-006}
 | [[CMD-PAY-001]]CMD-PAY-001 | `ChargePayment` | Payment | Order identifier, amount, currency, payment token, instant after which the charge must not be made | {EVT-PAY-001}, {EVT-PAY-002} or {EVT-PAY-003}; {EVT-PAY-004} when it arrives too late
-| [[CMD-PAY-002]]CMD-PAY-002 | `CancelPayment` | Payment | Order identifier | {EVT-PAY-004}; {EVT-PAY-001} or {EVT-PAY-002} when the charge had an outcome after all; {EVT-PAY-003} when nothing can be established
+| [[CMD-PAY-002]]CMD-PAY-002 | `CancelPayment` | Payment | Order identifier | {EVT-PAY-004}; {EVT-PAY-001} or {EVT-PAY-002} when the charge had an outcome after all. No answer while the provider cannot be reached: the request is tried again until it can
 | [[CMD-PAY-003]]CMD-PAY-003 | `RefundPayment` | Payment | Order identifier | {EVT-PAY-005} or {EVT-PAY-006}
 |===
 

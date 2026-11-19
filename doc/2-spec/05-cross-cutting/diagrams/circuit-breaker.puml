@@ -1,0 +1,15 @@
+@startuml
+title Circuit breaker around a dependency
+
+hide empty description
+
+state "CLOSED\ncalls pass and are counted" as CLOSED #C8E6C9
+state "OPEN\ncalls are refused at once" as OPEN #FFCDD2
+state "HALF-OPEN\nthree trial calls pass" as HALF #FFF8E1
+
+[*] --> CLOSED
+CLOSED --> OPEN : failures or slow calls\nreach the threshold
+OPEN --> HALF : the waiting time has passed
+HALF --> CLOSED : the three trial calls succeed
+HALF --> OPEN : one trial call fails
+@enduml

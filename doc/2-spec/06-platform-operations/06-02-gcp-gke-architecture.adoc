@@ -23,7 +23,7 @@ The platform uses managed services wherever one exists, so that the only thing t
 | Cluster | GKE Autopilot | Runs the web gateway, the six services and the identity provider, in three namespaces
 | Entry point | Global external Application Load Balancer, declared through the Gateway API | One public address; TLS; routing by host name ({ADR-PLT-019})
 | Firewall at the edge | Cloud Armor | Rules against web attacks; rate limits (document 05-04)
-| Certificates | Certificate Manager | Issued and renewed automatically for the three host names
+| Certificates | Certificate Manager | Issued and renewed automatically for the host names of the three environments
 | Names | Cloud DNS | The public zone of the store
 | Databases | Cloud SQL for PostgreSQL {v-postgresql} | One instance, highly available, private address ({ADR-PLT-012})
 | Messages | Pub/Sub | Topics, subscriptions, schemas (document 03-05)
@@ -76,7 +76,7 @@ plantuml::diagrams/network.puml[format=svg, align=center, pdfwidth=78%]
 [%unbreakable, cols="4,4,7", options="header"]
 |===
 | Address | Kind | What it is
-| `203.0.113.20` | Public, reserved, global | The store: the three host names resolve to it
+| `203.0.113.20` | Public, reserved, global | The store: the host names of the three environments resolve to it
 | `203.0.113.10` | Public, reserved, regional | The address our calls to providers come from: what a provider would put on its allow list
 | `10.40.0.3` | Private | The database instance
 | `10.30.0.10` | Private | The name service of the cluster
@@ -90,7 +90,7 @@ Private ranges are final.
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Name | Resolves to
-| The host name of the store, and those of `integration` and `test` | The public address. The load balancer routes on the host name to the namespace of that environment.
+| For each environment, the host name of the store and that of its identity provider | The public address. The load balancer routes on the host name: the store to the web gateway of that environment, the other to the sign-in pages of its identity provider and to nothing else of it (document 05-04).
 | `<service>.<namespace>.svc.cluster.local` | The service of that name in that environment: how the web gateway reaches a service, and a service another. A name never crosses a namespace.
 | The Google APIs | The private-access range: calls to Pub/Sub, the secret manager and telemetry never leave Google's network
 |===
@@ -204,7 +204,7 @@ What strategy sets up each managed service so that it is private, recoverable an
 | Pub/Sub | Per environment: 5 topics with their schema, 7 subscriptions, 7 dead-letter topics with their inspection subscriptions (document 03-05). Storage in the region.
 | Secret Manager | One secret per need and per environment; versions; access per identity
 | Artifact Registry | One repository in the region; tags cannot be moved once pushed; images scanned on arrival
-| Certificate Manager | One certificate for the three host names, validated through the DNS zone
+| Certificate Manager | One certificate for the six host names, validated through the DNS zone
 | Cloud Armor | One policy on the entry point: managed rules, rate limits, a stricter limit on sign-in and checkout
 | Cloud NAT | One reserved address; used by the payment and notification services only
 | Firestore | One database in native mode, used by the contract tests of `test`; none in production as long as PostgreSQL is the store
@@ -257,6 +257,7 @@ What strategy names today the limits of this layout and the step that removes ea
 | One region | A second region for production, the database replicated, the entry point already global | When an outage of a region costs more than a second region
 | Traffic between pods is not encrypted | Transparent encryption between nodes, or a service mesh | When a rule or an audit requires it
 | Encryption keys are managed by Google | Keys managed by us | When a rule or an audit requires it
+| A pod can reach the Google APIs of any project | A service perimeter around the project | Before real customer data
 | Engineers reach the control plane from anywhere, authenticated | Access from a private network only | With the company layout
 |===
 

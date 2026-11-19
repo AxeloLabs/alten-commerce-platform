@@ -80,7 +80,7 @@ An order has one for its placement and, if it is canceled, another for its cance
 | Answers | An event that answers a command carries the saga identifier of that command. The order service hands the event to that saga and to no other: the refund asked by a cancellation is never read by the placement saga of the same order.
 | Database | A column of the saga; of the reservation, for the saga that asked for it; of the payment, for the placement saga
 | Logs | The field `saga_id` of every log line written while handling a message of the saga
-| Traces | The attribute `saga.id` of every span; a saga is usually several traces, one per message exchange, and this attribute links them
+| Traces | The attribute `saga.id` of every span. The placement of an order is one trace, continued from message to message; a deadline that fires or an administrator who acts starts another, and this attribute links them all
 | Payment provider | The reference of a payment is derived from the identifier of the placement saga. The charge, its cancellation and its refund use that same reference, whichever saga asks, so that the provider itself refuses to charge or refund twice.
 | Administration | Shown with an order under review, so that support and engineering talk about the same thing
 |===
@@ -394,8 +394,8 @@ plantuml::diagrams/sc-ord-014.puml[format=svg, align=center]
 |===
 | Trigger | The payment provider answers nothing: neither the charge nor its cancellation.
 | Ends | Saga `SUSPENDED`, order `UNDER_REVIEW`; then, here, `REJECTED` with `ADMIN_DECISION` once the cancellation gets through.
-| Guarantee | The saga never guesses. Without a "captured" or a "canceled" from the provider it neither confirms nor rejects; at the review deadline a person takes over, and even that person's rejection goes through the cancellation of the payment first. Nothing is released before the payment is settled. Had the provider answered "already captured" to that cancellation, the saga would have refunded the payment before rejecting: the administrator's decision stands, and the order is never confirmed against it.
-| Transitions | P07, P11, P16, P19, P08. With a capture discovered: P19, P10, P14
+| Guarantee | The saga never guesses. Without a "captured" or a "canceled" from the provider it neither confirms nor rejects. The cancellation it asked for is not dropped: the payment service keeps it and tries again, with growing delays, until the provider answers, and the order is then settled by itself. At the review deadline a person is called in as well, and even that person's rejection goes through the cancellation of the payment first. Nothing is released before the payment is settled. Had the provider answered "already captured" to that cancellation, the saga would have refunded the payment before rejecting: the administrator's decision stands, and the order is never confirmed against it.
+| Transitions | P07, P16, P19, P08. Without an administrator: P07, P16, then P08 from `SUSPENDED`. With a capture discovered: P19, P10, P14
 | Acceptance | {BDD-ORD-027} {BDD-ORD-033}
 |===
 

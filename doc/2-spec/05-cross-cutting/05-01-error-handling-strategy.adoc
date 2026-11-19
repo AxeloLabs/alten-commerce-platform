@@ -1,6 +1,6 @@
 = Error Handling Strategy: From the Rule That Says No to the Message the Customer Reads
 :doc-id: 05-01
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The kinds of error, where each is handled, the form of an error answer, the catalog of error codes, and how errors are shown, logged and tested.
@@ -53,9 +53,26 @@ What strategy gives each layer one job with errors, so that none is handled twic
 | Shared starter | One handler turns every result and every exception into the same error answer, with the code and the trace identifier. An exception nobody expected becomes the generic unexpected error, and its detail goes to the log, never to the answer.
 | Web gateway | Passes the error answers of services through unchanged. Produces its own for what it decides: no session, anti-forgery check, service unreachable.
 | Storefront | Chooses what to show from the code, never from the text or the status alone. Shows the reference.
+| Container and platform | A service that cannot start or run says why and stops; the platform keeps the previous version serving. See the table below.
 |===
 
 plantuml::diagrams/error-flow.puml[format=svg, align=center]
+
+.Errors of the container and of the platform
+[cols="5,7,5", options="header"]
+|===
+| Failure | What happens | Seen by
+| A setting is missing or invalid, a secret cannot be read | The service refuses to start, with a log line naming the setting — never its value. The pod never becomes ready; the rollout stops and the previous version keeps serving. | The delivery pipeline; an alert on the rollout
+| A migration fails | The deployment stops before any pod of the new version starts | The delivery pipeline
+| The image cannot be pulled, or is not signed | The pod is not created; the rollout stops | The delivery pipeline
+| A container exceeds its memory | It is killed and restarted by the platform; the messages it held are redelivered | The alert on restarts (document 05-03)
+| A container fails again and again at startup | The platform restarts it with growing delays; the other replica serves | The same alert
+| A pod is not ready | It receives no traffic and no message | The dashboard of the service
+| A node is lost | Its pods are started again elsewhere | Nobody, if two replicas were running
+|===
+
+A service fails fast and loudly at startup rather than half-working: a wrong configuration is found by the rollout, not by a customer.
+The Kubernetes side of these behaviors is in document 06-03, the procedures in document 06-07.
 
 == The error answer
 
@@ -92,6 +109,18 @@ Every refusal and every failure of a REST interface is answered in the standard 
 | A password, a token, a card datum | {NFR-SEC-007}
 |===
 
+.Answers that do not come from a service
+[%unbreakable, cols="4,5,7", options="header"]
+|===
+| Answer | Comes from | What the storefront does
+| `429`, or `403`, without a body | The firewall at the edge | Shows the message of {ERR-PLT-007}, or a general refusal. No reference exists.
+| `502`, `503` or `504` without a body | The load balancer, when no pod of the web gateway answers | For a read: "temporarily unavailable, try again". For a request that changes something: the outcome is unknown, as for {ERR-PLT-011}.
+| Anything else without a code | – | Shown as the unexpected error
+|===
+
+The storefront therefore never assumes that an error has a body.
+It branches on the code when there is one, on the status otherwise, and for a request that changes something it never tells the person that nothing happened unless a service said so.
+
 == Error codes
 
 .Strategy question
@@ -109,7 +138,7 @@ A field that is merely invalid has no code of its own: it is reported under the 
 [cols="3,7,2,7", options="header"]
 |===
 | Code | Situation | Status | What the person is told to do
-| [[ERR-PLT-001]]ERR-PLT-001 | The request is malformed, a field is invalid, or a parameter is unknown | 400 | Correct the fields listed
+| [[ERR-PLT-001]]ERR-PLT-001 | The request is malformed: a field is invalid, a parameter is unknown, or the method, the size or the format is not accepted | 400; 405, 413, 415 | Correct the fields listed
 | [[ERR-PLT-002]]ERR-PLT-002 | No valid session or token | 401 | Sign in again
 | [[ERR-PLT-003]]ERR-PLT-003 | The role does not allow the function. The refusal is recorded. | 403 | Nothing: the function is not available to this account
 | [[ERR-PLT-004]]ERR-PLT-004 | The resource does not exist, or is not visible to the caller | 404 | Check the address or the number
@@ -119,13 +148,14 @@ A field that is merely invalid has no code of its own: it is reported under the 
 | [[ERR-PLT-008]]ERR-PLT-008 | A service this request needs is unavailable. Nothing was changed. | 503 | Try again in a moment
 | [[ERR-PLT-009]]ERR-PLT-009 | Unexpected error | 500 | Try again; if it persists, give the reference to support
 | [[ERR-PLT-010]]ERR-PLT-010 | The anti-forgery check failed | 403 | Reload the page and try again
+| [[ERR-PLT-011]]ERR-PLT-011 | The answer did not come in time: the request may or may not have been carried out | 504 | Nothing by hand: the storefront asks again. A checkout is sent again with the same checkout identifier, and gives the one order, created once ({FR-ORD-009})
 |===
 
 .Identity
 [%unbreakable, cols="3,7,2,7", options="header"]
 |===
 | Code | Situation | Status | What the person is told to do
-| [[ERR-IAM-001]]ERR-IAM-001 | The identity provider is unavailable: nobody can sign in or register for now | 503 | Try again later; browsing keeps working
+| [[ERR-IAM-001]]ERR-IAM-001 | The identity provider is unavailable. Answered by the web gateway: at the sign-in address, and to a request whose token cannot be renewed. The session is kept. | 503 | Try again later; browsing keeps working
 |===
 
 Wrong credentials, an address already registered and a password that breaks the policy are answered by the pages of the identity provider, under its own rules ({FR-IAM-006}, {FR-IAM-007}).
@@ -231,6 +261,7 @@ What strategy turns a code into a sentence that helps?
 | Code | On screen
 | {ERR-ORD-003} | "The price of Mechanical keyboard changed from 89.90 to 94.90. Review your cart and confirm again. Nothing was charged."
 | {ERR-PLT-008} | "We cannot take your order right now. Nothing was charged. Please try again in a moment. Reference: 4bf92f35."
+| {ERR-PLT-011} | "We are checking whether your order went through…" — then the order, or the cart again if no order exists. Never "nothing was charged" on a guess.
 | {ERR-CART-002} | "You can add up to 3 more of this product."
 | {ERR-PLT-009} | "Something went wrong on our side. Please try again. If it happens again, give this reference to support: 4bf92f35."
 |===

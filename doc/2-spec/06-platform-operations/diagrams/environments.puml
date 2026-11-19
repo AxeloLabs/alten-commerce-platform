@@ -5,7 +5,7 @@ skinparam componentStyle rectangle
 skinparam packageStyle rectangle
 
 package "Google Cloud project" #F4F7F9 {
-  component "Load balancer\none address, three host names" as LB #ECEFF1
+  component "Load balancer\none address; per environment, a host name\nfor the store and one for sign-in" as LB #ECEFF1
 
   package "GKE Autopilot cluster" #FFFFFF {
     package "namespace test" #E3F2FD {
