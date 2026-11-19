@@ -288,7 +288,7 @@ The policy does not rely on the agent resisting; it makes sure that obeying a pl
 | When | Check
 | Before a command runs | Refuses the forbidden list of document 06-06, generated from that list; refuses a command addressed to a cluster context other than `test`
 | Before a file is written | Refuses a write outside the working copy; asks for pipeline definitions, thresholds and harness configuration
-| Before a commit | Runs the secrets scan on what is staged
+| Before a commit | Runs the secrets scan on what is staged, then checks that the message follows Conventional Commits (document 08-05)
 | When the session stops | Nothing is pushed or published automatically: a session never ends with a side effect outside the workstation
 |===
 

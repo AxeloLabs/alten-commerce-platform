@@ -35,6 +35,7 @@ Nothing else stands between a commit and a running pod: no pipeline server to ho
 | Subject | Rule
 | Main branch | Always deployable. Protected by the rules of the repository, for everyone including its owner: a pull request is required, the checks of the pull request stage are required, no forced push, no deletion, no bypass. No count of approvals is required: the repository has one owner, who cannot approve their own pull request. The review is that person's reading before the merge, and the gates are what blocks ({ADR-PLT-035}).
 | Work | Short-lived branches, one pull request per change, merged within days.
+| Merge | By squash: the title of the pull request becomes the message on the main branch, and it follows Conventional Commits (document 08-05). The commits inside a pull request are free.
 | Release | Each merge that changes a deployable part creates a release: a version made of the date and a sequence number, tied to the commit, with the digests of its images and the versions of its charts.
 | Pipeline definitions | YAML files of the repository, reviewed like code; their owners are named, and a change to them needs their approval.
 |===
@@ -55,6 +56,7 @@ plantuml::diagrams/pipeline-pr.puml[format=svg, align=center, pdfwidth=80%]
 |===
 | Stage | What runs | Tools | Blocks when
 | Secrets | Scan of the commits | gitleaks {v-gitleaks} | Anything that looks like a secret ({NFR-SEC-004})
+| Title | The title of the pull request | A script of the repository, no tool added | The title is not `type(scope): subject`, with a type from the list of the instruction file (document 08-05)
 | Contracts | Style; compatibility with the main branch | Spectral {v-spectral}, oasdiff {v-oasdiff}, buf {v-buf}, AsyncAPI CLI {v-asyncapi-cli} | A rule of documents 03-04 or 04-05 is broken; a change breaks a consumer ({NFR-MAINT-003})
 | Build | Formatting, compilation with static checks, unit tests | Maven {v-maven}, Spotless {v-spotless}, Error Prone {v-error-prone}, NullAway {v-nullaway}, JUnit {v-junit} | A file is not formatted; a warning; a failing test ({NFR-MAINT-005})
 | Architecture | The rules of document 04-03 | ArchUnit {v-archunit}, Checkstyle {v-checkstyle} | One violation ({NFR-MAINT-002})

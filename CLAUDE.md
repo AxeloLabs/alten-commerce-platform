@@ -65,6 +65,10 @@ web gateway, Google Pub/Sub, PostgreSQL, on GKE Autopilot.
 
 - One increment at a time: a creation prompt (`CRE-…`, document `08-03`), on its own
   branch, as one pull request.
+- Commit messages follow Conventional Commits, in English: `type(scope): subject`, the
+  scope being the service or area (`order`, `catalog`, `platform-starter`, `deploy`, `doc`).
+  Types: `feat`, `fix`, `test`, `refactor`, `docs`, `build`, `ci`, `chore`. Identifiers go
+  in a footer: `Refs: UC-ORD-001, FR-ORD-003`. A pull request title follows the same form.
 - Stay in the scope the prompt gives. Do not touch `contracts/`, `platform-starter/`,
   pipeline definitions or quality thresholds unless the increment is about them.
 - No dependency outside document `04-01`, unless you report it with its reason.

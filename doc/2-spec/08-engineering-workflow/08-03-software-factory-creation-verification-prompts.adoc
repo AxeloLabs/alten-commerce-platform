@@ -191,11 +191,11 @@ The whole build passing is always implied.
 |===
 | ID | Increment | Builds, and what to read | Done when
 | [[CRE-PLT-001]]CRE-PLT-001 | Repository and build skeleton
-| The layout of document 04-03; the parent build with every version and every quality gate; the toolchain file; the build of an unprivileged, read-only image per service; the pipeline of a pull request with its build, architecture and domain stages; the instruction file of the project. Documents 04-01, 04-03, 06-03, 06-05, 08-01, 08-05.
-| An empty module passes the whole build; the pipeline answers a pull request; the mutation tool runs on the test engine, or its gate is recorded as suspended
+| The layout of document 04-03; the parent build with every version and every quality gate; the toolchain file; the build of an unprivileged, read-only image per service; the pipeline of a pull request with its title, build, architecture and domain stages; the instruction file of the project. Documents 04-01, 04-03, 06-03, 06-05, 08-01, 08-05.
+| An empty module passes the whole build; the pipeline answers a pull request, and refuses a title that does not follow Conventional Commits; the mutation tool runs on the test engine, or its gate is recorded as suspended
 | [[CRE-PLT-002]]CRE-PLT-002 | Harness
 | The shared settings, the hooks, the generator of refusals from the forbidden list of document 06-06, the rule files by folder; the procedure that creates the session account. Documents 08-02, 08-05, 06-06.
-| On the reference workstation, under the session account: the build passes with its containers; no cloud login, cluster configuration or key of the developer can be found; a command of the forbidden list is refused
+| On the reference workstation, under the session account: the build passes with its containers; no cloud login, cluster configuration or key of the developer can be found; a command of the forbidden list is refused; a commit message that does not follow Conventional Commits is refused
 | [[CRE-PLT-003]]CRE-PLT-003 | Experts, prompts and backlog tooling
 | The fourteen expert files; the workflow that runs them on a pull request, as defined on the main branch; the filled prompt of every increment, as files; the script that writes the backlog from the registry of identifiers. Documents 08-03, 08-04, 08-02.
 | The experts comment a sample pull request; every increment has its prompt file; the script, run twice against a test repository, changes nothing the second time

@@ -9,6 +9,8 @@ if (a secret found?) then (yes)
 else (no)
 endif
 fork
+  :Title of the request\nConventional Commits form;
+fork again
   :Contracts\nstyle and compatibility;
 fork again
   :Services\nformat, compile, unit tests,\narchitecture rules,\ndomain coverage and mutation;
