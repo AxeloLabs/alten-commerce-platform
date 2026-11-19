@@ -47,6 +47,8 @@ TYPES = {
     "TC": "Component tests",
     "TI": "Integration tests",
     "TE2E": "End-to-end tests",
+    "CRE": "Creation prompts",
+    "VER": "Verification prompts",
 }
 
 # (type A, type B): every A must be linked to at least one B, in either direction.
@@ -60,6 +62,12 @@ RULES = [
     ("CP", "UC"),
     ("CP", "TE2E"),
     ("SC", "TI"),
+    ("UC", "CRE"),
+    ("TU", "CRE"),
+    ("TC", "CRE"),
+    ("TI", "CRE"),
+    ("TE2E", "CRE"),
+    ("CRE", "VER"),
 ]
 
 _T = "|".join(sorted(TYPES, key=len, reverse=True))

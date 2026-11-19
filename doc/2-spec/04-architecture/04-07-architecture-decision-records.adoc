@@ -1,6 +1,6 @@
 = Architecture Decision Records: What Was Decided, Against What, and at What Price
 :doc-id: 04-07
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The register of architecture decisions of the platform, each with its context, its alternatives and its consequences.
@@ -64,6 +64,9 @@ It is marked as replaced, and a new record says what replaced it and why: the hi
 | {ADR-PLT-029} | Documentation as code | {st-approved}
 | {ADR-PLT-030} | A deployment profile for the proof of concept, destroyed on schedule | {st-approved}
 | {ADR-PLT-031} | GitHub Actions builds and delivers; Helm applies | {st-proposed}
+| {ADR-PLT-032} | The backlog lives in GitHub Issues and Projects | {st-approved}
+| {ADR-PLT-033} | AI agents work under a harness that leaves them no right on the cloud | {st-proposed}
+| {ADR-PLT-034} | The software is built by catalogued prompts and verified by independent experts | {st-proposed}
 |===
 
 Owner: {role-arch} {role-sol}
@@ -514,4 +517,52 @@ They are listed here so that the register is complete.
 | Alternatives | Cloud Deploy: a record of releases and approvals without building anything, at the price of the Skaffold configuration and of a strategy that does not fit message consumers. An agent in the cluster that pulls the charts from the repository: the cluster then gives no right to the pipeline, which is safer; it is one more component to run, to reconsider with the company layout of document 06-01.
 | Consequences | One tool and one set of definitions; nothing more to host. For the length of a job, the pipeline holds the right to change a namespace: that right is tied to the environment, to the main branch and, for production, to the approval. There is no delivery to a share of the traffic: a faulty version is contained by replacing one pod at a time, by readiness, by the verification that follows, and by the automatic return. What runs where is read in the deployment history of GitHub and in the revision history of Helm.
 | Owner | {role-devops}
+|===
+
+== Engineering workflow
+
+.Strategy question
+****
+What strategy records how the platform is built, and by whom, with the same rigor as what is built?
+****
+
+These decisions are argued in the documents of folder 08.
+
+[[ADR-PLT-032]]
+=== ADR-PLT-032 — The backlog lives in GitHub Issues and Projects
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-19 · validated by the product owner
+| Context | Epics, stories, increments of work and defects must be tracked somewhere, and linked to the identifiers of this specification. The brief suggested Jira. The repository, the pull requests and the pipeline are on GitHub.
+| Decision | The backlog is kept in GitHub Issues, organized by one GitHub Project. Issues are generated from the specification, carry its identifiers, and are closed by pull requests.
+| Alternatives | Jira: richer for portfolios, estimation and reporting across many teams; a second product, a second account, a connector to maintain between tickets and pull requests, and one more system to open to AI agents. To reconsider if an employer imposes it: the identifiers of the specification would map to tickets the same way. No tool at all: enough for one person for two days, and nothing to show of what remains.
+| Consequences | One place for code, review, delivery and backlog; agents and scripts drive it from the command line. Reporting is limited to what a project view offers. The backlog is public or private exactly as the repository is.
+| Owner | {role-swe} {role-devops}
+|===
+
+[[ADR-PLT-033]]
+=== ADR-PLT-033 — AI agents work under a harness that leaves them no right on the cloud
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | The platform is built largely by AI coding agents. An agent runs commands on its own initiative, can be wrong, and can be deceived by text it reads. A company that authorizes agents asks how they are controlled.
+| Decision | An agent works inside a harness of eight layers (document 08-02). On the workstation: a sandbox for files and network, permission rules, hooks. Outside it, and independent of it: no identity able to change a cloud resource, a cluster or the main branch. What an agent writes takes the same pull request, the same gates and the review of a person as any change.
+| Alternatives | Trusting instructions given to the agent: an instruction guides, it prevents nothing. Giving the agent the developer's own cloud rights, with confirmation prompts: one approval given without reading is enough. Tool servers for the cluster and the cloud: they add the power to change resources, where the command line under rules gives finer control (document 08-01). No agent on infrastructure at all: safe, and it gives up reviewable infrastructure code written faster.
+| Consequences | An agent cannot deploy, diagnose production or fix an incident: those stay with the pipeline and with people. A few actions interrupt the developer with a question. The harness configuration becomes code of the project, with owners, and a change to it is a security review.
+| Owner | {role-sec}
+|===
+
+[[ADR-PLT-034]]
+=== ADR-PLT-034 — The software is built by catalogued prompts and verified by independent experts
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | Asking an agent to "build the platform" produces a large change that nobody can review, on foundations nobody chose. The brief proposes to cut the work into creation prompts, and to have expert agents verify each addition.
+| Decision | The construction is a catalog of creation prompts (document 08-03), each one an increment the size of a pull request, naming what to read in the specification and which catalogued tests prove it. Cross-cutting foundations — errors, messaging, security, observability — come first, so that every later increment inherits them. Each change is verified three ways: by the deterministic gates of the pipeline, by expert agents that compare it with the specification without knowing the author's reasoning, and by a person. An expert never blocks alone; a kind of defect an expert finds twice becomes a deterministic check.
+| Alternatives | Building first and letting experts add quality afterwards, as the brief first imagined: error handling, transactions and security added to code written without them cost more than writing them first, and the experts would review code with no reference. One agent with one long prompt: no reviewable step. Experts as blocking gates: a model's judgment varies from one run to the next, and a gate that varies is ignored.
+| Consequences | The plan of construction is checked by the build of this specification: a use case that no prompt builds, or a test that no prompt delivers, fails it. The order of the prompts is constrained by the foundations. Expert reviews cost model usage on each pull request; they are run only on the changes that concern them.
+| Owner | {role-arch} {role-qa}
 |===

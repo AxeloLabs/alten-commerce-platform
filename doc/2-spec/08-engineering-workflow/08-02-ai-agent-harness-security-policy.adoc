@@ -1,0 +1,401 @@
+= AI Agent Harness and Security Policy: What an Agent May Read, Run and Reach, and Who Answers for It
+:doc-id: 08-02
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The security policy for AI coding agents on this project: the threats, the eight layers of control, what an agent may do, what it can never do, how its work is reviewed, what leaves the workstation, what is recorded, and the answers to a company's security review.
+include::../_shared/attributes.adoc[]
+
+== What a harness is
+
+.Strategy question
+****
+What strategy lets a company authorize AI agents on its code, and answer precisely when asked how they are controlled?
+****
+
+An AI coding agent is a language model that is given tools: it reads files, runs commands, calls services, and decides by itself which to use next.
+The *harness* is everything around the model that decides what those tools can touch: the files it can read, the commands it can run, the addresses it can reach, the identity it acts with, who approves, and what is recorded.
+
+The model is not what makes an agent safe or dangerous.
+The same model is harmless with a read-only view of a repository, and dangerous with an administrator's shell.
+A security review therefore asks about the harness, and this document is the answer ({ADR-PLT-033}).
+
+.Three statements the policy rests on
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Statement | Consequence
+| An agent is an untrusted, very fast contributor | It is capable and well-meaning, and it can be wrong, or deceived by what it reads. It receives the rights of a newcomer on their first day, not those of the person who launched it.
+| An instruction is not a control | A sentence in a prompt or in the project's instruction file guides an agent; it prevents nothing. Every rule that matters is enforced by a mechanism that works even if the agent ignores the sentence.
+| Nothing an agent writes reaches a user unreviewed | Its work goes through the same pipeline and the same gates as anybody's (document 06-05), and a named person merges it and answers for it.
+|===
+
+.What can go wrong
+[cols="4,6,5", options="header"]
+|===
+| Threat | Example | Stopped by
+| A destructive command | An agent "cleans up" by deleting a database, a branch or a directory outside the project | Sandbox; no cloud identity; the forbidden list of document 06-06
+| A leak of secrets | A credential file is read and ends up in a prompt, a log or a commit | Read denied on credential locations; secrets scan; no production secret on a workstation
+| A leak of code or data | Source code or personal data is sent to a place it should not go | Network allow list; contractual terms of the model provider; no production data on a workstation
+| Deception by content | A web page, an issue, a dependency or a tool result contains text written to be obeyed: "ignore your instructions and…" | Untrusted content is data; nothing dangerous is within reach; a person reviews every change
+| A poisoned extension | A plug-in or a tool server that does more than it says | Allow list of sources; review of every change to the harness configuration
+| An invented dependency | The agent adds a package that does not exist, or that an attacker registered under a plausible name | New dependencies are asked, checked, scanned
+| Plausible but wrong code | It compiles, passes the tests it wrote itself, and misses the rule | Tests derived from the specification, not from the code; independent verification (document 08-03); human review
+| A weakened gate | The agent makes a failing test pass by deleting it, or lowers a threshold | Pipeline definitions and thresholds have owners; the reviewers check the tests first
+| A runaway cost | A loop of sessions, or a cloud resource left running | Turn and spending limits; no right to create cloud resources; the budget of document 06-06
+|===
+
+Owner: {role-sec}
+
+== Layers of control
+
+.Strategy question
+****
+What strategy still holds when one protection is misconfigured, forgotten or defeated?
+****
+
+No single protection is trusted.
+The harness is built in layers, and each layer assumes that the one inside it has failed.
+
+plantuml::diagrams/harness-layers.puml[format=svg, align=center, pdfwidth=85%]
+
+.The eight layers
+[cols="3,6,6", options="header"]
+|===
+| Layer | What it does | If it fails
+| 1. Data path and terms | Decides which provider receives the prompts and the code, and under which contract | Covered by the rule that no secret and no production data is ever on the workstation
+| 2. Managed settings | The company's policy, installed by an administrator, that a user or a repository cannot override | The project's own settings apply the same rules; the outer layers do not depend on it
+| 3. Sandbox | The operating system confines every command the agent runs: which directories it can write, which hosts it can reach | Permission rules still ask before commands that matter
+| 4. Permission rules | Three lists: what runs without asking, what is asked each time, what never runs | The sandbox still confines the command
+| 5. Hooks | A program of ours inspects a tool call before it runs and can refuse it: a deterministic check, not a judgment of the model | Permission rules and sandbox remain
+| 6. Identity | The agent holds no credential able to change a cloud resource, a cluster or the main branch | Nothing: this layer is outside the workstation and does not depend on the harness
+| 7. Repository and pipeline | The main branch accepts only reviewed pull requests that pass every gate | The cloud guardrails
+| 8. Cloud guardrails | Rights, deletion protection, budget and scheduled destruction (document 06-06) | –
+|===
+
+The decisive property is in the last three lines.
+An agent whose harness is entirely bypassed is still an account that can push a branch and open a pull request, and nothing more.
+
+== What an agent may do
+
+.Strategy question
+****
+What strategy lets an agent work for hours without interrupting anyone, and stops it before the one action that matters?
+****
+
+Asking for everything trains people to approve without reading.
+The policy therefore makes the safe majority silent, and keeps questions for the few actions that leave the workstation.
+
+.Three lists
+[cols="3,5,5,5", options="header"]
+|===
+| Subject | Without asking | Asked each time | Never
+| Files of the repository | Read; write in the working copy | Write to pipeline definitions, to the harness configuration, to the quality thresholds | Read or write outside the working copy, except caches of the build tools
+| Credentials | – | – | Read any credential location: environment files, keys, cloud and cluster configuration of the user
+| Build and tests | Build, format, run every test, start the local platform in containers | – | –
+| Git | Status, diff, log, branch, add, commit on a work branch | Push a work branch; open a pull request | Push to the main branch; force a push; skip the checks of a commit; rewrite history
+| Network | The package registries and the documentation sites of the allow list | Any other host | –
+| Dependencies | – | Add or upgrade a dependency | Install anything system-wide; pipe a download into a shell
+| Infrastructure code | Edit; validate; render a chart; scan | Compute a plan, with a read-only identity | Apply, destroy, change a state
+| Cloud and cluster | – | Read `test`: list, describe, logs | Any change, anywhere; anything in `integration` or `prod`; every command of the forbidden list of document 06-06
+| Administrator rights | – | – | Any use
+| The harness itself | – | – | Disable the sandbox; switch to a mode that skips permissions; edit the managed settings
+|===
+
+The "never" column of the cloud is the list of document 06-06, enforced a second time.
+It is written once there, and the rules of the harness are generated from it, so that the two cannot drift.
+
+.Excerpt of the shared settings of the repository
+[source,json]
+----
+{
+  "permissions": {
+    "defaultMode": "default",
+    "disableBypassPermissionsMode": "disable",
+    "allow": [
+      "Bash(./mvnw *)", "Bash(pnpm run *)", "Bash(buf lint *)",
+      "Bash(git status)", "Bash(git diff *)", "Bash(git log *)",
+      "Bash(git add *)", "Bash(git commit *)",
+      "Bash(helm template *)", "Bash(helm lint *)", "Bash(terraform validate *)"
+    ],
+    "ask": [
+      "Bash(git push *)", "Bash(gh pr create *)",
+      "Bash(kubectl get *)", "Bash(kubectl describe *)", "Bash(kubectl logs *)",
+      "Bash(terraform plan *)"
+    ],
+    "deny": [
+      "Read(./.env)", "Read(./.env.*)", "Read(~/.ssh/**)",
+      "Read(~/.config/gcloud/**)", "Read(~/.kube/**)",
+      "Bash(sudo *)",
+      "Bash(git push --force *)", "Bash(git commit --no-verify *)",
+      "Bash(terraform apply *)", "Bash(terraform destroy *)", "Bash(terraform state *)",
+      "Bash(helm install *)", "Bash(helm upgrade *)", "Bash(helm rollback *)",
+      "Bash(helm uninstall *)",
+      "Bash(kubectl apply *)", "Bash(kubectl delete *)", "Bash(kubectl exec *)",
+      "Bash(kubectl edit *)", "Bash(kubectl patch *)", "Bash(kubectl scale *)",
+      "Bash(gcloud * delete *)", "Bash(gcloud * add-iam-policy-binding *)",
+      "Bash(gcloud iam service-accounts keys *)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": { "denyRead": ["~/.ssh", "~/.config/gcloud", "~/.kube", "~/.gnupg"] },
+    "network": { "allowedDomains": ["repo.maven.apache.org", "registry.npmjs.org", "github.com"] }
+  }
+}
+----
+
+The names of the settings are those of the Claude Code documentation as read on {revdate}; they are read again when the harness is installed, because the product changes faster than this specification.
+
+.Three things the excerpt does not say by itself
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Order of evaluation | A refusal wins over a question, and a question over an authorization. An authorization can never carve an exception out of a refusal.
+| Rules on commands are not a boundary | A rule compares the text of a command, not what the command does: a forbidden command can be wrapped in a script. The product's documentation says so itself. These rules stop accidents and give early, clear refusals; the boundary is the sandbox, and behind it the identity that has no rights.
+| Where the settings live | Shared settings are in the repository, reviewed like code, and apply to everyone who works on it. Personal settings may add comfort, never remove a refusal. In a company the refusals, the sandbox and the two disabled modes are repeated in the managed settings, which nobody can override.
+|===
+
+== Sandbox and network
+
+.Strategy question
+****
+What strategy confines a command that nobody anticipated?
+****
+
+.The sandbox
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Mechanism | Every shell command of the agent runs inside a confinement of the operating system: on Linux, an unprivileged container of the process with a filtering proxy for the network. A workstation where the confinement cannot start refuses to run the agent's commands rather than running them unconfined.
+| Files | Writes are limited to the working copy and to the caches of the build tools. Credential locations cannot be read, even by a command that the rules allow.
+| Network | Only the hosts of the allow list answer: the package registries and the source host. Everything else is refused, and the refusal is visible.
+| Escape | A command that fails in the sandbox is not retried outside it. The setting that would allow the retry is off.
+| What the sandbox does not cover | The agent's own file and web tools, which follow the permission rules instead; hooks and locally started tool servers, which are our code and are reviewed as such; protocols other than the web ones. These limits are those stated by the product's documentation.
+| Containers | The local platform runs in rootless containers. The agent may start and stop them; it never mounts a directory outside the working copy into a container.
+|===
+
+.A stronger confinement, when the work calls for it
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Situation | Confinement
+| Ordinary development | The sandbox above, on the workstation
+| Long unattended sessions; work on untrusted input, such as reproducing a reported vulnerability | A disposable container or virtual machine holding only the working copy, with no credential at all; the result leaves it as a branch
+| Agents in the pipeline | The runner itself is disposable; see below
+|===
+
+== Identities and secrets
+
+.Strategy question
+****
+What strategy makes sure a deceived agent finds nothing worth stealing and nothing it could break?
+****
+
+.What an agent can act as
+[cols="4,5,6", options="header"]
+|===
+| System | Identity | Rights
+| Source host | A token limited to this repository | Push work branches; open and comment pull requests. No administration, no change to protections, no secrets of the pipeline.
+| Main branch | None | Changed only by a reviewed pull request (document 06-05). The agent cannot approve or merge.
+| Cloud, to read `test` | A viewer identity, obtained for a short time by the developer and asked at each use | List, describe, read logs and metrics of `test`. Nothing else.
+| Cloud, to change anything | None | The pipeline is the only identity that changes a resource, and only from the main branch (document 06-04)
+| `integration` and `prod` | None | –
+| Databases | The local containers only | No session on any deployed database
+|===
+
+.Secrets
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| On the workstation | Only the invented secrets of the local platform exist there: development realm, local database. They are worth nothing elsewhere.
+| Real secrets | Live in Secret Manager, are read by workloads, and are never on a workstation (document 05-04). An agent cannot leak what it cannot reach.
+| In prompts | Never a secret, never personal data of a real person, never production data. A prompt is a message sent to a third party.
+| If a secret appears | In a file, a transcript or an answer: it is considered leaked and rotated, whoever saw it (document 05-04)
+|===
+
+== Untrusted content
+
+.Strategy question
+****
+What strategy protects an agent that will obey a well-written sentence, wherever it reads it?
+****
+
+An agent cannot reliably tell an instruction from its user from a sentence planted in a file.
+No product claims otherwise.
+The policy does not rely on the agent resisting; it makes sure that obeying a planted sentence leads nowhere.
+
+.Where planted instructions come from, and what limits them
+[cols="4,11", options="header"]
+|===
+| Source | Limit
+| Web pages | Fetching is asked outside the allow list; a fetched page is summarized as data
+| Issues, pull requests and comments written by others | Read as data. An agent run by the pipeline on a pull request from outside the team receives no secret and no write right.
+| Dependencies: their code, their documentation, their install scripts | Added only after a question; install scripts do not run with network access beyond the registries; the dependency scan of the pipeline
+| Results of tools and of commands | Data. A result that asks for an action is reported to the user, not acted upon.
+| The repository's own instructions | The instruction file, the rules, the skills and the settings are instructions to every future agent. A change to them is reviewed by their owners like a change to the pipeline.
+|===
+
+.Extensions of the harness
+[cols="4,11", options="header"]
+|===
+| Extension | Rule
+| Plug-ins | From the official marketplace only; the list is in the shared settings (document 08-01). In a company, the managed settings restrict the marketplaces that may be added.
+| Tool servers | The servers of document 08-01 and no other: they give knowledge, not power. A server declared by the repository is approved explicitly by each developer; in a company the managed settings hold the allow list.
+| Skills and subagents | Files of the repository, reviewed. A verification subagent is declared with reading tools only: it cannot edit, and it cannot run a shell.
+| Hooks | Programs of the repository, reviewed. They run outside the sandbox with the developer's rights: they are short, they call nothing on the network, and a change to them needs the security owner.
+|===
+
+.Hooks of the project
+[%unbreakable, cols="4,11", options="header"]
+|===
+| When | Check
+| Before a command runs | Refuses the forbidden list of document 06-06, generated from that list; refuses a command addressed to a cluster context other than `test`
+| Before a file is written | Refuses a write outside the working copy; asks for pipeline definitions, thresholds and harness configuration
+| Before a commit | Runs the secrets scan on what is staged
+| When the session stops | Nothing is pushed or published automatically: a session never ends with a side effect outside the workstation
+|===
+
+== Reviewing what an agent produces
+
+.Strategy question
+****
+What strategy keeps a person accountable for code they did not type?
+****
+
+.Rules
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| One path | An agent's change is a pull request like any other. No gate of document 06-05 is lowered, skipped or replaced for it.
+| Tests come from the specification | The tests an increment must pass are named before the code exists (document 07-02). An agent does not decide what "done" means.
+| Independent verification | Expert agents review the change against the specification, in a separate session that has the specification and the diff but not the author's reasoning (document 08-03). They advise the reviewer; they do not replace the gates.
+| A person decides | A person reads the change, the gates and the experts' findings, and merges. In a team that person is not the one who launched the agent. The agent cannot approve its own work.
+| Accountability | The person who launched the agent is the author of the change, in the sense that matters: they answer for it. The commit says which agent co-wrote it.
+| What reviewers look at first | The tests and the thresholds: a change that deletes a test, loosens an assertion or touches a gate is read with suspicion, whoever wrote it.
+| Dependencies | A new dependency is checked by a person: it exists, it is the intended one, it is maintained, its license is acceptable, and it is in the stack of document 04-01 or justified
+| Undo | The harness can restore files its own tools edited, not what a command changed, and nothing outside the workstation. The only undo that counts is version control: an agent commits often, on its branch.
+|===
+
+.Agents run by the pipeline
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| What runs | The verification experts of document 08-03, on a pull request, without a terminal
+| Tools | Reading tools only, and the right to comment the pull request. No shell, no write to the repository.
+| Limits | A maximum number of turns and a maximum spending per run, given on the command line
+| Secrets | The key of the model provider and nothing else. No cloud identity.
+| Pull requests from outside | Not reviewed by agents automatically: a maintainer starts the review after reading the change
+| Their output | Comments. An expert never changes the code it reviews, and its finding is read by a person before anything is done about it.
+|===
+
+== Data and confidentiality
+
+.Strategy question
+****
+What strategy answers "where does our code go?" with facts instead of reassurance?
+****
+
+.What leaves the workstation
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Data | Goes to
+| The prompts, the files the agent reads, the results of its commands | The model provider, to produce the answer
+| Usage figures and error reports | The publisher of the harness, unless disabled
+| Nothing else | The sandbox and the allow list see to it
+|===
+
+.Terms, by way of access
+[cols="4,6,5", options="header"]
+|===
+| Access | What the provider's documentation states | Suits
+| A consumer subscription | The user chooses whether conversations may be used for training; retention depends on that choice | A personal project, such as the proof of concept, with training refused
+| A team or enterprise subscription, or the programming interface | Not used for training by default; retained 30 days by default; a retention of zero can be contracted by qualifying organizations | A company
+| Through the company's cloud provider | The model is served by a cloud the company already has a contract with; the harness's own usage reports are off by default | A company that requires its data to stay within an existing contract and region
+|===
+
+These statements are those of the provider's documentation on {revdate}.
+A company verifies them in its own contract; this document does not replace that reading.
+
+.Rules of the project
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Classified or export-controlled material | Never given to an agent, whatever the terms. This project contains none.
+| Personal and production data | Never on a workstation, hence never in a prompt
+| Usage reports | Disabled where the company asks for it, by the environment variables the product documents for that purpose
+| Local transcripts | Sessions are kept in clear text on the workstation, 30 days by default. The disk of a workstation is encrypted; the retention is shortened where the company asks.
+|===
+
+== What is recorded
+
+.Strategy question
+****
+What strategy reconstructs, months later, what an agent did and who let it?
+****
+
+.Records
+[cols="4,7,4", options="header"]
+|===
+| Record | Content | Kept
+| Version control | Every change, its author, the agent that co-wrote it, the pull request, the review | For ever
+| Pull request | The gates, the experts' findings and what was done about each, the approval | For ever
+| Session transcript | Every prompt, tool call and result of a session | On the workstation, 30 days by default
+| Telemetry of the harness | Sessions, tool decisions — allowed, asked, refused —, tokens and cost, exported in the OpenTelemetry format to the company's collector. The text of prompts is not exported unless a setting asks for it. | As the company's logs
+| Cloud audit logs | Every call made with the viewer identity | As document 05-03
+|===
+
+.When something goes wrong
+[%unbreakable, cols="1,14", options="header"]
+|===
+| # | Step
+| 1 | Stop the session. Do not ask the agent to repair what it did: a person assesses first.
+| 2 | Revoke what the session could use: the token of the source host, the short-lived cloud identity
+| 3 | Rotate any secret that appeared in the transcript, a file or an answer
+| 4 | Read the transcript: which instruction, from where, led to the action
+| 5 | Repair through the normal path: a reviewed change, or the runbook of document 06-07
+| 6 | Close the gap with a mechanism — a rule, a hook, a right removed —, never with a sentence added to a prompt
+|===
+
+== Answers to a security review
+
+.Strategy question
+****
+What strategy turns this policy into the dozen answers a security officer will actually ask for?
+****
+
+[cols="5,7,4", options="header"]
+|===
+| Question | Answer | Enforced by
+| Can the agent delete or change something in production? | No. It holds no identity with any right on `integration` or `prod`, and none that can change `test`. | Cloud rights
+| Can it merge its own code? | No. The main branch takes reviewed pull requests that pass every gate; a person merges. | Branch protection
+| Can it read our secrets? | Real secrets are not on the workstation. The locations of the developer's own credentials cannot be read by its commands or its tools. | Secret Manager; sandbox; read refusals
+| Where does our code go? | To the model provider, under the terms above, and nowhere else. | Network allow list; contract
+| Is our code used to train a model? | Not under a commercial contract or through the company's cloud; under a consumer subscription, only if the user allows it. | Contract; account setting
+| What if it reads a malicious instruction? | It may follow it. It will find no credential to send, no host to send it to outside the allow list, and no right to change anything beyond a branch that a person reviews. | Layers 3, 6 and 7
+| Can a developer switch the protections off? | Not the company's: managed settings cannot be overridden, and the modes that skip permissions are disabled there. | Managed settings
+| Who answers for what it wrote? | The person who launched it, named as author; the change says which agent co-wrote it. | Review rules
+| How do you know the code is right? | Tests named by the specification before the code, deterministic gates, independent expert agents, then a person. | Documents 06-05, 07-02, 08-03
+| Which extensions can it load? | Those of an allow list held in the repository and, in a company, in the managed settings. | Settings; review of their changes
+| What do you keep as evidence? | Version control, pull requests, transcripts, telemetry of tool decisions, cloud audit logs. | See "What is recorded"
+| What does it cost if it loops? | A session has a turn limit and a spending limit; it cannot create a cloud resource. | Limits; cloud rights
+|===
+
+.Two profiles
+[%unbreakable, cols="4,5,6", options="header"]
+|===
+| Subject | Proof of concept, one developer | Company
+| Managed settings | None: the same refusals are in the developer's own settings | Installed by the administrators of the workstations
+| Review by a second person | Not available: the developer reads and merges; the gates and the experts matter all the more | Required
+| Access to the model | A personal subscription, training refused | The company's contract, or its cloud provider
+| Telemetry | Local transcripts | Exported to the company's collector
+| Cloud identity of the agent | None at all: the developer runs the few cloud commands themselves | The viewer identity on `test`
+|===
+
+.What this policy does not claim
+****
+It does not claim that an agent cannot be deceived, nor that a sandbox has no flaw.
+It claims that an agent which is deceived, in a sandbox that is breached, still holds nothing with which to harm production, and that what it writes is read before it counts.
+****
+
+Owner: {role-sec} {role-platform}

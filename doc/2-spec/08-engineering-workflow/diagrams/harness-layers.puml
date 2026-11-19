@@ -1,0 +1,29 @@
+@startuml
+title Layers of control around an AI agent
+
+skinparam componentStyle rectangle
+
+rectangle "8. Cloud guardrails\nrights, deletion protection, budget (document 06-06)" as L8 #F4F7F9 {
+  rectangle "7. Repository and pipeline\nprotected main branch, gates, review by a person" as L7 #E3F2FD {
+    rectangle "6. Identity\nno credential that can change the cloud" as L6 #E3F2FD {
+      rectangle "5. Hooks\na program decides before a tool runs" as L5 #C8E6C9 {
+        rectangle "4. Permission rules\nallowed, asked, never" as L4 #C8E6C9 {
+          rectangle "3. Sandbox\nfiles and network of every command" as L3 #C8E6C9 {
+            rectangle "2. Managed settings\nthe company's policy, not overridable" as L2 #FFF8E1 {
+              rectangle "1. Data path and terms\nwhat leaves the workstation" as L1 #FFF8E1 {
+                component "Agent\n(model + tools)" as A #FFFFFF
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+note bottom of L8
+  Layers 1 to 5 are on the workstation: the harness itself.
+  Layers 6 to 8 hold even if the harness is misconfigured
+  or bypassed: the agent has nothing to do damage with.
+end note
+@enduml

@@ -131,7 +131,7 @@ plantuml::diagrams/documentation-map.puml[format=svg, align=center]
 3+h| 08 Engineering workflow
 | 08-01 | Developer Workstation | –
 | 08-02 | AI Agent Harness and Security Policy | –
-| 08-03 | Software Factory: Creation and Verification Prompts | –
+| 08-03 | Software Factory: Creation and Verification Prompts | `CRE`, `VER`
 | 08-04 | Project Management | –
 | 08-05 | Proposed CLAUDE.md | –
 |===
@@ -177,6 +177,8 @@ An item that is abandoned keeps its identifier and is marked {st-rejected}; its 
 | `TC` | Component test | 07-02 | One service in isolation, real adapters, neighbors simulated
 | `TI` | Integration test | 07-02 | One adapter against the real technology, or several services together
 | `TE2E` | End-to-end test | 07-02 | A critical path through the deployed system
+| `CRE` | Creation prompt | 08-03 | One increment of the software, given to an agent: what to read, what to build, which tests prove it
+| `VER` | Verification prompt | 08-03 | One expert review, given to another agent: what to check against the specification
 |===
 
 .Context codes
@@ -221,6 +223,7 @@ A link is recorded whenever an item mentions another one in its own description.
 plantuml::diagrams/traceability-chain.puml[format=svg, align=center]
 
 The build enforces the chain: a user story with no use case, a use case with no acceptance scenario or a critical path with no end-to-end test makes the build fail.
+It enforces the plan of construction the same way: a use case that no creation prompt builds, or a catalogued test that no creation prompt delivers, makes the build fail.
 The complete registry and the links are published in the generated document 00-03 Traceability Matrix.
 
 When the code is written, the same identifiers travel with it:
