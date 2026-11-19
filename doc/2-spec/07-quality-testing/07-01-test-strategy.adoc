@@ -1,6 +1,6 @@
 = Test Strategy: What Is Tested, at Which Level, with What, and When
 :doc-id: 07-01
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The levels and kinds of test of the platform, what each one proves, the tools, the place of acceptance scenarios, the rules for test data and test doubles, the quality gates, and where each test runs.
@@ -21,7 +21,7 @@ A business rule is proven by a test that runs in a millisecond; only what cannot
 |===
 | Principle | Meaning
 | The lowest level that can prove it | A rule of the domain is tested in the domain. A test that starts a database to check an addition is a wasted second, a thousand times a day.
-| Every identifier is tested | Each rule, scenario, saga path and error code of this specification is verified by at least one catalogued test (document 07-02). What is not traced is not known to be tested.
+| Every identifier is tested | Each rule, scenario, saga path and error code of this specification is verified by at least one catalogued test (document 07-02). What is not traced is not known to be tested. The build of this specification already refuses a business rule, a critical path or a saga scenario that no catalogued test verifies.
 | Four families, always | A function is tested when it works, when it must refuse, at its limits, and for what must stay true whatever happens.
 | Real where it matters | A database behavior is tested on the real database; a bus behavior on the real bus. Simulations are for neighbors, never for the thing under test.
 | Deterministic | A test controls time, identifiers and order. A test that fails one time in twenty is a defect, treated as such.
@@ -44,8 +44,8 @@ plantuml::diagrams/test-pyramid.puml[format=svg, align=center, pdfwidth=85%]
 |===
 | Level | What is under test | What is real, what is simulated | Tools
 | Unit (`TU`) | One aggregate, value object, domain service or saga | Nothing is started. Time and identifiers are given by the test. No mock: the domain has no dependency to replace. | JUnit {v-junit}, AssertJ {v-assertj}
-| Component (`TC`) | One service, through its interfaces: REST requests, messages in, messages out | Real: its database, the bus emulator, its own adapters. Simulated: the other services and the providers. | Spring Boot test support, Testcontainers {v-testcontainers}, Microcks {v-microcks}, WireMock {v-wiremock}
-| Integration (`TI`) | One adapter against the technology it adapts; or several services together on one scenario | Real: PostgreSQL, Pub/Sub, Firestore, the services involved. Simulated: the providers. | Testcontainers; the `test` and `integration` environments
+| Component (`TC`) | One service, through its interfaces: REST requests, messages in, messages out | Real: its database, the bus emulator, its own adapters. Simulated: the other services and the providers. | Spring Boot test support, Testcontainers {v-testcontainers}, Microcks {v-microcks}, WireMock {v-wiremock}; H2 {v-h2} for persistence slices
+| Integration (`TI`) | One adapter against the technology it adapts; or several services together on one scenario | Real: PostgreSQL, Pub/Sub, Firestore, the services involved. Simulated: the providers. | Testcontainers; a composition of containers for several services; the `test` environment for the real bus and the real document database
 | End-to-end (`TE2E`) | A critical path, from the browser to the e-mail | Everything is real and deployed. The providers are the simulated ones of the platform. | Playwright {v-playwright}
 |===
 
@@ -55,7 +55,7 @@ plantuml::diagrams/test-pyramid.puml[format=svg, align=center, pdfwidth=85%]
 | Level | Order of magnitude | Each takes | Runs
 | Unit | Many hundreds | Milliseconds | At every build, on a workstation and in the pipeline
 | Component | About a hundred | Seconds | At every build
-| Integration | Some dozens | Seconds to minutes | Adapters: at every build, in containers. Several services together: after deployment, in `test` and `integration`
+| Integration | Some dozens | Seconds to minutes | Adapters: at every build, in containers. Several services together: in a composition of containers, on the pull requests that concern them (document 07-03). What needs the real bus or the real document database: after deployment, in `test`
 | End-to-end | A handful per critical path | Minutes | After deployment to `integration`; a subset after every deployment, everywhere
 |===
 
@@ -77,9 +77,10 @@ Each is a purpose; most are served by one of the four levels above.
 | Component | A service keeps its contract, with its real adapters | Spring Boot tests, Testcontainers | TC
 | Interface, on inputs and outputs | Every request and answer of a REST interface, every message in and out, conforms to its contract — errors included | Microcks against the OpenAPI and AsyncAPI documents; schema validation of messages | TC
 | Integration | An adapter works with the real technology; services work together | Testcontainers; the deployed environments | TI
-| Acceptance | The behavior agreed with the business holds | The Gherkin scenarios of document 01-08, run by Cucumber {v-cucumber} | TC or TE2E
+| Acceptance | The behavior agreed with the business holds | The Gherkin scenarios of document 01-08, run by Cucumber {v-cucumber} against the application code of the services assembled in memory; those tagged for it, again through the storefront | TC, TE2E
+| Persistence slice | An entity maps to and from its domain object; the simple queries of a store return what the port promises | The persistence test slice of Spring Boot on H2 {v-h2} in PostgreSQL mode ({ADR-PLT-015}) | TC
 | End-to-end | A critical path works for a customer | Playwright | TE2E
-| Smoke | A deployment that just finished is alive: the critical paths answer | A subset of the end-to-end tests, tagged | TE2E
+| Smoke | A deployment that just finished is alive: its entry points answer and, where test accounts exist, an order is placed and confirmed | A subset of the end-to-end tests, tagged | TE2E
 | Regression | What worked still works | Not a separate suite: every test above, run at every change. A defect found in production first becomes a test that fails. | All
 | Architecture | The structure of the code is kept | ArchUnit {v-archunit} (document 04-03) | Build
 | Mutation | The unit tests would notice a change of the domain | PIT {v-pitest} | Build
@@ -112,6 +113,7 @@ A function is covered when it has tests of each family that applies to it.
 |===
 
 Invariants are tested twice: by examples, like the others, and by tests that try many generated sequences of events against a saga or an aggregate and check the invariant after each step.
+The sequences come from a seeded generator written with the tests, without an extra library: a failure prints its seed and its sequence, which is then kept as an example.
 The state grids of document 02-03 make this possible: every event has a defined outcome in every state, so any sequence is a valid test.
 
 == Acceptance scenarios
@@ -128,8 +130,9 @@ The acceptance scenarios of document 01-08 are written in Gherkin and are the on
 |===
 | Subject | Rule
 | One source | The feature files of the specification are the ones Cucumber runs. They are not copied: the build of the services reads them where they are.
-| Automated once | Each scenario is bound to code at the lowest level that can prove it. A scenario about one service runs as a component test of that service. A scenario tagged as a critical path runs end to end as well.
-| Steps | A step is bound to a call of the service's interface or of the storefront, never to its database. What a scenario cannot observe from outside, it does not assert.
+| Where every scenario runs | Against the domain and the use cases of the six services, assembled in one process with stores, bus and providers in memory (document 01-08). The bus of this assembly can hold, repeat and delay a message; its clock is moved by the steps; a restart is a service built again from its store. Every scenario runs there, failures included, at every build, in seconds. The assembly is a module of tests: no service depends on another to make it possible (document 04-03).
+| Where some run again | Scenarios tagged `@e2e` are replayed through the storefront on a deployed environment: the critical-path scenarios that a person can perform. The other critical-path scenarios need a failure to be provoked, or assert what no screen shows; their proof on real technology is the saga scenario test of document 07-03 that provokes the same failure.
+| Steps | A step calls a use case, or acts on the storefront. It never reads a store: what a scenario cannot observe as an actor would, it does not assert.
 | Identifiers | The tags of a scenario — its own identifier, its use case, its rules — are reported with its result, and feed the traceability matrix (document 00-03).
 | A scenario with no binding | Fails the build. A sentence agreed with the business is never silently unverified.
 | Changing a scenario | A change of the specification, reviewed as such, before the code changes.
@@ -152,6 +155,7 @@ What strategy keeps a test honest about what it really exercised?
 | The payment provider | Every level | The simulated provider of the platform, scripted by its tokens ({FR-PAY-007}): the same at every level, up to production in this release
 | The e-mail provider | Every level | The simulated provider, which records what it was asked to send
 | The database, the bus | A component or integration test | Not replaced: PostgreSQL in a container; the Pub/Sub emulator, or the real service where its schemas matter (document 03-05)
+| The database | A persistence slice | H2 {v-h2} in PostgreSQL mode, in memory, with the schema generated from the entities: milliseconds to start. Whatever depends on the behavior of PostgreSQL — constraints, locks, migrations, search — is tested on PostgreSQL; the table of document 04-04 says which test uses which database.
 | The clock | Every level below end-to-end | A clock the test moves. Deadlines of minutes are crossed in milliseconds.
 |===
 
@@ -201,9 +205,9 @@ What strategy places each test in the earliest stage that can run it?
 |===
 | Stage | Tests | Stops
 | Workstation, while writing | Unit tests of the module; component tests of the service being changed | Nothing: the author's own loop
-| Pull request | All unit, architecture and mutation tests; all component tests; adapter integration tests in containers; acceptance scenarios bound at component level | The merge (document 06-05)
+| Pull request | All unit, architecture and mutation tests; all component tests; adapter integration tests in containers; every acceptance scenario, in memory; the saga scenarios in a composition of containers, when the change concerns them | The merge (document 06-05)
 | After deployment to `test` | Integration tests that need the real services: schemas on Pub/Sub, the persistence contract on the document database, identities and rights; the authorization suite; the dynamic security scan | The release
-| After deployment to `integration` | End-to-end tests of the critical paths; the saga scenarios across services; the leak test | The release
+| After deployment to `integration` | End-to-end tests of the critical paths; the few saga scenarios that payment tokens alone can drive; the leak test | The release
 | In an announced window | Load tests; the failover drill (document 07-04) | A release that touches performance or the platform
 | After deployment to `prod` | Smoke tests | The deployment: automatic return
 |===
@@ -213,7 +217,7 @@ What strategy places each test in the earliest stage that can run it?
 |===
 | Subject | What changes
 | Before deployment | Nothing: every test of a pull request runs as above. They need no cloud resource.
-| After deployment | The one environment receives the smoke tests, then the end-to-end tests and the saga scenarios that can run on one replica
+| After deployment | The one environment receives the smoke tests, then the end-to-end tests and the saga scenarios that payment tokens can drive
 | Not run | Tests that need a second replica or a standby: the loss of an instance, the failover. Load tests are limited to a short run at the nominal load, to keep the cost within the budget.
 | Tests on the real bus and the real document database | Run against the single environment, in topics and collections of their own
 |===

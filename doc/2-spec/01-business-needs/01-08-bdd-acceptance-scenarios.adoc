@@ -1,6 +1,6 @@
 = BDD Acceptance Scenarios: Examples That Define "Done"
 :doc-id: 01-08
-:revnumber: 0.4
+:revnumber: 0.5
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Gherkin acceptance scenarios, generated from the feature files, with their index and trace links.
@@ -44,7 +44,8 @@ That is what allows the same scenario to run at two levels.
 | `@UC-…` | The use case the scenario proves. At least one.
 | `@FR-…` | The business rules the scenario exercises.
 | `@nominal` `@error` `@edge` `@invariant` | The family of the example. Every rule should have its nominal example and at least one of the others.
-| `@critical-path` | The scenario belongs to a critical path. It is also run end to end against the deployed system.
+| `@critical-path` | The scenario belongs to a critical path.
+| `@e2e` | The scenario is replayed through the storefront on the deployed system: a critical-path scenario that a person can perform, with no failure to provoke.
 |===
 
 .Where scenarios run
@@ -52,8 +53,11 @@ That is what allows the same scenario to run at two levels.
 |===
 | Level | Against | When
 | Acceptance | The domain and application code of the services, with in-memory adapters in place of databases, messaging and providers | At every build, in seconds
-| End to end | The deployed platform, through the storefront and the public interfaces; only `@critical-path` scenarios | After each deployment to the test and integration environments
+| End to end | The deployed platform, through the storefront; only the scenarios tagged `@e2e` | After each deployment to the integration environment
 |===
+
+A critical-path scenario that needs a failure to be provoked — a restart, an outage, a stale copy — or that asserts what no screen shows, runs at the acceptance level only.
+On real technology the same failure is provoked by the saga scenario tests of document 07-03.
 
 The feature files are the single source.
 The pages below are generated from them by the build, which also checks that every scenario has its identifier, that every use case has at least one scenario, and that every identifier quoted in a tag exists.

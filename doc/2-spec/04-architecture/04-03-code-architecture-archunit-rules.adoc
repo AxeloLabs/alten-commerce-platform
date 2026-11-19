@@ -1,6 +1,6 @@
 = Code Architecture and ArchUnit Rules: One Structure for Every Service, Checked at Every Build
 :doc-id: 04-03
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The layout of the repository, the inner structure common to every service, the coding conventions, and the catalog of architecture rules enforced automatically.
@@ -37,6 +37,7 @@ alten-commerce-platform/
 ├── deploy/
 │   ├── terraform/           cloud resources
 │   └── helm/                Kubernetes packages
+├── acceptance/              tests only: the acceptance scenarios, bound to the application code of all services
 ├── doc/                     this specification
 └── pom.xml                  parent build: versions, plugins, quality gates
 ----
@@ -49,6 +50,7 @@ alten-commerce-platform/
 | `platform-starter` | Built first. Every service depends on it; it depends on no service.
 | A service | Depends on the starter and on the contracts it implements or consumes. Never on another service.
 | `web-gateway` | Depends on Spring Cloud Gateway. Not on the starter's messaging or persistence parts.
+| `acceptance` | Contains tests and nothing else. Depends on the domain and application code of every service and on their in-memory adapters, which it assembles in one process to run the scenarios of document 01-08. Nothing depends on it, and it is never deployed.
 |===
 
 Services share contracts, never code: a service that calls another generates its client from the other's OpenAPI document, in its own module.

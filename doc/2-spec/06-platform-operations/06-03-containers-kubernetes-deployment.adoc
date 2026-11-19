@@ -1,6 +1,6 @@
 = Containers and Kubernetes Deployment: From an Image to a Running Service
 :doc-id: 06-03
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How an image is built and hardened, what runs in a pod, the Kubernetes objects of a service, sizing and connection budgets, probes and rollouts, and the Helm charts.
@@ -140,7 +140,7 @@ The loss of a pod interrupts its function for the time of a restart: {NFR-AVAIL-
 | Bounds | Never fewer than two replicas ({NFR-AVAIL-002}); never more than six ({NFR-SCAL-001}). The connection budget below is computed for six.
 | Down | Slowly: a replica is removed only after several minutes of low load, and always through a clean shutdown
 | Message consumers | Scaled the same way. A backlog that grows while the processor is idle means a dependency is slow, not that replicas are missing: it raises an alert, not a scale-up.
-| Non-production | No autoscaler. `test` and `integration` are set to zero replicas when unused, and back when a pipeline or a person needs them (document 06-06).
+| Non-production | No autoscaler. `test` and `integration` are set to zero replicas when unused, and back when a pipeline or a person needs them (document 06-06). One exception: during an announced load window, `integration` receives the autoscaler, bounded to four replicas, while `test` sleeps (document 07-04).
 |===
 
 .Connection budget of the database instance, full profile

@@ -52,6 +52,7 @@ TYPES = {
 }
 
 # (type A, type B): every A must be linked to at least one B, in either direction.
+# B may be a tuple of types: one link to any of them is enough.
 # A rule is only enforced once at least one identifier of type B exists.
 RULES = [
     ("EPIC", "JRN"),
@@ -62,6 +63,7 @@ RULES = [
     ("CP", "UC"),
     ("CP", "TE2E"),
     ("SC", "TI"),
+    ("FR", ("TU", "TC", "TI", "TE2E")),
     ("UC", "CRE"),
     ("TU", "CRE"),
     ("TC", "CRE"),
@@ -307,17 +309,19 @@ def main() -> int:
         for target in targets:
             incoming[target].add(origin)
 
-    def linked(identifier: str, wanted: str) -> bool:
+    def linked(identifier: str, wanted: tuple[str, ...]) -> bool:
         neighbours = edges.get(identifier, set()) | incoming.get(identifier, set())
-        return any(n.startswith(wanted + "-") for n in neighbours)
+        return any(n.startswith(tuple(w + "-" for w in wanted)) for n in neighbours)
 
     present = {d["type"] for d in defs.values()}
     for type_a, type_b in RULES:
-        if type_b not in present:
+        wanted = (type_b,) if isinstance(type_b, str) else tuple(type_b)
+        if not present.intersection(wanted):
             continue
         for identifier, definition in sorted(defs.items()):
-            if definition["type"] == type_a and not linked(identifier, type_b):
-                errors.append(f"UNTRACED   {identifier} has no link to any {type_b} ({definition['where']})")
+            if definition["type"] == type_a and not linked(identifier, wanted):
+                errors.append(
+                    f"UNTRACED   {identifier} has no link to any {' / '.join(wanted)} ({definition['where']})")
 
     # --- Derived files -----------------------------------------------------
     ids_dir = GEN / "ids"

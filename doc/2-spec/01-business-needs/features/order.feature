@@ -8,7 +8,7 @@ Feature: Order
 
   Rule: An order is confirmed only when its payment is captured and its stock is secured
 
-    @BDD-ORD-001 @UC-ORD-001 @FR-ORD-006 @FR-ORD-007 @FR-INV-005 @FR-CART-007 @nominal @critical-path
+    @BDD-ORD-001 @UC-ORD-001 @FR-ORD-006 @FR-ORD-007 @FR-INV-005 @FR-CART-007 @nominal @critical-path @e2e
     Scenario: Order placed and confirmed
       Given a cart with 1 unit of "KB-001" and 3 units of "CB-001"
       When the customer places the order with the payment token "tok_ok"
@@ -46,7 +46,7 @@ Feature: Order
       And the cart is kept
       And one rejection e-mail is sent to "alice@example.com"
 
-    @BDD-ORD-004 @UC-ORD-001 @FR-INV-002 @FR-INV-003 @invariant @critical-path
+    @BDD-ORD-004 @UC-ORD-001 @FR-INV-002 @FR-INV-003 @invariant @critical-path @e2e
     Scenario: Two customers compete for the last unit
       Given "KB-001" has 1 unit on hand
       And the customers "alice@example.com" and "bob@example.com" each have 1 unit of "KB-001" in their cart
@@ -57,7 +57,7 @@ Feature: Order
 
   Rule: A refused payment rejects the order and frees the stock
 
-    @BDD-ORD-002 @UC-ORD-001 @FR-ORD-008 @FR-PAY-004 @FR-CART-007 @error @critical-path
+    @BDD-ORD-002 @UC-ORD-001 @FR-ORD-008 @FR-PAY-004 @FR-CART-007 @error @critical-path @e2e
     Scenario: Order rejected when the payment is refused
       Given a cart with 2 units of "KB-001"
       When the customer places the order with the payment token "tok_declined"
@@ -130,7 +130,7 @@ Feature: Order
       And no payment was requested
       And the cart is kept
 
-    @BDD-ORD-009 @UC-ORD-001 @FR-ORD-015 @FR-PAY-005 @edge @critical-path
+    @BDD-ORD-009 @UC-ORD-001 @FR-ORD-015 @FR-PAY-005 @edge @critical-path @e2e
     Scenario: Order rejected when the payment gives no answer before the order deadline
       Given a cart with 1 unit of "KB-001"
       When the customer places the order with the payment token "tok_timeout"
@@ -139,7 +139,7 @@ Feature: Order
       And the order is "REJECTED" with the reason "TIMED_OUT"
       And "KB-001" has 5 units available
 
-    @BDD-ORD-010 @UC-ORD-001 @FR-ORD-015 @FR-PAY-005 @edge @critical-path
+    @BDD-ORD-010 @UC-ORD-001 @FR-ORD-015 @FR-PAY-005 @edge @critical-path @e2e
     Scenario: A payment found captured at the order deadline is carried through
       Given a cart with 1 unit of "KB-001"
       When the customer places the order with the payment token "tok_late_capture"
@@ -148,7 +148,7 @@ Feature: Order
       And the order is "CONFIRMED"
       And "KB-001" has 4 units on hand
 
-    @BDD-ORD-027 @UC-ORD-001 @UC-ORD-007 @FR-ORD-016 @edge @critical-path
+    @BDD-ORD-027 @UC-ORD-001 @UC-ORD-007 @FR-ORD-016 @edge @critical-path @e2e
     Scenario: An order whose payment outcome cannot be established goes under review
       Given a cart with 1 unit of "KB-001"
       When the customer places the order with the payment token "tok_blackout"

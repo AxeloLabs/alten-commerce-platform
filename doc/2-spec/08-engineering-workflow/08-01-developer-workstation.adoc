@@ -1,6 +1,6 @@
 = Developer Workstation: IDE, JDK, Command-Line Tools and AI Assistant
 :doc-id: 08-01
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: What a workstation needs to build, test, deploy and document the platform, how it is installed, and what requires administrator rights.
@@ -175,8 +175,9 @@ If a test library proves incompatible with Podman, Docker Engine is the fallback
 | Firestore emulator | Firestore
 | Keycloak {v-keycloak} | The identity provider, with a development realm
 | otel-lgtm {v-otel-lgtm} | Logs, metrics and traces, with Grafana
-| Simulated payment provider | The external payment provider
 |===
+
+The payment and e-mail providers need no container: in this release they are simulated by an adapter inside the payment and notification services (document 02-02).
 
 == Google Cloud access
 

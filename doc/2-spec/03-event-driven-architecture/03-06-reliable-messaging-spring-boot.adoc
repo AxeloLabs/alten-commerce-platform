@@ -1,6 +1,6 @@
 = Reliable Messaging in Spring Boot: Outbox, Idempotent Consumers and Deadlines
 :doc-id: 03-06
-:revnumber: 0.3
+:revnumber: 0.4
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How producers and consumers are built so that no business operation is lost, none is applied twice, and none waits forever.
@@ -92,6 +92,7 @@ plantuml::diagrams/outbox-relay.puml[format=svg, align=center]
 | Permanent refusal | A row that Pub/Sub refuses for a reason retrying cannot cure — it does not match the schema of the topic, it is too large, the right to publish is missing — is *parked*: marked with the error and no longer tried. An alert is raised. It keeps blocking the later rows of its key for the same topic, on purpose: publishing what follows would break the order. Meanwhile the deadlines of the saga take the order concerned to a person, and the runbook of document 06-07 says how to correct and release a parked row, or discard it.
 | Crash after publishing, before marking | The row is published again on restart: the same message, with the same identifier, twice. Consumers handle that (next section).
 | Cleaning | Published rows are deleted after 7 days. They are kept that long to investigate incidents. The payload of a row that carried a secret is erased as soon as it is published (section "A secret in a message").
+| Switch | A relay can be switched off by configuration. Rows accumulate, nothing is lost, and they leave in order when it is switched on again. The scenario tests use it to stop a service between saving and publishing (document 07-03).
 | Measures | Number of unpublished rows, age of the oldest, number of parked rows. All three are near zero in a healthy service; alerts watch them ({NFR-REL-005}).
 |===
 

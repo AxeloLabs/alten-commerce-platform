@@ -124,7 +124,7 @@ Feature: Catalog
 
   Rule: A price change applies to future orders only
 
-    @BDD-CAT-011 @UC-CAT-005 @FR-CAT-006 @FR-ORD-002 @invariant @critical-path
+    @BDD-CAT-011 @UC-CAT-005 @FR-CAT-006 @FR-ORD-002 @invariant @critical-path @e2e
     Scenario: Changing a price does not change an order already placed
       Given a published product "KB-001" priced 89.90
       And a confirmed order "ORD-1001" with 1 unit of "KB-001" at 89.90
@@ -169,7 +169,7 @@ Feature: Catalog
       And the order "ORD-1001" still shows "KB-001"
       And the customer's favorites show "KB-001" flagged as unavailable
 
-    @BDD-CAT-014 @UC-CAT-006 @UC-INV-001 @UC-CART-001 @FR-CAT-003 @FR-INV-007 @nominal @critical-path
+    @BDD-CAT-014 @UC-CAT-006 @UC-INV-001 @UC-CART-001 @FR-CAT-003 @FR-INV-007 @nominal @critical-path @e2e
     Scenario: A newly published product becomes purchasable
       Given a signed-in administrator
       And a complete draft product "KB-010" priced 59.00

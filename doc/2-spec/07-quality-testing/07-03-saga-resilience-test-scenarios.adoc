@@ -1,9 +1,9 @@
 = Saga and Resilience Test Scenarios: Provoking Each Failure on Purpose
 :doc-id: 07-03
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
-:description: How the promises of the saga and of the resilience strategy are tested: the means to provoke each failure, the sheet of each saga scenario, the systematic sweeps, the resilience tests of the platform and the tests of alerts.
+:description: How the promises of the saga and of the resilience strategy are tested: the means to provoke each failure, the two sets of delays, the sheet of each saga scenario, the systematic sweeps, the resilience tests of the platform and the tests of alerts.
 include::../_shared/attributes.adoc[]
 
 == Testing a promise made under failure
@@ -16,21 +16,58 @@ What strategy tests "it still works when something breaks" without waiting for s
 The saga specification promises outcomes under failure: an order is never charged twice, never left pending, never rejected while it holds a payment.
 Such a promise is tested only by causing the failure, on purpose, at a chosen instant, and as many times as wanted.
 
-The same scenarios are tested at three depths, from the cheapest to the most real.
+The same scenarios are tested at four depths, from the cheapest to the most real.
 
-.Three depths
+.Four depths
 [cols="3,5,4,4", options="header"]
 |===
 | Depth | What runs | Proves | Catalog
 | The saga alone | The domain classes, fed with events and deadlines | Every cell of the grids; every invariant over generated sequences | {TU-ORD-005} to {TU-ORD-012}
+| The application code of all services, in memory | The domain and the use cases of the six services in one process, with stores, bus and providers in memory, and a clock moved by the test | Every acceptance scenario of document 01-08, failures included, in seconds | {TC-PLT-006}
 | One service | A service with its database and the bus emulator, its neighbors replaced by scripted messages | Transactions, inbox, outbox, deadlines, restarts of that service | {TC-ORD-003} {TC-ORD-004} {TC-INV-002} {TC-PAY-001}
-| Several services | The services of the saga together, with the simulated providers | The scenarios of document 03-03, end to end through the bus | {TI-ORD-001} to {TI-ORD-019}
+| Several services | The services of the saga together, in containers, with the simulated providers | The scenarios of document 03-03, end to end through the bus | {TI-ORD-001} to {TI-ORD-019}
 |===
 
-Most of the proof is at the first depth, where a thousand sequences run in a second.
-The third depth proves that the pieces agree; it repeats each named scenario once, not every variation.
+Most of the proof is at the first two depths, where a thousand sequences run in a second and no timing is involved.
+The fourth depth proves that the real pieces agree; it repeats each named scenario once, not every variation.
+The rest of this document is mostly about that fourth depth, the only one where failures have to be provoked on running software.
 
 Owner: {role-qa} {role-sre}
+
+== Where the scenarios run
+
+.Strategy question
+****
+What strategy gives a scenario the control it needs without building that control into production?
+****
+
+.One place
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Place | A composition of containers: the six services, their database, the bus emulator, the identity provider, and the harness described below. The payment and e-mail providers need no container: in this release they are simulated by an adapter inside the payment and notification services (document 02-02), there as everywhere.
+| When | In the pipeline of a pull request, when the change touches a service of the saga, the shared starter or the contracts (document 06-05). The whole set takes about ten minutes.
+| Not on a deployed environment | The scenarios need to hold a message, to freeze a service and to shorten delays. A deployed environment offers none of these, and must not: they are means of a test bench, not features of the platform.
+| What runs again once deployed | Only the scenarios that the payment tokens alone can drive — a declined payment, a provider that does not answer, a late capture — and a silent inventory, obtained by scaling it to nothing before the order is placed. They run in `integration` with the delays of production, hence slowly, and they are few.
+|===
+
+.Two sets of delays
+[cols="5,3,3,3", options="header"]
+|===
+| Setting | Production | Fast set | Real set
+| Order deadline | 2 min | 20 s | 2 min
+| Review delay | 5 min | 40 s | 5 min
+| Reservation lifetime | 15 min | 90 s | 15 min
+| Time limit of a call to the payment provider | 10 s | 3 s | 10 s
+| Delay of the provider under `tok_slow` | A few seconds | 1 s | A few seconds
+| Period of the deadline task and of the expiry task | A few seconds | 1 s | A few seconds
+| Shortest wait before a message is delivered again | 5 s | 1 s | 5 s
+| Used by | – | Scenarios that cross a deadline. They freeze or hold; they never restart a service. | Scenarios that restart a service. They cross no deadline.
+|===
+
+Every delay is a configuration value (document 01-06); a set is a file of values given to the composition.
+The fast set keeps the order of the delays of production, not their proportions: the call limit is below the order deadline, which is below the review delay, which is below the reservation lifetime, and the tasks run many times within the shortest of them.
+A restart takes longer than a shortened deadline could tolerate; this is why restarts have a set of their own.
 
 == Means of control
 
@@ -41,16 +78,20 @@ What strategy gives a test the power to break exactly one thing at exactly one m
 
 plantuml::diagrams/scenario-harness.puml[format=svg, align=center]
 
+Stopping a service "just after" something happened is a race that a test loses one time in ten.
+Every means below is therefore put in place *before* the order is placed, and takes effect at a point defined by a message, not by a clock.
+
 .What a scenario controls
 [cols="4,11", options="header"]
 |===
 | Need | Means
 | Decide what the payment provider does | The token given at checkout scripts the simulated provider ({FR-PAY-007}): see the table below
-| Make a service silent | In a composition of containers: the container is stopped, and started again later. On a deployed environment: the operations job that scales one workload to nothing (document 06-07).
-| Cross a deadline | Delays are configuration values (document 01-06). Scenarios run with an order deadline of 5 s, a review delay of 15 s and a reservation lifetime of 45 s: the same order as in production, a hundredth of the wait. At the first two depths the clock itself is moved by the test.
-| Deliver a message twice | The test republishes a message it observed: with the same identifier, as the bus would; or as a new message with the same content, as a retry would
-| Stop a service between saving and publishing | The service is stopped as soon as the test observes the change through its interface, before its relay has run: the relay of scenario runs waits one second between passes to leave that window
-| Make two things happen at once | An answer is published at the instant a deadline is due, repeatedly; the invariants are checked each time. The deterministic proof of the same collision is {TI-PLT-003}.
+| Make one answer or one request wait, while everything else runs | *The gate.* In the composition, each consumer reads its messages through a gate of the harness. A gate forwards every message unchanged — same envelope, same identifier, same ordering key. Told to hold a type of message for a consumer, it keeps back the messages of that type and, as the bus does for an ordering key, every later message of the same order. Told to release, it delivers them in order.
+| Make a whole service silent | *Freezing.* The container is paused, and resumed later: the service keeps its memory and its connections and does nothing. It is immediate both ways. It stands for a service that is overloaded or cut off.
+| Lose what a service holds in memory | *Killing and starting.* The container is killed without warning and started again. It stands for a crash. Used with the real set of delays.
+| Stop a service between saving and publishing | The outbox relay of that service is switched off by configuration (document 03-06): what it saves is not published. The service is then killed, and started with its relay on.
+| Deliver a message twice | The gate delivers it a second time, with the same identifier, as the bus would. For commands only, the test also publishes a new message with the same content, as a sender that retries would: a command is answered from the status of what it concerns, whereas an event with a new identifier is a new fact.
+| Aim two things at the same instant | The gate holds an answer and releases it at the instant a deadline is due, with an offset the test chooses
 | Act as an administrator | The administration interface, with a test account that has the role
 |===
 
@@ -58,18 +99,18 @@ plantuml::diagrams/scenario-harness.puml[format=svg, align=center]
 [%unbreakable, cols="3,7,5", options="header"]
 |===
 | Token | The provider | Used by
-| `tok_ok` | Captures | The nominal scenarios
+| `tok_ok` | Captures at once | The nominal scenarios
 | `tok_declined` | Declines | {SC-ORD-002}
-| `tok_slow` | Captures after a delay of a few seconds: shorter than the time limit of the call, hence than the order deadline | A slow payment that still succeeds: {UC-ORD-001}, flow 7a
-| `tok_timeout` | Does not answer the charge; cancels when asked | {SC-ORD-005}
+| `tok_slow` | Captures after a delay shorter than the time limit of the call | A slow payment that still succeeds: {UC-ORD-001}, flow 7a
+| `tok_timeout` | Does not answer the charge and does not capture; cancels when asked | {SC-ORD-005}
 | `tok_late_capture` | Captures but does not answer; answers "already captured" to the cancellation | {SC-ORD-006}
 | `tok_blackout` | Answers nothing at all: neither the charge, nor a status query, nor a cancellation | {SC-ORD-015}
-| `tok_error` | Fails every call | The circuit breaker
+| `tok_error` | Fails every charge with a technical error and does not capture; cancels when asked | The circuit breaker
 | `tok_flaky` | Fails twice, then captures | The retries of the call
 | `tok_refund_fails` | Captures at once; every refund fails | {SC-ORD-013}
 |===
 
-The simulated provider also has a control interface, absent from any real provider: a test uses it to end a blackout or a refund failure, which is how "the provider works again" is written in a scenario.
+The simulated provider keeps a record of what it was asked and has a control interface, both on the management port of the payment service, which is never routed from outside. A test uses the control to end a blackout or a refund failure, which is how "the provider works again" is written in a scenario. The simulated e-mail provider keeps its record the same way, in the notification service.
 
 .What a scenario observes
 [%unbreakable, cols="4,11", options="header"]
@@ -78,10 +119,10 @@ The simulated provider also has a control interface, absent from any real provid
 | The order: status, reason, history | The interface of the order service, as a customer and as an administrator
 | What the saga knows: its state, the remembered step, payment and stock | The administrator's view of the order
 | Every message, in order, with its envelope | A subscription of the test on each topic
-| What the provider was asked: charges, cancellations, refunds, by reference | The record of the simulated provider
+| What the payment service did | Its messages, and the record of the simulated provider: charges, cancellations, refunds, by reference. The payment service has no business interface to read.
 | The stock: on hand, reserved, available | The administration interface of the inventory
 | The e-mails | The record of the simulated e-mail provider
-| Metrics and alerts | The metrics endpoint of each service; the alert rules evaluated on them
+| What an alert would read | The metrics endpoint of each service. No alerting system runs in the composition: a scenario asserts the measure, and the rule that turns it into an alert is tested separately (below).
 |===
 
 A scenario never reads a database: what cannot be observed from outside is not a promise of the platform.
@@ -96,39 +137,42 @@ What strategy turns each scenario of the saga specification into a test that any
 Each sheet gives what is arranged, what is done and what must be observed at the end.
 Every sheet also asserts the four invariants, which are not repeated in the table: one order per checkout; at most one charge and one refund per order at the provider; available stock never negative and back to its value when the order is not confirmed; at most one e-mail per event.
 
+Sheets use the fast set of delays unless they say otherwise.
+"Let a delay pass" means waiting for the message or the status that the delay produces, with a limit; a sheet never sleeps for a fixed time.
+
 .Placing an order
 [cols="2,5,5,7", options="header"]
 |===
 | Test | Arrange | Act | Assert at the end
 | {TI-ORD-001} | 5 units in stock; `tok_ok` | Place an order for 1 unit | Order `CONFIRMED`; one charge; 4 units on hand, none reserved; the cart is empty; one confirmation e-mail; the messages of document 03-03 in order
 | {TI-ORD-002} | `tok_declined` | Place an order | Order `REJECTED`, `PAYMENT_REFUSED`; no capture; the unit is available again; the cart is kept; one rejection e-mail saying nothing was charged
-| {TI-ORD-003} | 1 unit in stock | Two customers place an order for it at the same instant | One `CONFIRMED`, one `REJECTED`, `OUT_OF_STOCK`; the provider was called once; no stock is negative
-| {TI-ORD-004} | The inventory is stopped | Place an order; let the order deadline pass; start the inventory | Order `REJECTED`, `TIMED_OUT`; the provider was never called; after the inventory returns, nothing stays reserved
+| {TI-ORD-003} | 1 unit in stock; the gate holds `StockAvailabilityChanged` for the catalog | Customer A orders the unit and sees it confirmed; customer B, to whom the catalog still shows it, orders it too; release | A `CONFIRMED`; B `REJECTED`, `OUT_OF_STOCK`; the provider was called once; no stock is negative; after the release the catalog shows the product out of stock
+| {TI-ORD-004} | The inventory is frozen | Place an order; let the order deadline pass; resume the inventory | Order `REJECTED`, `TIMED_OUT`; the provider was never called; after the inventory resumes, nothing stays reserved
 | {TI-ORD-005} | `tok_timeout` | Place an order | The payment is canceled at the provider; order `REJECTED`, `TIMED_OUT`; no capture, now or after waiting
 | {TI-ORD-006} | `tok_late_capture` | Place an order | Order `CONFIRMED`; exactly one capture; the stock is taken
-| {TI-ORD-016} | The payment service is stopped | Place an order; let the order deadline and the review delay pass; start the payment service | While stopped: order `UNDER_REVIEW`. After: the provider was never asked to charge; order `REJECTED`, `TIMED_OUT`; the unit is available
-| {TI-ORD-018} | The inventory is stopped after the reservation | Place an order with `tok_ok`; start the inventory before the review delay | Order `CONFIRMED`; it was never `UNDER_REVIEW`
+| {TI-ORD-016} | The payment service is frozen | Place an order; let the order deadline and the review delay pass; resume the payment service | While frozen: order `UNDER_REVIEW`. After: the provider was never asked to charge; order `REJECTED`, `TIMED_OUT`; the unit is available
+| {TI-ORD-018} | `tok_ok`; the gate holds `ConfirmReservation` for the inventory | Place an order; once the provider has recorded the capture, wait a quarter of the review delay; release | Order `CONFIRMED`; it was never `UNDER_REVIEW`
 |===
 
 .Technical failures
 [cols="2,5,5,7", options="header"]
 |===
 | Test | Arrange | Act | Assert at the end
-| {TI-ORD-007} | `tok_ok` | Stop the order service as soon as the capture is observed on the bus; start it | Order `CONFIRMED`; one capture
-| {TI-ORD-008} | `tok_ok` | Run the nominal scenario; republish every observed message, once with its identifier and once as a new message | Exactly the end state of {TI-ORD-001}: one charge, one stock movement, one e-mail
-| {TI-ORD-009} | – | For each service of the saga in turn: stop it between its saving and its publication; start it | The message is published after the restart; the order reaches the outcome of {TI-ORD-001}
-| {TI-ORD-010} | Two replicas of the order service; the inventory answers at the instant the order deadline is due | Place an order; repeat fifty times | Each order ends `CONFIRMED` or `REJECTED`, `TIMED_OUT`, never both, never neither; the invariants hold each time
+| {TI-ORD-007} | Real delays. `tok_ok`; the gate holds `PaymentCaptured` for the order service | Place an order; once the provider has recorded the capture, kill the order service; release; start the order service | Order `CONFIRMED`; one capture. The order service learned of the debit only after its restart.
+| {TI-ORD-008} | `tok_ok` | Run the nominal scenario; have the gate deliver every message a second time; publish every command once more as a new message | Exactly the end state of {TI-ORD-001}: one charge, one stock movement, one e-mail
+| {TI-ORD-009} | Real delays. For each service of the saga in turn: its relay is switched off | Place an order; wait until the step of that service is visible — the order through its interface, the reservation in the stock figures, the capture in the record of the provider — and that no message followed; kill the service; start it with its relay on | The message is published after the restart; the order reaches the outcome of {TI-ORD-001}
+| {TI-ORD-010} | Two replicas of the order service; the gate holds `StockReserved` for the order service | Place fifty orders; release each answer at the instant the deadline of its order is due, with an offset swept from 200 ms before to 200 ms after | Each order ends `CONFIRMED`, or `REJECTED` with nothing reserved and nothing charged: never both, never neither. The deterministic proof of the same collision is {TI-PLT-003}.
 |===
 
 .Orders under review
 [cols="2,5,5,7", options="header"]
 |===
 | Test | Arrange | Act | Assert at the end
-| {TI-ORD-011} | `tok_ok`; the inventory is stopped after the reservation | Place an order; let the review delay pass; start the inventory | While stopped: order `UNDER_REVIEW`, the alert raised, one e-mail "being checked". After: order `CONFIRMED` with no decision of an administrator
-| {TI-ORD-012} | The same, with a reservation lifetime shorter than the outage and the unit bought by another customer meanwhile | Start the inventory | The payment is refunded once; order `REJECTED`, `OUT_OF_STOCK`; an e-mail says the charge was refunded
-| {TI-ORD-013} | `tok_refund_fails`; a paid order whose stock is gone | Let the refund fail; then allow refunds and retry as an administrator | First: order `UNDER_REVIEW`, payment still captured, the alert raised. Then: one refund; order `REJECTED`
-| {TI-ORD-015} | `tok_blackout` | Place an order; let the review delay pass; reject as an administrator; lift the blackout | While dark: order `UNDER_REVIEW`, payment unknown, the unit still reserved. After: the payment is canceled; order `REJECTED`, `ADMIN_DECISION`; the unit is available
-| {TI-ORD-017} | `tok_ok`; the inventory is stopped after the reservation; order `UNDER_REVIEW` | Reject as an administrator; then start the inventory | One refund; order `REJECTED`, `ADMIN_DECISION`; after the inventory returns, the unit is on hand and available: taken, then returned once
+| {TI-ORD-011} | `tok_ok`; the gate holds `ConfirmReservation` for the inventory | Place an order; let the review delay pass; release | While held: order `UNDER_REVIEW`, one order counted under review, one e-mail "being checked". After: order `CONFIRMED` with no decision of an administrator
+| {TI-ORD-012} | `tok_ok`; 1 unit in stock; the gate holds `ConfirmReservation` for the inventory, which keeps running | Place an order; let the review delay, then the reservation lifetime, pass; as an administrator set the stock of the product to zero; retry the order as an administrator; release | Before the release: order `UNDER_REVIEW`, nothing reserved any more. After: one refund; order `REJECTED`, `OUT_OF_STOCK`; an e-mail says the charge was refunded
+| {TI-ORD-013} | `tok_refund_fails`; the gate holds `ConfirmReservation` for the inventory | Place an order; let the review delay pass; reject it as an administrator; then allow refunds at the provider, retry as an administrator, release | After the rejection: order still `UNDER_REVIEW`, payment still captured, one failed refund counted. After the retry: one refund; order `REJECTED`, `ADMIN_DECISION`; the unit is available
+| {TI-ORD-015} | `tok_blackout` | Place an order; let the order deadline and the review delay pass; reject as an administrator; end the blackout | While dark: order `UNDER_REVIEW`, payment unknown, nothing captured. After: the payment is canceled; order `REJECTED`, `ADMIN_DECISION`; the unit is available
+| {TI-ORD-017} | `tok_ok`; the gate holds `ConfirmReservation` for the inventory | Place an order; let the review delay pass; reject as an administrator; release | One refund; order `REJECTED`, `ADMIN_DECISION`; after the release the unit is on hand and available: taken, then returned once
 |===
 
 .Cancellation
@@ -136,8 +180,11 @@ Every sheet also asserts the four invariants, which are not repeated in the tabl
 |===
 | Test | Arrange | Act | Assert at the end
 | {TI-ORD-014} | A confirmed order of 2 units | Cancel it as its customer | Order `CANCELED`; 2 units back on hand; one refund of the full amount; one cancellation e-mail
-| {TI-ORD-019} | A confirmed order of 2 units; the inventory is stopped | Cancel; let the review delay pass; retry as an administrator; start the inventory | While stopped: order `UNDER_REVIEW`. After: exactly 2 units back, not 4; one refund; order `CANCELED`
+| {TI-ORD-019} | A confirmed order of 2 units; the gate holds `ReturnStock` for the inventory | Cancel; let the review delay pass; retry as an administrator; release | While held: order `UNDER_REVIEW`. After: exactly 2 units back, not 4; one refund; order `CANCELED`
 |===
+
+Scenarios that hold a message or freeze a service run one after the other: a hold concerns a type of message for a consumer, whatever the order.
+Each scenario uses its own customer and its own products.
 
 == Systematic sweeps
 
@@ -154,9 +201,9 @@ Sweeps go through all the cases of one kind, mechanically.
 |===
 | Sweep | Method | Depth
 | Every cell | A test reads the grids of document 02-03 and checks that each cell has a test, and each test its cell | The saga alone
-| Generated sequences | Thousands of random sequences of answers, deadlines and administrator requests are applied to a saga, with the answers the participants could really give; the invariants are checked after each step, and every sequence must end or reach a person | The saga alone
-| Duplicate everything | Each message of each scenario is delivered a second time, at once and later | One service; several services
-| Stop at every step | For each message handled in the nominal scenario, the handling service is stopped after its transaction and before its acknowledgement, then started | Several services
+| Generated sequences | Thousands of random sequences of answers, deadlines and administrator requests are applied to a saga, with the answers the participants could really give; the invariants are checked after each step, and every sequence must end or reach a person. The generator is seeded: a failure prints its seed and its sequence, which is then kept as an example test. | The saga alone
+| Duplicate everything | Each message of each scenario is delivered a second time, at once and later | The application code in memory; several services
+| Handled, killed, delivered again | For each message of the nominal scenario: the consumer handles it, is killed once the effect is visible, is started, and receives the same message again. Whether or not its acknowledgement had left, the effect must exist once. | One service
 | Silence at every step | Each participant is silent at each step where the saga waits for it: the table below | Several services
 |===
 
@@ -171,11 +218,14 @@ Sweeps go through all the cases of one kind, mechanically.
 | Inventory | The confirmation | Confirmed late, or under review and then confirmed ({TI-ORD-018}, {TI-ORD-011})
 | Payment provider | The refund | Under review; refunded on a retry ({TI-ORD-013})
 | Inventory | The return of a cancellation | Under review; returned once ({TI-ORD-019})
-| Order service | Any answer | Answers wait; handled at restart, deadlines first ({TI-ORD-007})
+| Order service | Any answer | Answers wait; handled at restart ({TI-ORD-007})
 | Notification | – | Orders unaffected; e-mails sent late ({TC-NOT-001})
+| Catalog | – | Sagas in progress continue; a new checkout is refused; the cart shows its last known prices ({TC-ORD-002}, {TC-CART-001})
+| Cart | – | Sagas in progress continue; a new checkout is refused ({TC-ORD-002})
+| The bus | Everything | Messages accumulate in the outboxes and leave in order when the bus returns; deadlines still fall ({TI-PLT-001}, {TC-ORD-004})
 |===
 
-Every row of the outage table of document 05-02 appears here with a test.
+Every row of the table "When a service is down" of document 05-02 appears here with a test.
 
 == Resilience tests of the platform
 
@@ -190,38 +240,68 @@ These tests run on `integration`, in an announced window when they disturb the s
 |===
 | Test | Method | Passes when
 | Loss of an instance | During a steady load, a pod of each service is deleted in turn | No error beyond the requests that pod held; no order lost; the pod is replaced ({NFR-AVAIL-002})
+| Loss of a zone | The platform offers no way to remove a zone on demand. The test checks that the replicas of each service are spread over zones, then deletes together every pod of one zone. The database part of a zone loss is the failover below. | The replicas of the other zones serve; the deleted pods are replaced
 | Loss of a service | Each service is scaled to nothing in turn, for five minutes, under load | The functions that document 05-02 says survive do survive, without error ({NFR-AVAIL-003}); orders settle when the service returns
 | Deployment under load | A new version of each service is rolled out while orders are being placed | Not one order fails or is charged twice because of the rollout ({NFR-REL-004})
 | Slow neighbor | A simulated catalog answers after the time limit | The call is abandoned in time; the circuit opens, then closes after the trial calls; the cart shows the last known prices
-| Failing provider | `tok_error` on a share of the orders | The circuit opens; charges are answered "unknown" at once; orders are rejected uncharged when it closes
+| Failing provider | `tok_error` on a share of the orders | The circuit opens; charges are answered "unknown" at once; each is canceled at the provider and its order rejected, uncharged
 | Poison message | A message that breaks its contract is published on each topic | It reaches its dead-letter topic after ten attempts; the alert fires; the other orders are not delayed
 | Parked message | A row that the bus refuses is placed in an outbox | It is parked; the alert fires; only the later messages of the same order and topic wait
 | Identity provider down | It is scaled to nothing for ten minutes | Browsing works; a session is kept and answered with its code; everything resumes
 | Database failover | Triggered in its window | About a minute of clean refusals; no order lost; nothing to do by hand
 |===
 
-.Tests of alerts
-[%unbreakable, cols="5,10", options="header"]
+== Tests of alerts
+
+.Strategy question
+****
+What strategy proves that an alert will fire, without waiting half an hour for each one?
+****
+
+An alert is three things, and each is tested where it is cheapest.
+
+.Three proofs
+[cols="3,7,5", options="header"]
 |===
-| Alert | Provoked by
-| Orders under review | {TI-ORD-011}, left unresolved
-| Dead letter; outbox late or parked | The poison and parked message tests above
-| Defensive transition | A `PaymentCaptured` published by the test for a rejected order
-| Payment provider unavailable | `tok_error` for longer than the threshold
-| Refund failed; e-mail not sent | {TI-ORD-013}; the simulated e-mail provider set to fail
-| Error budget, probe | A service scaled to nothing under load; the web gateway scaled to nothing
-| Budget, drift | A test budget with a tiny amount in `test`; a label removed by hand from a resource of `test`
+| Proof | Method | Where
+| The measure exists | The scenario that causes the condition asserts the measure the alert reads | Containers: the scenario sheets above
+| The rule is right | Each rule file is replayed against series written for it: below the threshold, at the threshold, for less than its duration, for longer. "Under review for more than 30 minutes" is checked in a millisecond. | The build
+| The alert arrives | A few alerts are provoked for real, end to end, down to the notification | `test`, after a deployment that changes the alert rules
 |===
 
-Each alert must fire within 5 minutes of its cause and name its runbook ({NFR-OBS-004}).
+.Every alert of document 05-03
+[cols="4,6,5", options="header"]
+|===
+| Alert | Its measure is asserted by | Provoked for real in `test`
+| Error budget burning fast or slowly | The rule test, on written series | A service scaled to nothing under a small load: fast burn only
+| Orders under review; an order is put under review | {TI-ORD-011} | {SC-ORD-015} driven by its token, left unresolved: the occurrence alert. The 30 minutes are proven by the rule test.
+| Dead letter | The poison message test | Yes
+| Outbox late; parked row | {TI-PLT-001} | A parked row
+| Defensive transition | {TU-ORD-010}; a `PaymentCaptured` published by the test for a rejected order | –
+| Payment provider unavailable | The failing provider test | –
+| Refund failed | {TI-ORD-013} | –
+| E-mail not sent | {TC-NOT-001} | –
+| Subscription backlog | A consumer frozen in the composition | A service scaled to nothing for three minutes
+| Database connections | The rule test | –
+| Pod restarting | The rule test | –
+| Database failed over | – | Observed during the failover drill
+| Infrastructure drift | – | A label removed by hand from a resource of `test`
+| Unexpected errors | {TC-PLT-004} | –
+| Invalid requests; access refused | {TC-PLT-001} {TC-PLT-003}; the rule test | –
+| Probe failing | – | The web gateway scaled to nothing
+| Budget | – | A test budget with a tiny amount
+|===
+
+An alert provoked for real must arrive within 5 minutes of its condition and name its runbook ({NFR-OBS-004}).
 
 .In the proof of concept ({ADR-PLT-030})
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Subject | What runs
-| Saga scenarios | All of them, in the composition of containers of the pipeline: they need no cloud resource. On the deployed environment: the nominal one, a declined payment, a silent inventory.
+| Saga scenarios | All of them, in the composition of containers of the pipeline: they need no cloud resource. On the deployed environment: the nominal one, a declined payment, a provider that does not answer, a silent inventory.
 | Platform tests | The loss of a service, the poison message, the identity provider down. With one replica, the loss of an instance is the loss of the service.
-| Not run | Deployment under load and database failover: they need a second replica and a standby
+| Alerts | The measures and the rules, in the build. Provoked for real: the dead letter and the failing probe.
+| Not run | Deployment under load, loss of a zone and database failover: they need a second replica and a standby
 |===
 
 Owner: {role-qa} {role-sre}

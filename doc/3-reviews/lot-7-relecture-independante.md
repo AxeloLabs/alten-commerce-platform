@@ -12,26 +12,30 @@ Rapport rendu le 2026-11-19 par un relecteur indépendant, qui a lu les quatre d
 
 ## 2. État des corrections
 
-À CORRIGER — plan arrêté le 2026-11-19, avant toute modification des documents.
+FAIT le 2026-11-19 : les seize remarques sont corrigées, par le commit « spec LOT 7 : corrections de la relecture indépendante » qui suit celui de ce rapport. La fabrication passe sans erreur, et elle refuse désormais une règle métier sans test. Cette passe de correction n'a pas été relue par un tiers.
+
+Deux points relevés par l'auteur pendant la correction sont ajoutés en fin de table.
 
 | Remarque | Correction retenue | Documents | État |
 |---|---|---|---|
-| BLOQUANT — fiche TI-ORD-012 impossible : personne n'achète quand l'inventaire est arrêté, et une réservation tenue est confirmée au retour | Nouveau moyen de contrôle : une « porte » entre un sujet et son consommateur, tenue par le banc de test, qui retient un type de message pour un participant pendant que celui-ci continue de tourner. La fiche laisse expirer la réservation, met le stock à zéro, relance en administrateur. TI-ORD-013 est amené par un rejet d'administrateur | `07-03` | à faire |
-| BLOQUANT — TI-ORD-009 : un redémarrage dure plus que l'échéance de 5 s | Deux profils de délais pour les scénarios : « rapide » (échéances en secondes, on gèle ou on retient, jamais de redémarrage) et « réel » (délais de production, pour les scénarios de redémarrage). Le test de l'outbox coupe le relais par configuration | `07-03`, `03-06` | à faire |
-| Délais « dans le même ordre qu'en production » : faux (limite d'appel 10 s, tâche d'échéance, durée de vie de la réservation) | Une table qui met à l'échelle TOUS les réglages de temps ensemble | `07-03` | à faire |
-| Où tournent les scénarios de saga : contradiction entre `07-01`, `07-03` et `06-05` | Un seul endroit : une composition de conteneurs, dans le pipeline. Étape ajoutée au pipeline. Sur un environnement déployé : seulement le sous-ensemble pilotable par les jetons | `07-01`, `07-03`, `06-05` | à faire |
-| Fenêtres de quelques millisecondes impossibles à viser (« arrêté après la réservation », « dès que la capture est observée ») | Retenir un type de message AVANT de passer la commande ; geler au lieu d'arrêter ; le balayage « arrêt à chaque étape » devient « traité, tué, relivré » | `07-03` | à faire |
-| Niveau des scénarios d'acceptation : `07-01` contredit `01-08` ; des scénarios de chemin critique exigent une panne qu'un navigateur ne provoque pas | Tous les scénarios tournent dans un seul processus, sur le code métier des services avec des adaptateurs en mémoire, comme `01-08` le dit. Les scénarios de chemin critique qui demandent une panne portent une étiquette et ne sont pas rejoués par le navigateur | `07-01`, `07-02`, `01-08`, `04-03` | à faire |
-| H2 absent de `07-01` alors que `04-04` et ADR-PLT-015 y renvoient | Tests de tranche de persistance sur H2 ajoutés : niveau, outil, entrée au catalogue | `07-01`, `07-02` | à faire |
-| Performance : pas d'autoscaling en intégration, limite de débit par adresse, modèle de charge incohérent, mesure attribuée à tort à Gatling | Cible avec autoscaling nommée, exemption de l'injecteur, modèle ouvert à débit d'arrivée fixe, phrase sur la mesure retirée | `07-04` | à faire |
-| Couverture : 17 règles sans test au catalogue, inscription et connexion non testées, et la fabrication ne vérifie pas « toute règle a un test » | Entrées ajoutées ; la fabrication refuse désormais une règle métier sans test | `07-02`, `_tools/ids.py` | à faire |
-| Alertes : huit alertes sans test ; « alerte levée » affirmé là où aucun système d'alerte ne tourne | Table complétée ; en conteneurs on affirme la mesure, pas l'alerte | `07-03` | à faire |
-| `tok_error` : rejet impossible si l'annulation échoue aussi | L'annulation réussit ; précisé dans les règles métier | `01-06`, `07-03` | à faire |
-| TI-ORD-003 et TE2E-ORD-003 instables selon l'ordre d'arrivée | En conteneurs : l'événement de disponibilité est retenu. De bout en bout : les deux issues sont acceptées | `07-03`, `07-02` | à faire |
-| Mineur — message rejoué « comme un message neuf » : un second e-mail | Réservé aux commandes | `07-03` | à faire |
-| Mineur — « toutes les lignes de la table des pannes » : il en manque | Lignes ajoutées ou phrase corrigée | `07-03` | à faire |
-| Mineur — test de fumée avec un compte de test en production | Aligné sur `06-01` | `07-02`, `07-04` | à faire |
-| Mineur — séquences générées sans outil ni graine ; collision de TI-ORD-010 impossible à viser | Générateur à graine imprimée ; la porte relâche la réponse à l'instant de l'échéance | `07-01`, `07-03` | à faire |
+| BLOQUANT — fiche TI-ORD-012 impossible : personne n'achète quand l'inventaire est arrêté, et une réservation tenue est confirmée au retour | Nouveau moyen de contrôle : une « porte » entre un sujet et son consommateur, tenue par le banc de test, qui retient un type de message pour un participant pendant que celui-ci continue de tourner. La fiche laisse expirer la réservation, met le stock à zéro, relance en administrateur. TI-ORD-013 est amené par un rejet d'administrateur | `07-03` | fait |
+| BLOQUANT — TI-ORD-009 : un redémarrage dure plus que l'échéance de 5 s | Deux profils de délais pour les scénarios : « rapide » (échéances en secondes, on gèle ou on retient, jamais de redémarrage) et « réel » (délais de production, pour les scénarios de redémarrage). Le test de l'outbox coupe le relais par configuration | `07-03`, `03-06` | fait |
+| Délais « dans le même ordre qu'en production » : faux (limite d'appel 10 s, tâche d'échéance, durée de vie de la réservation) | Une table qui met à l'échelle TOUS les réglages de temps ensemble | `07-03` | fait |
+| Où tournent les scénarios de saga : contradiction entre `07-01`, `07-03` et `06-05` | Un seul endroit : une composition de conteneurs, dans le pipeline. Étape ajoutée au pipeline. Sur un environnement déployé : seulement le sous-ensemble pilotable par les jetons | `07-01`, `07-03`, `06-05` | fait |
+| Fenêtres de quelques millisecondes impossibles à viser (« arrêté après la réservation », « dès que la capture est observée ») | Retenir un type de message AVANT de passer la commande ; geler au lieu d'arrêter ; le balayage « arrêt à chaque étape » devient « traité, tué, relivré » | `07-03` | fait |
+| Niveau des scénarios d'acceptation : `07-01` contredit `01-08` ; des scénarios de chemin critique exigent une panne qu'un navigateur ne provoque pas | Tous les scénarios tournent dans un seul processus, sur le code métier des services avec des adaptateurs en mémoire, comme `01-08` le dit. Les scénarios de chemin critique qui demandent une panne portent une étiquette et ne sont pas rejoués par le navigateur | `07-01`, `07-02`, `01-08`, `04-03` | fait |
+| H2 absent de `07-01` alors que `04-04` et ADR-PLT-015 y renvoient | Tests de tranche de persistance sur H2 ajoutés : niveau, outil, entrée au catalogue | `07-01`, `07-02` | fait |
+| Performance : pas d'autoscaling en intégration, limite de débit par adresse, modèle de charge incohérent, mesure attribuée à tort à Gatling | Cible avec autoscaling nommée, exemption de l'injecteur, modèle ouvert à débit d'arrivée fixe, phrase sur la mesure retirée | `07-04` | fait |
+| Couverture : 17 règles sans test au catalogue, inscription et connexion non testées, et la fabrication ne vérifie pas « toute règle a un test » | Entrées ajoutées ; la fabrication refuse désormais une règle métier sans test | `07-02`, `_tools/ids.py` | fait |
+| Alertes : huit alertes sans test ; « alerte levée » affirmé là où aucun système d'alerte ne tourne | Table complétée ; en conteneurs on affirme la mesure, pas l'alerte | `07-03` | fait |
+| `tok_error` : rejet impossible si l'annulation échoue aussi | L'annulation réussit ; précisé dans les règles métier | `01-06`, `07-03` | fait |
+| TI-ORD-003 et TE2E-ORD-003 instables selon l'ordre d'arrivée | En conteneurs : l'événement de disponibilité est retenu. De bout en bout : les deux issues sont acceptées | `07-03`, `07-02` | fait |
+| Mineur — message rejoué « comme un message neuf » : un second e-mail | Réservé aux commandes | `07-03` | fait |
+| Mineur — « toutes les lignes de la table des pannes » : il en manque | Lignes ajoutées ou phrase corrigée | `07-03` | fait |
+| Mineur — test de fumée avec un compte de test en production | Aligné sur `06-01` | `07-02`, `07-04` | fait |
+| Mineur — séquences générées sans outil ni graine ; collision de TI-ORD-010 impossible à viser | Générateur à graine imprimée ; la porte relâche la réponse à l'instant de l'échéance | `07-01`, `07-03` | fait |
+| Auteur — dans la matrice de traçabilité, le titre de chaque test était sa famille (« Nominal, error ») au lieu de ce qu'il prouve | Colonnes du catalogue inversées : l'énoncé suit l'identifiant | `07-02` | fait |
+| Auteur — où tourne le fournisseur de paiement simulé : `08-01` en faisait un conteneur, `02-02` et `06-02` un adaptateur du service de paiement | Un seul énoncé : un adaptateur dans le service de paiement (et de notification), avec son journal et sa commande sur le port de gestion | `07-03`, `08-01` | fait |
 
 ## 3. Rapport du relecteur
 

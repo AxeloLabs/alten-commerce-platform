@@ -1,6 +1,6 @@
 = Functional Requirements and Business Rules: What the System Shall Always Do
 :doc-id: 01-06
-:revnumber: 0.4
+:revnumber: 0.5
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Verifiable functional requirements and business rules, by bounded context, with the amounts, limits and statuses they rely on.
@@ -293,7 +293,7 @@ In this release the storefront offers the tokens below as test means of payment.
 | `tok_timeout` | Never answers the charge and does not capture. A cancellation succeeds.
 | `tok_late_capture` | Never answers the charge, but captures. A cancellation answers "already captured".
 | `tok_blackout` | Answers nothing at all: neither the charge, nor a status query, nor a cancellation.
-| `tok_error` | Fails with a technical error on every attempt, and does not capture.
+| `tok_error` | Fails the charge with a technical error on every attempt, and does not capture. A cancellation succeeds.
 | `tok_flaky` | Fails twice, then captures.
 | `tok_refund_fails` | Captures at once; every refund fails.
 |===

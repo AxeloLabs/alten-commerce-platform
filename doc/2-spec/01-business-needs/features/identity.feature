@@ -34,7 +34,7 @@ Feature: Identity and access
       Then the sign-in is refused
       And the message does not say whether the address or the password is wrong
 
-    @BDD-IAM-005 @UC-IAM-002 @FR-IAM-003 @error @critical-path
+    @BDD-IAM-005 @UC-IAM-002 @FR-IAM-003 @error @critical-path @e2e
     Scenario: A visitor is asked to sign in before using the cart
       Given a visitor who is not signed in
       When the visitor adds the product "KB-001" to the cart
@@ -43,7 +43,7 @@ Feature: Identity and access
 
   Rule: A role reaches only its own functions, and a customer only their own data
 
-    @BDD-IAM-006 @UC-IAM-002 @FR-IAM-005 @error @critical-path
+    @BDD-IAM-006 @UC-IAM-002 @FR-IAM-005 @error @critical-path @e2e
     Scenario Outline: A customer cannot use an administration function
       Given a signed-in customer
       When the customer tries to <action>
@@ -58,7 +58,7 @@ Feature: Identity and access
         | adjust the stock of "KB-001"        |
         | resolve an order under review       |
 
-    @BDD-IAM-007 @UC-IAM-002 @FR-IAM-004 @invariant @critical-path
+    @BDD-IAM-007 @UC-IAM-002 @FR-IAM-004 @invariant @critical-path @e2e
     Scenario: A customer cannot read another customer's order
       Given a customer "alice@example.com" with the order "ORD-1001"
       And a signed-in customer "bob@example.com"

@@ -1,6 +1,6 @@
 = Environment Strategy: Three Environments, One Cluster, and the Path to Production
 :doc-id: 06-01
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: What each environment is for, how the three are separated inside one project and one cluster, what may differ between them, how a version is promoted, and the layout a company would use.
@@ -32,8 +32,8 @@ An engineer's workstation comes before them; it is described in document 08-01 a
 | Place | Tests
 | Build | Unit tests, architecture rules, component tests with containers, contract checks
 | `test` | What needs the real services: schemas enforced by Pub/Sub, the document database, identities and rights; the authorization suite; the dynamic security scan
-| `integration` | End-to-end tests of the critical paths; saga scenarios with failures provoked; load tests; the database failover drill
-| `prod` | A verification after each deployment: the critical paths, read-only or on a test account
+| `integration` | End-to-end tests of the critical paths; the saga scenarios that payment tokens can drive; load tests; the database failover drill
+| `prod` | A verification after each deployment: the entry points answer, and the checkout indicator is watched. No account of the store is used: production has none to lend. In the proof of concept, whose data is synthetic, a test customer also places an order.
 |===
 
 Owner: {role-platform} {role-devops}
@@ -178,7 +178,7 @@ What strategy gives tests realistic data without ever copying a customer's?
 | Subject | Rule
 | Production data | Never leaves production. No copy, no extract, no anonymized dump in another environment.
 | Synthetic data | A script creates a catalog, stock, accounts and orders that look real and belong to nobody. It is versioned with the code and can rebuild an environment from empty.
-| Accounts | Test accounts exist in the realms of `test` and `integration` only. Production has no shared or generic account.
+| Accounts | Test accounts exist in the realms of `test` and `integration`, and in the proof of concept, whose only environment holds synthetic data. A production with real customers has no shared or generic account.
 | Reset | `test` can be emptied and reloaded at any time. `integration` keeps its data between runs, so that migrations are exercised on data that has a history.
 | Reference data | The list of categories is part of the migrations, identical everywhere.
 |===

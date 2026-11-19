@@ -1,6 +1,6 @@
 = Security and Performance Test Plans: Proving the Platform Resists and Holds the Load
 :doc-id: 07-04
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The security tests, from the authorization suite to the dynamic scan and the leak test, and the performance tests, from the load model to the pass criteria, with where and when each one runs.
@@ -30,6 +30,7 @@ plantuml::diagrams/security-tests-layers.puml[format=svg, align=center]
 | A pod reaches only what is its own | Isolation tests | `test`
 | Nothing sensitive in logs, e-mails or error answers | Leak tests | `integration`; every build for error answers
 | Administration actions are audited | Audit tests | Every build
+| Registration and sign-in belong to the identity provider | Realm tests, on a container of the real product ({TI-IAM-001}, {TI-IAM-002}) | Every build
 |===
 
 Owner: {role-sec} {role-qa}
@@ -75,7 +76,7 @@ What strategy guarantees that no cell of the authorization matrix is ever left u
 | Anti-forgery | A request that changes something without the token, or with another session's token, is refused with {ERR-PLT-010}
 | Session identifier | Changes at sign-in; an identifier obtained before sign-in gives nothing after
 | Expiry and sign-out | An expired or ended session is refused; ended at the identity provider, it is ended at the gateway
-| Renewal | Twenty parallel requests at the moment of renewal: one renewal, no session lost
+| Renewal | Twenty parallel requests at the moment of renewal: one renewal, no session lost. A refresh token presented a second time is refused and ends the session ({TI-IAM-002}).
 | Headers | Transport security, content policy, no framing, no content sniffing, on every answer
 |===
 
@@ -126,7 +127,7 @@ What strategy looks at the running platform the way an attacker would?
 |===
 | Subject | Method
 | Marked values | End-to-end tests use values made to be recognized: an e-mail address, a street, a payment token and a password that contain a marker
-| Logs | After the end-to-end tests of `integration`, the logs of every service for the period are searched for the marker and for the shape of a token: no occurrence is accepted ({NFR-SEC-007})
+| Logs | After the end-to-end tests of `integration`, the logs of every service for the period are searched for the marker and for the shape of a token: no occurrence is accepted ({TI-PLT-008})
 | E-mails | The e-mails recorded by the simulated provider contain no payment data, and say the truth about what was charged
 | Error answers | A provoked unexpected error returns the generic code and a reference, and nothing else ({TC-PLT-004})
 | Traces | The attributes of the spans of the same period are searched the same way
@@ -170,12 +171,13 @@ What strategy turns "it should be fast" into numbers measured the same way at ev
 [%unbreakable, cols="5,10", options="header"]
 |===
 | Element | Value
-| Customers browsing at the same time | 100
+| Model | Open: requests are injected at the rates below, whatever the response times. The rates define the load.
+| Customers these rates stand for | 100 browsing at the same time, as document 01-07 assumes: each sends a catalog request every two seconds on average
 | Catalog requests | 50 per second: four fifths lists and searches, one fifth product pages
 | Cart operations | 5 per second
 | Orders | 2 per second at peak; nine in ten succeed, one in ten is declined or out of stock
 | Administration | A stock adjustment or a price change every few seconds, to keep availability moving
-| Behavior of a simulated customer | Browses, pauses for a few seconds between pages, adds to the cart, sometimes checks out, polls its order until it is settled
+| Shape of a session | Browse, add to the cart, sometimes check out, poll the order until it is settled: the rates above are split between these steps
 |===
 
 .Data in place before a run
@@ -198,11 +200,21 @@ What strategy finds the limit of the platform before customers do?
 
 Runs are written with Gatling {v-gatling}, kept in the repository, and driven from outside the cluster through the public entry point, so that the load balancer and the web gateway are measured with the rest.
 
+Two arrangements are made for the window of a run, by the pipeline, and undone at its end.
+
+.For the window of a run
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Arrangement
+| Rate limits | The firewall at the edge limits the requests of one address (document 05-04), and the injector is one address. A rule exempts it for the window; otherwise the run would measure the firewall. A separate short run, without the exemption, checks that the limits do refuse the excess.
+| Autoscaling | `integration` has no autoscaler of its own (document 06-03). For the runs that need one — twice nominal, spike, deployment under load — `test` is put to sleep and `integration` receives the values of production: two replicas and the autoscaler, bounded to four. With production at its own maximum this is 356 database connections, within the 400 that the shared instance may use (document 06-03).
+|===
+
 .Runs
 [cols="3,5,3,6", options="header"]
 |===
 | Run | Load | Duration | Passes when
-| Smoke | A tenth of the nominal load | 2 minutes | No error. Run after every deployment that touches a service.
+| Smoke | A tenth of the nominal load | 2 minutes | No error. Run after every deployment that touches a service, except in a production with real customers.
 | Nominal | The nominal load | 30 minutes | Every target of the table above is met; no error beyond business refusals
 | Twice nominal | Ramp from nominal to twice nominal | 30 minutes | Targets still met; replicas were added, and removed afterwards ({NFR-SCAL-001})
 | Stress | Ramp until a target is missed | Until it breaks | Not a pass or fail: it tells what gives way first and at what load. The platform must refuse the excess cleanly, and recover by itself when the load drops.
@@ -215,7 +227,7 @@ Runs are written with Gatling {v-gatling}, kept in the repository, and driven fr
 [cols="4,11", options="header"]
 |===
 | Side | Measures
-| The injector | Response times as percentiles, per kind of request; errors by code; requests sent and answered per second. Measured from the instant a request was due, so that a slow platform is not flattered by an injector that waited for it.
+| The injector | Response times as percentiles, per kind of request; errors by code; requests sent and answered per second. Because the load is injected at fixed rates, a slow platform is not flattered by an injector that waits for it.
 | The services | The histograms of each endpoint; the duration of sagas; the delay of publication; connections in use and waiting; the state of circuits
 | The bus and the database | The age of the oldest message of each subscription; the load and the slow statements of the instance
 | The cluster | Replicas over time; processor and memory against the requests
@@ -248,7 +260,7 @@ What strategy runs heavy tests without making production pay for them?
 | Security gates of the pipeline; authorization, token and session tests | The build | Every pull request
 | Dynamic scan, isolation, abuse tests | `test` | After every deployment
 | Leak tests | `integration` | After the end-to-end tests
-| Smoke load | Every environment | After a deployment that touches a service
+| Smoke load | `test`, `integration` and the proof of concept; never a production with real customers | After a deployment that touches a service
 | Nominal, twice nominal, spike, deployment under load | `integration` | In an announced window, before a release that touches performance or the platform
 | Stress, soak | `integration` | In an announced window, before the opening and after a change of sizing
 |===

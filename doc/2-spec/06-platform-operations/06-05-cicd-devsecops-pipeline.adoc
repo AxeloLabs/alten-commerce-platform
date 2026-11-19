@@ -1,6 +1,6 @@
 = CI/CD and DevSecOps Pipeline: From a Commit to Production, Gate by Gate
 :doc-id: 06-05
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How a change is integrated and delivered, the gates it must pass and what each one blocks, how the pipeline authenticates, how production is reached and left, and how delivery is measured.
@@ -59,7 +59,9 @@ plantuml::diagrams/pipeline-pr.puml[format=svg, align=center, pdfwidth=80%]
 | Build | Formatting, compilation with static checks, unit tests | Maven {v-maven}, Spotless {v-spotless}, Error Prone {v-error-prone}, NullAway {v-nullaway}, JUnit {v-junit} | A file is not formatted; a warning; a failing test ({NFR-MAINT-005})
 | Architecture | The rules of document 04-03 | ArchUnit {v-archunit}, Checkstyle {v-checkstyle} | One violation ({NFR-MAINT-002})
 | Domain | Coverage, then mutation testing, of the domain packages | JaCoCo {v-jacoco}, PIT {v-pitest} | Coverage below 100 % of lines and branches; mutation score below its threshold ({NFR-MAINT-001})
+| Acceptance | Every scenario of document 01-08, against the application code of the services assembled in memory | Cucumber {v-cucumber} | A failing scenario; a scenario of a delivered use case that has no binding
 | Components | Each service with its real adapters, in containers | Testcontainers {v-testcontainers}, Microcks {v-microcks} | A failing test; a service that does not conform to its contract
+| Saga scenarios | The services of the saga in a composition of containers, driven by the harness of document 07-03. Only when a service of the saga, the starter or the contracts changed. | Testcontainers {v-testcontainers} | A scenario that does not end as specified
 | Storefront | Lint, unit tests, build | Angular {v-angular} tooling | An error
 | Code analysis | Defects, duplications and security rules on the code that changed | SonarQube, hosted edition | The quality gate on new code fails
 | Dependencies | Inventory of components, known vulnerabilities | Syft {v-syft}, Grype {v-grype} | A critical or high vulnerability with a fix available ({NFR-SEC-005})
@@ -67,7 +69,7 @@ plantuml::diagrams/pipeline-pr.puml[format=svg, align=center, pdfwidth=80%]
 | Documentation | Build of this specification, when it changes | The documentation toolchain | A broken identifier or reference
 |===
 
-A pull request is answered within a quarter of an hour.
+A pull request is answered within a quarter of an hour; one that changes a service of the saga, the starter or the contracts waits about ten minutes more for the saga scenarios.
 Stages that do not depend on each other run in parallel, and a stage runs only if something it concerns has changed.
 
 The code analysis uses the hosted edition of the product: a server of our own would cost more to run than the whole proof of concept ({ADR-PLT-030}).
@@ -81,6 +83,9 @@ Where that service is not configured, the stage is skipped and says so; the othe
 | A false positive of an analysis | Marked where it occurs, with a reason. Never by lowering a threshold.
 | Skipping a gate | Not possible from a pull request. The protection of the main branch belongs to the owners of the repository.
 |===
+
+Expert review agents (document 08-03) comment on a pull request in a workflow of their own.
+They advise the reviewer and never block: only the stages above are gates.
 
 == The pipeline of the main branch
 
@@ -99,7 +104,7 @@ plantuml::diagrams/pipeline-release.puml[format=svg, align=center, pdfwidth=72%]
 | Release | Recorded in the repository: its version, the digests of its images, the versions of its charts | –
 | Deployment to `test` | One job, bound to the environment `test`. It applies the infrastructure of the environment if it changed, then each chart that changed. | A migration fails; a pod does not become ready
 | Tests of `test` | The tests that need real services, the authorization suite, the dynamic scan with ZAP {v-zap} | A failing test; a finding of high severity ({NFR-SEC-008})
-| Deployment to `integration`, and its tests | The same release, the same way. End-to-end tests of the critical paths with Playwright {v-playwright}; saga scenarios with failures provoked | A failing test
+| Deployment to `integration`, and its tests | The same release, the same way. End-to-end tests of the critical paths with Playwright {v-playwright}; the saga scenarios that payment tokens alone can drive; the leak test | A failing test
 | Approval | The job bound to the environment `prod` waits until a person named for that environment approves, with the evidence of the previous steps in front of them | Not approved
 | Deployment to `prod` | The same release, the same way, then a verification of the critical paths | A pod not ready, or a failed verification: automatic return to the previous release
 |===

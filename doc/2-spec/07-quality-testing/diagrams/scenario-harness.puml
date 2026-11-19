@@ -12,31 +12,36 @@ package "Under test" #F4F7F9 {
   component "Cart, catalog,\nnotification" as R
 }
 
-component "Simulated payment provider\nanswers by token;\nrecords every call" as PSP #E3F2FD
-component "Simulated e-mail provider\nrecords every e-mail" as MAIL #E3F2FD
 queue "Bus" as BUS
+component "Gate\none per consumer:\nforwards, holds, releases,\nrepeats a message" as G #FFE0B2
+component "Simulated payment provider\nan adapter of the payment service:\nanswers by token, records every call" as PSP #E3F2FD
+component "Simulated e-mail provider\nan adapter of the notification service:\nrecords every e-mail" as MAIL #E3F2FD
 component "Observation subscriptions\none per topic" as OBS #C8E6C9
 
 T --> O : places an order,\ndecides as an administrator
-T ..> I : stops and restarts
-T ..> P : stops and restarts
-T ..> BUS : republishes a message
-T ..> PSP : chooses the token
-O <--> BUS
-I <--> BUS
-P <--> BUS
-R <-- BUS
+T ..> G : holds and releases\na type of message
+T ..> I : freezes, kills, starts
+T ..> P : freezes, kills, starts
+T ..> PSP : chooses the token,\nends a blackout
+O --> BUS
+I --> BUS
+P --> BUS
+BUS --> G
+G --> O
+G --> I
+G --> P
+G --> R
 P --> PSP
 R --> MAIL
 BUS --> OBS
 T <-- OBS : every message, in order
-T <-- PSP : how many charges, cancellations, refunds
+T <-- PSP : how many charges,\ncancellations, refunds
 T <-- MAIL : which e-mails
 T <-- O : status of the order,\nwhat its saga knows
 
-note bottom of T
-  Delays are configuration: a scenario
-  runs with seconds where production
-  has minutes, in the same order.
+note bottom of G
+  The gate exists in the composition of containers only.
+  No service knows it is there: each one reads
+  a subscription whose name is configuration.
 end note
 @enduml
