@@ -1,0 +1,22 @@
+@startuml
+title Two-phase commit: what it does, and where it blocks
+participant "Coordinator" as C
+participant "Order\ndatabase" as O
+participant "Inventory\ndatabase" as I
+participant "Payment\ndatabase" as P
+
+== phase 1: prepare ==
+C -> O : prepare
+O --> C : yes
+C -> I : prepare
+I --> C : yes
+C -> P : prepare
+P --> C : yes
+note over O, P : each participant has promised to commit:\nit holds its locks until told what to do
+
+== phase 2: commit ==
+C -> O : commit
+C -> I : commit
+note over C #FFCDD2 : the coordinator stops here
+note over P #FFF8E1 : in doubt: prepared, not told.\nIt cannot commit, cannot roll back,\nand keeps its locks until\nthe coordinator comes back
+@enduml

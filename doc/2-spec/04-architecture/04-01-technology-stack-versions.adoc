@@ -99,7 +99,7 @@ That separation is specified in document 04-03 and enforced by architecture test
 | Spring Boot Actuator | Spring Boot | Liveness, readiness and startup probes for Kubernetes; metrics and build information. | Built in.
 | Spring Modulith | {v-spring-modulith} | Verifies module boundaries inside the two services that hold more than one module (order, cart) and documents them. | Used for its verification and documentation only. Its event registry is not our outbox: it has no Pub/Sub publisher.
 | Spring Cloud GCP | {v-spring-cloud-gcp} | Spring integration with Pub/Sub, Secret Manager and Cloud SQL. | The supported bridge between Spring Boot 4 and Google Cloud.
-| Spring Cloud | {v-spring-cloud} | Gateway (Server Web MVC), if the edge decision retains a backend-for-frontend. | The release train matching Spring Boot 4.1.
+| Spring Cloud | {v-spring-cloud} | Gateway (Server Web MVC), for the web gateway at the edge ({ADR-PLT-018}). | The release train matching Spring Boot 4.1.
 | BootUI | {v-bootui} | A developer console inside the running service: beans, configuration, endpoints, requests. | Requested for the project; Spring Boot 4 only. *Development profiles only*: it bypasses the application's security chain, so it is never packaged for a deployed environment.
 |===
 
@@ -208,7 +208,7 @@ What strategy keeps credentials, tokens and secrets out of our code altogether?
 |===
 | Tool | Version | What it does for us | Why this one
 | Keycloak | {v-keycloak} | Identity provider: registration, sign-in, password policy, roles, tokens. | Open source, standard protocols, first-class Spring Security support. No service of the platform ever sees a password.
-| OpenID Connect, OAuth 2.0 | Standards | Sign-in with the authorization code flow and PKCE; services validate signed tokens. | The standards. Whether tokens stay on the server (backend for frontend) or reach the browser is the edge decision recorded in document 04-07.
+| OpenID Connect, OAuth 2.0 | Standards | Sign-in with the authorization code flow and PKCE; services validate signed tokens. | The standards. Tokens stay on the server, in the web gateway, and never reach the browser ({ADR-PLT-018}).
 | Secret Manager | Managed service | Holds every secret; delivered to pods by the GKE add-on. | Imposed.
 | Workload Identity Federation for GKE | Managed service | Gives each service its own Google identity, without any key file. | Always on in Autopilot. No long-lived credential exists.
 | Cloud Armor | Managed service | Web application firewall and rate limiting at the entry point. | Attached to the load balancer through the Gateway.

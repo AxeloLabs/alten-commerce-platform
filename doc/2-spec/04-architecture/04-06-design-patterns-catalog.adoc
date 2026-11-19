@@ -1,0 +1,204 @@
+= Design Patterns Catalog: The Recurring Solutions, Where They Are Used and What They Cost
+:doc-id: 04-06
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The design patterns the platform relies on, each with the problem it solves here and its price, and the well-known patterns that were considered and not used.
+include::../_shared/attributes.adoc[]
+
+== How to use the catalog
+
+.Strategy question
+****
+What strategy gives a team one word for each recurring solution, and one place that says where it is used?
+****
+
+A pattern is a named solution to a problem that keeps coming back.
+Naming it matters more than inventing it: "this is an outbox" replaces a page of explanation, provided everyone means the same thing.
+
+This catalog lists the patterns the platform uses, by family.
+Each entry gives the problem as it appears _here_, the place where the solution is specified, and its price — because a pattern without a price is a fashion.
+A last section lists patterns that are often expected in such an architecture and were deliberately left out.
+
+Nothing in this document is a new decision.
+Decisions are in document 04-07; this is the vocabulary to read them with.
+
+Owner: {role-arch}
+
+== Structure of a service
+
+.Strategy question
+****
+What strategy keeps the business rules of a service in one place and everything else replaceable?
+****
+
+[cols="3,5,6,4", options="header"]
+|===
+| Pattern | Problem here | How it is used | Price
+| Hexagonal architecture (ports and adapters) | The domain must be testable alone, and the store must be swappable | Three rings; the application states its needs as ports, adapters implement them (document 04-03, {ADR-PLT-002}) | Mapping code at every edge; more classes
+| Aggregate | Rules that must hold together need one guardian and one transaction | `Order`, `Reservation`, `StockItem`, `Payment`, `Product`, `Cart`: loaded, changed and saved whole (document 02-02) | Large aggregates are slow to load; ours are kept small
+| Value object | A price is not a number, a SKU is not a string | `Money`, `Sku`, `Quantity`: immutable records, valid by construction | A type per concept
+| Domain service | A rule spans several aggregates | `ReservationPolicy`: every line or none | Kept rare, or the aggregates empty out
+| Decision as a result | A domain that sends messages itself cannot be tested without a bus | An aggregate returns its new state and the messages to send; the use case acts on them | One more object per operation
+| Unit of work | An aggregate, the message received and the messages to send must be saved together | One port, one transaction in the PostgreSQL adapter (document 03-06) | The atomicity lives in an adapter, which must be tested on the real database
+| Separate reads | A list does not need two hundred aggregates | Query ports return read models (document 04-04) | Two paths to the same data
+| Strategy | One behavior, several interchangeable implementations chosen at startup | The three stores of the catalog and the cart; the simulated payment provider, which answers by token | The implementations must be proven equivalent: contract tests
+| Anti-corruption layer | A provider's vocabulary must not leak into ours | The adapters of the payment and e-mail providers translate at the edge (document 02-01) | A translation to maintain when the provider changes
+| State machine | An order may never jump to a status the business did not allow | Plain classes; every pair of state and event has a defined outcome (document 02-03, {ADR-PLT-010}) | Every cell is written and tested by hand
+|===
+
+== Data across services
+
+.Strategy question
+****
+What strategy lets a service show data it does not own, without reading another service's database?
+****
+
+[cols="3,5,6,4", options="header"]
+|===
+| Pattern | Problem here | How it is used | Price
+| Database per service | A shared schema ties services together silently | One database per service, with its own identity and rights ({ADR-PLT-012}) | No join across services; no transaction across them
+| Read model fed by events | The catalog must show availability, which the inventory owns | The inventory announces each change; the catalog keeps the last quantity per product ({FR-CAT-008}) | The copy is late by a moment; it is an indication, the reservation is the guarantee
+| Event carrying its data | A listener should not have to call back the publisher | Every order event carries the order summary (document 03-02) | Larger events; personal data travels
+| Sequence number | Events about one product can arrive out of order | An availability older than the one applied is ignored ({FR-INV-007}) | A counter to maintain per product
+| Composition at read time | A cart needs current prices, which the catalog owns | The cart service reads the catalog each time a cart is shown, and stores no price as the truth ({FR-CART-005}) | A cart cannot be priced while the catalog is down
+| Snapshot | An order must not change when the catalog does | Names and prices are copied into the order when it is placed ({FR-ORD-002}) | Duplicated data, on purpose
+|===
+
+== Consistency and messaging
+
+.Strategy question
+****
+What strategy keeps several services consistent with messages that can be lost, repeated or late?
+****
+
+[cols="3,5,6,4", options="header"]
+|===
+| Pattern | Problem here | How it is used | Price
+| Saga, orchestrated | Three services must all succeed or be undone | The order service conducts; compensations undo completed steps (document 03-03, {ADR-PLT-006}) | Intermediate states are visible and must each be designed
+| Pivot step | Some steps must not be undone lightly | The payment: before it, refusals are cheap; after it, the saga goes forward | The order of steps is a business decision
+| Compensation | A committed step cannot be rolled back | Release a reservation, cancel or refund a payment, return stock | A compensation can fail too, and needs a person as last resort
+| Transactional outbox | Saving and publishing are not atomic | Messages are saved with the change and published by a relay ({ADR-PLT-007}) | Publication is slightly late and sometimes double
+| Idempotent consumer | A message may arrive twice | An inbox records what was handled (document 03-06) | A table that grows and must be cleaned
+| Answer from status | A request may be sent twice, with two identifiers | A participant reads the status of the payment or reservation and acts only if the request is not served ({ADR-PLT-008}) | Every request needs an answer in every status
+| Message expiry | A request that waited for hours must not act | `ReserveStock` and `ChargePayment` carry the instant after which they are not executed (document 03-03) | Clocks of services must agree to within seconds
+| Tombstone | A cancellation can arrive before what it cancels | A payment is recorded as canceled before any charge, so that a late charge does nothing (document 02-03) | Records of things that never happened
+| Correlation identifier | One order spans many messages and traces | The saga identifier on every message, log line and span ({NFR-OBS-001}) | One more attribute to propagate
+| Ordering key | Messages about one order must not overtake each other | The order identifier is the ordering key of its messages (document 03-05) | A message that keeps failing holds back those behind it
+| Competing consumers | Several replicas must share the work without doing it twice | One subscription per service; rows claimed with a lock that others skip | Order is kept per key, not globally
+| Dead letter channel | A message that cannot be handled must not block or vanish | One dead-letter topic per subscription, with an alert (document 03-05) | Somebody must look, and replay
+| Deadline as data | The bus cannot deliver later | An instant saved with the saga, and a task that turns it into an event (document 03-06) | Deadlines are honored within seconds, not instantly
+| Envelope | Routing and tracing should not need to open the payload | CloudEvents attributes around a Protobuf payload ({ADR-PLT-009}) | Two things to keep in agreement
+| Tolerant reader | A producer must be able to add without breaking | Consumers ignore unknown fields and acknowledge unknown types (document 03-04) | Mistakes in a field name go unnoticed unless contracts are tested
+|===
+
+== Concurrency
+
+.Strategy question
+****
+What strategy keeps two simultaneous changes from corrupting what they both touch?
+****
+
+[cols="3,5,6,4", options="header"]
+|===
+| Pattern | Problem here | How it is used | Price
+| Optimistic lock | Two handlers load the same aggregate | A version checked at each save; the loser runs again on the fresh state (document 03-06) | Work redone under contention
+| Pessimistic lock in a fixed order | Two orders reserve the same products | Stock rows locked in SKU order (document 04-04) | Waiting under contention; never a deadlock
+| Constraint as a guard | A rule must hold even if the code is wrong | Unique checkout, one pending order per customer, stock never negative, declared in the database (document 02-02) | The same rule in two places, deliberately
+|===
+
+== Resilience
+
+.Strategy question
+****
+What strategy stops the failure of one dependency from becoming the failure of everything?
+****
+
+These patterns apply to the few synchronous calls of the platform.
+Their settings are in document 05-02.
+
+[cols="3,5,6,4", options="header"]
+|===
+| Pattern | Problem here | How it is used | Price
+| Time limit | A call that never answers holds its caller | Every outgoing call has one, shorter than its caller's | A slow success is treated as a failure
+| Retry with growing, randomized delays | A failure may be momentary | On calls that are safe to repeat: reads, and provider calls that carry a reference | Retries add load to a service that is struggling; they are few and bounded
+| Circuit breaker | Calling a dependency that is down wastes time and delays its recovery | Around the catalog, the cart and the two providers ({ADR-PLT-025}) | A threshold to tune; a failing dependency is declared down for a moment
+| Bulkhead | One slow dependency must not exhaust what the others need | A bounded number of concurrent calls per dependency; a bounded pool of database connections ({ADR-PLT-003}) | Requests refused at the limit
+| Rate limit | A burst, or an abuse, must not reach the services | At the entry point, by address and session (document 04-05) | Legitimate bursts may be slowed
+| Degraded mode | A missing part should cost a function, not the store | Browsing and carts work without orders, payments or e-mails ({NFR-AVAIL-003}) | Each degraded behavior must be designed and tested
+| Asynchrony as isolation | The slowest participant sets the pace of a synchronous chain | Stock and payment are asked by messages: their outage delays an order, it does not fail the request | The customer waits for an outcome instead of getting it at once
+|===
+
+== Edge and security
+
+.Strategy question
+****
+What strategy keeps identity out of the browser's reach and authorization out of nobody's hands?
+****
+
+[cols="3,5,6,4", options="header"]
+|===
+| Pattern | Problem here | How it is used | Price
+| Back end for the front end | Tokens in a browser can be stolen by a script | The web gateway keeps them and gives the browser a session cookie ({ADR-PLT-018}) | One more deployment on the path of every request
+| Token relay | A service that calls another must not gain rights of its own | The actor's token is passed on ({ADR-PLT-021}) | No synchronous call outside a request
+| Validation at every hop | A network position is not an identity | Each service validates each token ({ADR-PLT-020}) | A little work per request
+| Deny by default | A forgotten rule must fail closed | Every address is refused unless opened (document 04-05) | Every new endpoint needs its rule
+| Identity of a workload | A password in a configuration file is a leak waiting | Each service has its own Google identity for the database, the bus and the secrets (document 06-02) | Rights to manage per service
+|===
+
+== Considered and not used
+
+.Strategy question
+****
+What strategy explains the absence of patterns a reader may expect to find here?
+****
+
+[cols="3,6,7", options="header"]
+|===
+| Pattern | What it offers | Why not here
+| Two-phase commit | One transaction over several databases | It stops every order when one participant is slow, and the bus and the provider cannot take part ({ADR-PLT-011}). Explained below.
+| Choreographed saga | No conductor: each service reacts to the others | Nobody would know where an order stands, and deadlines would have no owner ({ADR-PLT-006})
+| Event sourcing | The state is the list of everything that happened | A full history is not required; it would change how every aggregate is stored and read. The status history of an order and the stock movements give the audit needed.
+| Separate read stores | Reads served by a database built for them | Our reads are simple and fit the store of each service. One read model exists, where a service needs another's data.
+| Change data capture | Messages produced from the database log | A streaming service to operate for a few messages per order ({ADR-PLT-007})
+| Workflow engine | Durable workflows and timers | A second home for business logic and a platform to run, for two small sagas ({ADR-PLT-010})
+| Distributed lock | One worker at a time across replicas | Database locks and versions already give it, without another system that can itself fail
+| Service mesh | Encryption, retries and policies outside the code | Six services that mostly exchange messages do not justify it ({ADR-PLT-019})
+| Aggregating gateway | One call that merges several services | The web gateway routes and nothing else; a page that needs two services makes two calls ({ADR-PLT-018})
+| Shared library of domain types | The same `Order` class everywhere | Services that can no longer change alone ({ADR-PLT-023})
+|===
+
+== Two-phase commit, explained
+
+.Strategy question
+****
+What strategy shows why the textbook answer to "keep three databases consistent" is not ours?
+****
+
+The brief asks for the pattern to be explained.
+A two-phase commit lets a _coordinator_ make several databases commit together, or none.
+
+plantuml::diagrams/two-phase-commit.puml[format=svg, align=center, pdfwidth=80%]
+
+In the first phase the coordinator asks every participant to _prepare_: to do the work, keep it locked, and promise it can commit.
+If all answer yes, the second phase tells each of them to commit; if one answers no, all are told to roll back.
+
+The promise is the problem.
+Between its "yes" and the coordinator's decision, a participant can neither commit nor roll back: it is _in doubt_, and it keeps its locks.
+
+.Two-phase commit against a saga, for placing an order
+[%unbreakable, cols="4,6,6", options="header"]
+|===
+| Question | Two-phase commit | Saga
+| Who can take part? | Resources that speak the protocol. Pub/Sub and a payment provider do not. | Anything that can do a step and undo it
+| A participant is slow | Every order waits, with locks held in all the others | That order waits; the others proceed
+| The coordinator stops | Participants stay in doubt, locked, until it returns | The state is saved; a deadline decides if nothing comes
+| Consistency | At every instant, when it works | Eventually; intermediate states are visible and named
+| What must be designed | Almost nothing in the application | Every compensation and every intermediate state
+|===
+
+The saga costs more design, which documents 02-03 and 03-03 pay in full.
+In exchange, the store keeps taking orders when the payment service is slow, and an order is never held hostage by a lock in another service.
+That trade is the reason of {ADR-PLT-011}.
+
+Owner: {role-arch} {role-sol}

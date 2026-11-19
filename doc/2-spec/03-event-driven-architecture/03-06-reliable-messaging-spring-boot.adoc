@@ -273,7 +273,7 @@ A use case receives a message that is already decoded, calls the domain, and han
 | Calls to providers | Outbound adapter | HTTP service clients of Spring Framework {v-spring-framework}; Resilience4j {v-resilience4j} for time limits, retries and circuit breakers | The three steps of the section "Calling a provider"
 |===
 
-The exact classes, annotations and configuration properties are fixed in document 04-03, against the reference documentation of these versions.
+Document 04-03 says where each piece lives in the code and which rules keep it there. The exact classes and configuration properties are fixed when the shared starter is written, against the reference documentation of these versions.
 
 The unit of work is the one port whose contract includes atomicity.
 A use case never opens a transaction and never publishes: it cannot get the order of the two wrong, because it does neither.
