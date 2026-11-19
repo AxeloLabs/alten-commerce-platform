@@ -1,0 +1,37 @@
+@startuml
+title Where logs, metrics and traces go
+
+skinparam componentStyle rectangle
+left to right direction
+
+package "A pod of any service" #F4F7F9 {
+  component "Service\nSpring Boot" as S
+  component "Standard output\nJSON lines" as OUT
+  component "Metrics endpoint\nmanagement port" as M
+}
+
+component "OpenTelemetry\ncollector" as COL #FFF8E1
+
+package "Google Cloud, managed" #ECEFF1 {
+  component "Cloud Logging" as LOG
+  component "Managed Service\nfor Prometheus" as PROM
+  component "Cloud Trace" as TRACE
+  component "Alerting" as ALERT
+}
+
+component "Grafana\ndashboards as code" as GRAF #FFE0B2
+actor "On-call\nengineer" as SRE
+
+S --> OUT : logs
+S --> M : metrics
+S --> COL : traces, OTLP
+OUT --> LOG : collected by the cluster
+M <-- PROM : scraped
+COL --> TRACE : exported
+PROM --> GRAF : queried
+LOG --> GRAF : linked by trace identifier
+TRACE --> GRAF : linked by trace identifier
+PROM --> ALERT : rules
+LOG --> ALERT : log-based rules
+ALERT --> SRE : notification,\nwith the runbook
+@enduml

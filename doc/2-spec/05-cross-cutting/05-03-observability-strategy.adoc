@@ -1,0 +1,269 @@
+= Observability Strategy: Following One Order, Watching Every Service
+:doc-id: 05-03
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The questions observability must answer, the identifiers that tie signals together, logs, metrics and traces, the service level objectives, the alerts and the dashboards.
+include::../_shared/attributes.adoc[]
+
+== The questions to answer
+
+.Strategy question
+****
+What strategy tells us what the platform is doing without opening a debugger in production?
+****
+
+Observability is judged by the questions it answers, not by the tools installed.
+
+.Four questions
+[cols="5,5,5", options="header"]
+|===
+| Question | Asked by | Answered with
+| Is the store working for customers, right now? | The person on call | Service level objectives, measured at the entry point and on the order flow
+| Where is this order, and what happened to it? | Support, an administrator, an engineer | The saga identifier, in logs and traces ({NFR-OBS-001})
+| Why did this request fail? | An engineer | The trace of the request and the log lines that share its identifier
+| What is about to break? | The person on call | Metrics of saturation and of backlog, with alerts ahead of the failure ({NFR-OBS-004})
+|===
+
+Services emit three signals — logs, metrics, traces — through one protocol, OpenTelemetry, and the managed services of Google Cloud store them ({ADR-PLT-028}).
+
+plantuml::diagrams/telemetry-flow.puml[format=svg, align=center]
+
+.Signals and their path
+[%unbreakable, cols="2,6,6", options="header"]
+|===
+| Signal | Emitted as | Stored and read in
+| Logs | One JSON object per line on standard output | Cloud Logging, collected by the cluster itself
+| Metrics | An endpoint on the management port of each pod, in the Prometheus format | The managed Prometheus service, which scrapes it; Grafana for dashboards
+| Traces | OTLP, from the OpenTelemetry support of Spring Boot {v-spring-boot}, to a collector in the cluster | Cloud Trace
+|===
+
+On a workstation one container, the Grafana OpenTelemetry stack {v-otel-lgtm}, receives the three signals: what an engineer sees locally has the same names and the same identifiers as in production.
+
+Owner: {role-sre} {role-arch}
+
+== Identifiers that tie signals together
+
+.Strategy question
+****
+What strategy lets one value pulled from a customer's e-mail lead to every log line, span and metric about their order?
+****
+
+.Identifiers
+[cols="3,6,6", options="header"]
+|===
+| Identifier | Born | Carried by
+| Trace identifier | At the entry point, for each request | The standard trace header on every HTTP call; the trace attribute of the envelope on every message (document 03-04). A consumer continues the trace of the message it handles.
+| Saga identifier | With each saga, in the order service | The envelope of every command and answer of the saga; a field of every log line and an attribute of every span written while handling them (document 03-03)
+| Order identifier and order number | With the order | Log fields and span attributes wherever an order is concerned. The number is what a customer quotes.
+| Error code | Where the error is mapped | The error answer, the log line, a metric label (document 05-01)
+| Version of the service | At build | A field of every log line and a label of every metric: an error rate can be tied to a release
+|===
+
+A message is published by the relay some time after the transaction that wrote it.
+The trace context is saved with the message in the outbox and restored at publication, so that the trace of a request continues through the bus instead of stopping at the database.
+
+A saga spans several traces: one per exchange, and one per administrator request.
+The saga identifier is what links them; searching logs or traces on it gives the whole life of an order.
+
+== Logs
+
+.Strategy question
+****
+What strategy makes a log something a machine can search and a person can trust?
+****
+
+.Fields of every log line
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Field | Content
+| Time, severity | In UTC, to the millisecond
+| Service, version, environment | Which code wrote the line, where
+| Trace and span identifiers | Present on every line written while handling a request or a message
+| Saga and order identifiers | Present when the work concerns an order
+| Event | A stable name for what happened: `order.placed`, `saga.transition`, `outbox.parked`. What dashboards and log-based alerts match on, never the free text.
+| Message | A sentence for a person
+| Error code, exception | When there is one (document 05-01)
+|===
+
+.Rules
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Format | Structured, always ({NFR-OBS-002}). No line is written as free text, including those of libraries.
+| Levels | Information for what happened as expected, refusals included; warning for a failing dependency; error for a defect. A healthy system writes no error.
+| A saga | Each transition writes one line: saga, order, state left, state entered, transition number, cause. The history of an order can be read from these lines alone.
+| Never logged | A password, a token, a payment datum, the body of a request, an e-mail address or a postal address ({NFR-SEC-007}). The customer is named by identifier only.
+| Masking | Fields marked as secret in a contract are masked by the logging configuration, by construction and not by the care of each author.
+| Volume | Reads are not logged one by one in production: metrics and sampled traces cover them. Changes are.
+| Retention | 30 days for operational logs. The audit of administration actions is kept one year, in its own log store ({NFR-SEC-006}); the business history — status changes, stock movements, price changes — lives in the databases.
+|===
+
+== Metrics
+
+.Strategy question
+****
+What strategy chooses a few numbers that say whether things are well, instead of collecting everything?
+****
+
+.What every service exposes
+[cols="4,11", options="header"]
+|===
+| Family | Measures
+| Requests served | Rate, errors and duration of each endpoint, by status ({NFR-OBS-003})
+| Calls made | Rate, errors and duration of each outgoing call; state of each circuit breaker; refusals of each bulkhead
+| Messages | Handled, refused, failed and redelivered, by type; time between publication and handling
+| Outbox | Rows waiting, age of the oldest, rows parked ({NFR-REL-005})
+| Database | Connections in use and waiting; duration of statements
+| Runtime | Memory, garbage collection, threads, restarts
+|===
+
+.What the business exposes
+[cols="4,11", options="header"]
+|===
+| Family | Measures
+| Orders | Placed; settled by outcome and by reason; time from placement to outcome ({NFR-PERF-003})
+| Sagas | In progress by state; suspended by remembered step; settled by a late answer; defensive transitions fired (document 03-03)
+| Checkout | Accepted; refused by error code
+| Payments | By outcome: captured, refused, unknown, canceled, refunded; refunds failed
+| Stock | Reservations held, rejected, expired; delay between a stock change and the catalog ({NFR-PERF-005})
+| E-mails | Sent, retried, not sent
+|===
+
+.Rules
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Names | One naming scheme for all services, set by the shared starter. A metric means the same thing everywhere.
+| Labels | From small, closed sets only: service, endpoint, status, outcome, reason, error code. Never an order, a customer or a SKU: such values belong to logs and traces.
+| Durations | Histograms, with boundaries placed at the objectives, so that "under 300 ms" is read exactly.
+| Bus | The age of the oldest message of each subscription and the content of each dead-letter subscription come from Pub/Sub's own metrics.
+|===
+
+== Traces
+
+.Strategy question
+****
+What strategy shows where the time of a request went, across services and across the bus?
+****
+
+.Rules
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Spans | One per request served, per outgoing call, per database transaction, per message published and per message handled. Created by the framework's instrumentation, not by hand.
+| Attributes | The saga and order identifiers, the transition of a saga, the error code. Never personal data.
+| Across the bus | The context travels in the envelope; the handling of a message is a child of its publication.
+| Sampling | Every trace that places, cancels or decides an order is kept, with everything it causes: these are few and they are the ones that matter. Reads are sampled at 10 % in production. Everything is kept in the test and integration environments.
+| Errors | A sampled-out request that fails is still found: its log lines carry the trace identifier, and the error answer gives it to the person.
+| Retention | 30 days.
+|===
+
+== Service level objectives
+
+.Strategy question
+****
+What strategy replaces "is everything green?" by a number the business agreed to?
+****
+
+An objective states, for a kind of request, what share must be good over a month.
+What is left is the _error budget_: the room for failures and for risk.
+
+.Objectives
+[cols="4,6,3,3", options="header"]
+|===
+| Function | A request is good when | Objective | Requirement
+| Catalog, product and cart reads | It is answered without a server error | 99.5 % | {NFR-AVAIL-001}
+| Same | It is answered in less than 300 ms; 200 ms for the cart | 95 % | {NFR-PERF-001} {NFR-PERF-004}
+| Checkout | A valid checkout is accepted | 99.0 % | {NFR-AVAIL-005}
+| Checkout | It is acknowledged in less than 500 ms | 95 % | {NFR-PERF-002}
+| Order outcome | The order is settled in less than 5 s; 15 s | 95 %; 99 % | {NFR-PERF-003}
+| Displayed availability | A stock change reaches the catalog in less than 5 s | 95 % | {NFR-PERF-005}
+|===
+
+Availability is measured at the entry point, where a customer would see the failure; durations of the order flow come from the saga metrics.
+A refusal of the business is a good answer: a checkout refused because a price changed did not fail.
+
+.Using the error budget
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Situation | Action
+| The budget burns fast: at this rate it is gone in two days | The person on call is paged
+| The budget burns slowly: at this rate it is gone before the end of the month | A ticket is opened for the next working day
+| The budget of a month is spent | Deliveries of features to the function concerned stop until it is restored; reliability work comes first
+|===
+
+== Alerts
+
+.Strategy question
+****
+What strategy wakes someone only when a person must act, and tells them what to do?
+****
+
+An alert is raised on what customers suffer or on what will make them suffer soon, never on a cause that may be harmless.
+Each alert names its runbook (document 06-07).
+An alert that asks for no action is deleted.
+
+.Alerts
+[cols="5,5,2,5", options="header"]
+|===
+| Alert | Condition | Urgency | Protects
+| Error budget burning fast | Any objective above | Page | Customers, now
+| Error budget burning slowly | Any objective above | Ticket | The month
+| Orders under review | Any order under review for more than 30 minutes; or more than 10 at once | Page | {NFR-REL-003}
+| An order is put under review | Each occurrence | Ticket | {NFR-OBS-004}
+| Dead letter | Any message in a dead-letter subscription | Page | An order stuck, a consumer broken
+| Outbox late | Oldest unpublished row older than 60 s; or any parked row | Page | {NFR-REL-005}
+| Defensive transition | A capture on a rejected order, or a refund on a confirmed one | Page | Money held or returned wrongly
+| Payment provider unavailable | Circuit open for more than 5 minutes | Page | Order placement
+| Refund failed | Each occurrence | Ticket | A customer waiting for money
+| E-mail not sent | Each occurrence after the last attempt | Ticket | {FR-NOT-003}
+| Subscription backlog | Oldest unacknowledged message older than 2 minutes | Ticket | A consumer slow or down
+| Database connections | Above 80 % of the budget for 10 minutes | Ticket | The next outage
+| Pod restarting | A pod restarted more than 3 times in 10 minutes | Ticket | A defect or a wrong limit
+| Unexpected errors | Any error of the generic code after a deployment; a sustained rate otherwise | Ticket | A defect shipped
+| Access refused | A burst of refused sign-ins or of forbidden requests | Ticket | An attack in progress (document 05-04)
+|===
+
+Every alert is evaluated often enough to fire within 5 minutes of its condition ({NFR-OBS-004}), and is tested in the test environment by provoking that condition.
+Spending alerts are in document 06-06.
+
+== Dashboards
+
+.Strategy question
+****
+What strategy gives each reader one screen that answers their question?
+****
+
+.Dashboards
+[%unbreakable, cols="4,5,6", options="header"]
+|===
+| Dashboard | For | Shows
+| Objectives | The person on call, the product owner | Each objective, its budget left, its burn rate
+| Order flow | Support, the product owner, engineers | Orders placed and settled by outcome and reason; time to outcome; sagas by state; orders under review
+| One per service | Its engineers | Requests, calls made, messages, outbox, database, runtime; the version deployed
+| Bus | The person on call | Backlog and age per subscription; dead letters
+| Platform | The platform engineers | Pods, restarts, scaling, capacity (document 06-03)
+|===
+
+Dashboards and alert rules are files of the repository, reviewed and deployed like code.
+A dashboard edited by hand in production is overwritten at the next deployment.
+
+== Health and diagnosis
+
+.Strategy question
+****
+What strategy lets the platform and an engineer ask a service how it is, without exposing that to the world?
+****
+
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Management port | Health, metrics and build information are served on a port of their own, which the web gateway does not route and only the cluster reaches.
+| Health | Three answers, used by the platform as document 05-02 specifies: started, ready, alive.
+| Information | The version, the commit and the build time of what is running.
+| In development only | A local console shows beans, mappings and configuration of a running service. It is never part of an image that is deployed.
+| No shell in production | Diagnosis relies on signals. Nobody connects to a pod to look.
+|===
+
+Owner: {role-sre} {role-platform}
