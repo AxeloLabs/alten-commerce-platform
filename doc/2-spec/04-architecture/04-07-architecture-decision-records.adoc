@@ -1,0 +1,489 @@
+= Architecture Decision Records: What Was Decided, Against What, and at What Price
+:doc-id: 04-07
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The register of architecture decisions of the platform, each with its context, its alternatives and its consequences.
+include::../_shared/attributes.adoc[]
+
+== How decisions are recorded
+
+.Strategy question
+****
+What strategy keeps the reasons of an architecture alive after the people who chose it have moved on?
+****
+
+An architecture is a set of decisions, and a decision without its reasons is a rule nobody dares to change.
+Each significant choice of the platform is recorded here once, in the same form: the context that forced a choice, the decision, what else was considered, and what the decision costs.
+The other documents state what is built and refer to the record; they do not argue the choice again.
+
+A record is never rewritten when the decision changes.
+It is marked as replaced, and a new record says what replaced it and why: the history of the architecture is part of the architecture.
+
+.Status of a record
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Status | Meaning
+| {st-approved} | Imposed by the brief, or validated by the product owner. The date and the origin are given.
+| {st-proposed} | Recommended by the architects and applied throughout this specification. It becomes approved at the gate of the lot that introduces it.
+| {st-rejected} | Considered and abandoned. Kept, so that it is not proposed again without a new argument.
+|===
+
+.Register
+[cols="3,10,3", options="header"]
+|===
+| Record | Decision | Status
+| {ADR-PLT-001} | Six services cut along the bounded contexts; identity is bought | {st-proposed}
+| {ADR-PLT-002} | Hexagonal architecture in every service | {st-approved}
+| {ADR-PLT-003} | Blocking code on virtual threads, not reactive code | {st-proposed}
+| {ADR-PLT-004} | Spring Modulith, in two services only | {st-proposed}
+| {ADR-PLT-005} | Google Cloud Pub/Sub is the only message bus | {st-approved}
+| {ADR-PLT-006} | An orchestrated saga in the order service; stock is reserved before the payment | {st-proposed}
+| {ADR-PLT-007} | Transactional outbox with a polling relay | {st-proposed}
+| {ADR-PLT-008} | Idempotence by status, inbox and limits carried by requests | {st-proposed}
+| {ADR-PLT-009} | CloudEvents envelope, Protocol Buffers payload | {st-approved}
+| {ADR-PLT-010} | Plain state machines, no workflow engine | {st-proposed}
+| {ADR-PLT-011} | No distributed transaction | {st-proposed}
+| {ADR-PLT-012} | One database per service, on one PostgreSQL instance | {st-proposed}
+| {ADR-PLT-013} | Three interchangeable stores, for the catalog and the cart only | {st-approved}
+| {ADR-PLT-014} | Flyway for schema migrations | {st-proposed}
+| {ADR-PLT-015} | H2 for fast persistence tests, PostgreSQL in a container for the truth | {st-approved}
+| {ADR-PLT-016} | REST and JSON for synchronous interfaces | {st-approved}
+| {ADR-PLT-017} | Contracts are written first, by hand | {st-proposed}
+| {ADR-PLT-018} | A back end for the front end at the edge | {st-proposed}
+| {ADR-PLT-019} | Gateway API and a Google load balancer; no service mesh | {st-proposed}
+| {ADR-PLT-020} | Identity delegated to Keycloak; every service validates the token | {st-approved}
+| {ADR-PLT-021} | The actor's token is relayed between services | {st-proposed}
+| {ADR-PLT-022} | The outcome of an order is polled, not pushed | {st-proposed}
+| {ADR-PLT-023} | One repository, one build, one shared technical starter, no shared domain code | {st-proposed}
+| {ADR-PLT-024} | Java {v-java} and the Spring Boot {v-spring-boot} line | {st-proposed}
+| {ADR-PLT-025} | HTTP service clients and Resilience4j for synchronous calls | {st-proposed}
+| {ADR-PLT-026} | One Google Cloud project, one Autopilot cluster, three namespaces | {st-approved}
+| {ADR-PLT-027} | GitHub Actions to integrate, Cloud Deploy to deliver | {st-proposed}
+| {ADR-PLT-028} | OpenTelemetry towards the observability services of Google Cloud | {st-proposed}
+| {ADR-PLT-029} | Documentation as code | {st-approved}
+|===
+
+Owner: {role-arch} {role-sol}
+
+== Decomposition and style
+
+.Strategy question
+****
+What strategy decides how many services there are and how each one is built inside?
+****
+
+[[ADR-PLT-001]]
+=== ADR-PLT-001 — Six services cut along the bounded contexts; identity is bought
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | The brief asks which services to build and hesitates between one, two or three services for catalog, product and stock, and on the need for a user service and a cart service.
+| Decision | Six services, one per bounded context of document 02-01: catalog, inventory, cart (with favorites), order (with its sagas), payment, notification. Identity is provided by an identity provider, not by a service of ours.
+| Alternatives | A user service: it would only copy the identity provider. A product service next to the catalog: one concept seen by the same person. Catalog and inventory in one service: their rules, their rhythms and their availability needs differ. A separate orchestration service: it would have to share the order's database.
+| Consequences | Each service owns its data and can fail alone. Six deployments, six databases and six pipelines must be operated; three environments multiply the cost, which document 06-06 bounds. A boundary that proves wrong later is expensive to move: this is why it follows business rules, not technical layers.
+| Owner | {role-sol}
+|===
+
+[[ADR-PLT-002]]
+=== ADR-PLT-002 — Hexagonal architecture in every service
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-18 · asked by the brief
+| Context | The brief requires a domain that is fully unit-tested, a persistence that can be swapped, and business code free of framework concerns.
+| Decision | Every service has three rings: a domain in plain Java, an application ring of use cases and ports, and adapters at the edge. Dependencies point inwards only. The structure and the rules that enforce it are in document 04-03.
+| Alternatives | A layered architecture with the persistence model at the bottom: the domain ends up shaped by the database. A domain annotated for persistence: fewer classes, but the swap of store demanded by {NFR-MAINT-004} becomes impossible.
+| Consequences | The domain is tested without a framework or a database ({NFR-MAINT-001}). Adapters can be replaced one by one. The price is mapping code between the domain and each adapter, and a discipline that only automated rules keep over time ({NFR-MAINT-002}). The three smallest services pay that price for little logic; it is accepted for the sake of one way of working.
+| Owner | {role-arch}
+|===
+
+[[ADR-PLT-003]]
+=== ADR-PLT-003 — Blocking code on virtual threads, not reactive code
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | Services wait on a database, on Pub/Sub and on a few HTTP calls. Reactive programming handles many waits with few threads, at the cost of code that is hard to read, debug and trace. Java {v-java} offers virtual threads.
+| Decision | Services are written in plain blocking style on Spring Web MVC, and run their requests and message handlers on virtual threads. No service uses the reactive stack.
+| Alternatives | Spring WebFlux end to end: it would also require reactive database access, which the persistence layer chosen here does not use. A mix of both: two programming models in one codebase.
+| Consequences | Code reads top to bottom and stack traces mean something. Concurrency is no longer bounded by a thread pool, so it must be bounded on purpose where a resource is scarce: database connections and calls to providers (document 05-02). The client of the document database is used through its blocking interface.
+| Owner | {role-arch} {role-swe}
+|===
+
+[[ADR-PLT-004]]
+=== ADR-PLT-004 — Spring Modulith, in two services only
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | The brief asks whether Spring Modulith is useful in a microservice architecture. It verifies boundaries between modules of one application and documents them. Most of our services are one module.
+| Decision | Spring Modulith {v-spring-modulith} is used in the order service, to keep the order model independent from the sagas that drive it, and in the cart service, to keep cart and favorites apart. Only its verification and documentation features are used.
+| Alternatives | Everywhere: in a one-module service it verifies nothing that the architecture rules do not. Nowhere: the two services with two modules would rely on convention alone. Its event publication registry as our outbox: it has no publisher for Pub/Sub and ties messaging to Spring events ({ADR-PLT-007}).
+| Consequences | Two services gain a build-time check and generated module diagrams. The team must know that the library is used for structure only; a rule of document 04-03 forbids its event registry.
+| Owner | {role-arch}
+|===
+
+== Messaging and consistency
+
+.Strategy question
+****
+What strategy keeps an order, its stock and its payment consistent across services that share nothing?
+****
+
+[[ADR-PLT-005]]
+=== ADR-PLT-005 — Google Cloud Pub/Sub is the only message bus
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-18 · imposed by the brief
+| Context | The brief excludes Kafka and imposes Google Cloud Pub/Sub.
+| Decision | Every asynchronous exchange travels on Pub/Sub, with one command topic and one event topic per context that needs them, ordering keys, pull subscriptions, filters and one dead-letter topic per subscription (document 03-05).
+| Alternatives | None is open. Within Pub/Sub: one topic per message type would lose the order between messages about the same order; push subscriptions would expose endpoints and take pace control away from the consumer.
+| Consequences | No broker to operate, and a negligible cost at our volumes. Pub/Sub delivers at least once, has no delayed delivery and no transaction with a database: these three facts shape {ADR-PLT-006}, {ADR-PLT-007} and {ADR-PLT-008}. Its emulator does not validate schemas, so part of the tests runs against the real service (document 07-03).
+| Owner | {role-cloud} {role-sol}
+|===
+
+[[ADR-PLT-006]]
+=== ADR-PLT-006 — An orchestrated saga in the order service; stock is reserved before the payment
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | Placing an order changes three services. The brief asks for a saga and describes a scenario where the payment succeeds, the stock is missing and the customer is refunded.
+| Decision | The order service conducts the workflow: it sends each command and decides on each answer, and its saga state is saved with the order (document 03-03). The stock is reserved first and the payment charged second, so that the two frequent refusals cost a release at most. A refund remains only for a payment discovered late or an order canceled.
+| Alternatives | Choreography: no service would know where an order stands, and deadlines would have no owner. Charging first, as the brief's scenario implies: every shortage would become a refund, slower, visible to the customer and able to fail.
+| Consequences | The whole workflow is readable in one place and has a state, deadlines and an owner. The order service becomes the most critical one and must never be on the synchronous path of another service. Stock can be held up to 15 minutes for an order that will not be paid; the reservation lifetime bounds it.
+| Owner | {role-sol} {role-arch}
+|===
+
+[[ADR-PLT-007]]
+=== ADR-PLT-007 — Transactional outbox with a polling relay
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | A service must save a change and publish a message. No transaction covers a database and Pub/Sub, and a crash between the two loses one of them ({NFR-REL-001}).
+| Decision | Outgoing messages are written in an outbox table in the same transaction as the change. A relay in each service reads the table and publishes, in order for each key (document 03-06).
+| Alternatives | Publishing inside the transaction: not atomic. Change data capture on the database log: no polling, but a streaming service to run for a few messages per order. The event publication registry of Spring Modulith: no Pub/Sub publisher.
+| Consequences | No message is lost, and none is announced for a change that did not happen. Messages are published slightly after the commit and sometimes twice, which consumers must tolerate ({ADR-PLT-008}). The outbox must be watched: its backlog is an alert ({NFR-REL-005}).
+| Owner | {role-arch} {role-sre}
+|===
+
+[[ADR-PLT-008]]
+=== ADR-PLT-008 — Idempotence by status, inbox and limits carried by requests
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | Messages arrive twice, late, or days later from a dead-letter topic; an administrator may send the same request again. Nothing may be charged, refunded, reserved or returned twice ({NFR-REL-002}).
+| Decision | Three protections are combined. An inbox records each message handled. A participant answers every request from the current status of the payment or the reservation concerned, and acts only if that status shows the request is not served. The two requests that take something carry the instant after which they must not be executed.
+| Alternatives | Exactly-once delivery of Pub/Sub: it covers redelivery within one subscription only, not a request sent twice, and adds latency. An idempotency key alone: it does not survive a retry with a new message.
+| Consequences | A retry is always safe and always useful: what failed is attempted again, what succeeded is not. Every aggregate must be able to answer any request in any status, which document 02-03 specifies as complete tables and which unit tests cover cell by cell.
+| Owner | {role-arch} {role-swe}
+|===
+
+[[ADR-PLT-009]]
+=== ADR-PLT-009 — CloudEvents envelope, Protocol Buffers payload
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-18 · imposed by the brief
+| Context | The brief imposes CloudEvents and Protocol Buffers, and asks for AsyncAPI documents with the Pub/Sub bindings.
+| Decision | Every message is a CloudEvent in binary mode: its attributes travel as Pub/Sub attributes and its data is the Protobuf message of the topic (document 03-04). Each topic has one schema enforced by Pub/Sub.
+| Alternatives | Structured mode: the payload would be hidden from the topic schema and from subscription filters. JSON payloads: readable, but without the evolution rules and the compactness of Protobuf.
+| Consequences | Routing, filtering and tracing need no decoding of the payload. A Pub/Sub schema must be one self-contained message, which forces one wrapper per topic and some duplication of shared shapes, checked by a lint rule. Messages are not human-readable on the wire; tooling must decode them.
+| Owner | {role-sol} {role-data}
+|===
+
+[[ADR-PLT-010]]
+=== ADR-PLT-010 — Plain state machines, no workflow engine
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | The order sagas have a handful of states and about twenty transitions each. Workflow engines and state-machine libraries exist for this.
+| Decision | Each saga and each status machine is a plain domain class: a state, and one method per event that returns a decision. No engine, no state-machine library.
+| Alternatives | A workflow engine: durable timers and a visual model, but a new stateful platform to operate and a second place where the business logic lives. A state-machine library: configuration instead of code, harder to unit test cell by cell.
+| Consequences | The grids of document 02-03 translate line for line into code and tests, with no framework ({NFR-MAINT-001}). Deadlines are ours to implement, with a column and a scheduled task. If the number of sagas or their complexity grows, this decision should be revisited.
+| Owner | {role-arch} {role-swe}
+|===
+
+[[ADR-PLT-011]]
+=== ADR-PLT-011 — No distributed transaction
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | The simplest way to keep three databases consistent would be one transaction over the three, coordinated by a two-phase commit.
+| Decision | No transaction spans two services, nor a database and the message bus. Consistency across services is reached by sagas and compensations; consistency inside a service by one local transaction.
+| Alternatives | Two-phase commit: every participant holds its locks until the coordinator decides, so one slow or failed participant stops every order; Pub/Sub and the payment provider cannot take part in it anyway. Document 04-06 explains the protocol and its failure modes.
+| Consequences | Services stay available independently. In exchange the system is consistent eventually, not at every instant: an order is visibly pending for a moment, and every intermediate state must be designed, named and bounded in time.
+| Owner | {role-sol} {role-arch}
+|===
+
+== Data
+
+.Strategy question
+****
+What strategy gives each service its own data without multiplying what must be operated?
+****
+
+[[ADR-PLT-012]]
+=== ADR-PLT-012 — One database per service, on one PostgreSQL instance
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | Services must not share data, yet one managed database instance per service and per environment would dominate the cost of a platform of this size.
+| Decision | A Cloud SQL instance of PostgreSQL {v-postgresql} hosts one database per service. Each service connects with its own identity and has rights on its own database only. Document 06-02 says how instances are shared between the three environments.
+| Alternatives | One schema for all: boundaries would rest on discipline. One instance per service: the right isolation for a large platform, described as the evolution path in document 06-02.
+| Consequences | The boundary is enforced by the database itself, at a fraction of the cost. The instance is a shared point of failure and a shared pool of connections: it runs in high availability in production, and the size of every connection pool is budgeted (document 04-04).
+| Owner | {role-data} {role-cloud}
+|===
+
+[[ADR-PLT-013]]
+=== ADR-PLT-013 — Three interchangeable stores, for the catalog and the cart only
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-18 · validated by the product owner
+| Context | The brief wants the persistence to be swappable between PostgreSQL, a document database and a file. The services of a saga need transactions over an aggregate, an inbox and an outbox, which only PostgreSQL offers among the three.
+| Decision | The order, inventory, payment and notification services use PostgreSQL only. The catalog and the cart have three adapters behind the same port — PostgreSQL, Firestore, a JSON file — proven equivalent by one shared suite of contract tests ({NFR-MAINT-004}).
+| Alternatives | Three adapters everywhere: the saga guarantees could not be kept on a file or without multi-document transactions of the right kind. One adapter everywhere: the requirement of the brief would be unmet.
+| Consequences | The swap is demonstrated where it is safe. Mixing two stores inside one service, and the file store in production or with more than one replica, are stated as unsupported. Queries of the catalog must stay within what the three stores can all do (document 04-04).
+| Owner | {role-arch} {role-data}
+|===
+
+[[ADR-PLT-014]]
+=== ADR-PLT-014 — Flyway for schema migrations
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | Each service must create and evolve its own schema, in every environment, in a way that is versioned and repeatable.
+| Decision | Flyway {v-flyway}, with plain SQL migrations kept in each service and applied by a dedicated step of the deployment, before the new version starts.
+| Alternatives | Liquibase: its license changed to a source-available one in 2025. Schema generation by the persistence framework: convenient in a demonstration, unpredictable in production.
+| Consequences | The schema of each environment is known and reproducible. Migrations must be compatible with the version that is still running while the new one starts ({NFR-REL-004}): a column is added in one release and made mandatory in the next.
+| Owner | {role-data} {role-devops}
+|===
+
+[[ADR-PLT-015]]
+=== ADR-PLT-015 — H2 for fast persistence tests, PostgreSQL in a container for the truth
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-18 · H2 is imposed by the brief
+| Context | The brief imposes H2 to run tests quickly. H2 is not PostgreSQL: it lacks, or implements differently, features the platform relies on — partial unique indexes, row locks that other transactions skip, binary JSON.
+| Decision | Domain tests use no database at all. H2 {v-h2}, in PostgreSQL compatibility mode, runs the fast tests of mappings and simple queries. Everything that depends on PostgreSQL behavior — the outbox relay, locking, constraints, migrations — is tested against PostgreSQL {v-postgresql} in a container.
+| Alternatives | H2 for all persistence tests: tests that pass and a production that fails. PostgreSQL containers only: accurate, but slower than the brief wants for the inner loop.
+| Consequences | The inner loop stays fast and the guarantees are proven on the real engine. Two persistence test setups coexist; document 07-01 says which test goes where, and a rule forbids testing outbox or locking code on H2.
+| Owner | {role-qa} {role-data}
+|===
+
+== Interfaces and edge
+
+.Strategy question
+****
+What strategy exposes the platform to a browser safely, and keeps what services promise each other explicit?
+****
+
+[[ADR-PLT-016]]
+=== ADR-PLT-016 — REST and JSON for synchronous interfaces
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-18 · GraphQL is excluded by the brief
+| Context | The storefront and a few services need synchronous reads and commands. The brief excludes GraphQL.
+| Decision | Synchronous interfaces are REST over HTTP with JSON, described in OpenAPI {v-openapi} and following the guidelines of document 04-05. Errors use the standard problem-details format.
+| Alternatives | gRPC between services: efficient, but we have four synchronous calls between services, all simple reads; a second protocol is not worth it. It can be reopened if a chatty interface appears.
+| Consequences | One protocol, one set of tools, one way to secure and observe a call. JSON over HTTP is not the fastest transport; at our volumes the difference is not measurable.
+| Owner | {role-sol}
+|===
+
+[[ADR-PLT-017]]
+=== ADR-PLT-017 — Contracts are written first, by hand
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | A contract can be generated from code or written before it. Generated contracts describe what was built; they change whenever the code does.
+| Decision | OpenAPI documents, AsyncAPI documents and Protobuf schemas are written by hand in the repository, reviewed as contracts, and checked for compatibility by the pipeline. Server interfaces and message classes are generated from them; a service is tested against its contract ({NFR-MAINT-003}).
+| Alternatives | Code first with generated documents: faster at the start, and no tool generates AsyncAPI from Pub/Sub listeners. A schema registry service: Pub/Sub schemas and the repository already play that role.
+| Consequences | A breaking change is caught in a pull request, before any service is touched. Writing contracts by hand is slower and needs linting to stay uniform. The generated code must stay in the adapters, never in the domain.
+| Owner | {role-sol} {role-qa}
+|===
+
+[[ADR-PLT-018]]
+=== ADR-PLT-018 — A back end for the front end at the edge
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | The brief opposes "load balancer" and "API gateway". They are two different things: a load balancer brings traffic into the cluster, which {ADR-PLT-019} settles; an application gateway is a service of ours standing between the browser and the services. The question that remains is where the tokens of a signed-in customer live. In a browser application they can be stolen by any script that runs in the page.
+| Decision | A small edge service, the web gateway, stands between the browser and the services. It signs the customer in with the identity provider as a confidential client, keeps the tokens on the server side, gives the browser only a session cookie that scripts cannot read, serves the storefront files, and forwards each request to the right service with the access token. It is built with Spring Cloud Gateway from Spring Cloud {v-spring-cloud}. It holds no business logic and aggregates nothing.
+| Alternatives | The browser application as a public client holding its tokens: one service less, but tokens within reach of a script, which current security guidance for browser applications advises against. A general API management product: features we do not need, for a cost and an operating burden we do not want.
+| Consequences | No token ever reaches the browser, and the storefront and its interfaces share one origin, which removes cross-origin configuration. The web gateway is on the path of every request: it runs with several replicas, keeps its sessions in a store shared by them, and is the seventh deployment of the platform. Cross-site request forgery must be handled, since a cookie is sent automatically (document 05-04). Services still validate every token themselves ({ADR-PLT-020}).
+| Owner | {role-sec} {role-sol}
+|===
+
+[[ADR-PLT-019]]
+=== ADR-PLT-019 — Gateway API and a Google load balancer; no service mesh
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | Traffic must enter the cluster over HTTPS, with a certificate, a web application firewall and rate limiting. Inside the cluster, services call each other a little.
+| Decision | The entry point is declared with the Kubernetes Gateway API and implemented by a managed Google load balancer, with Cloud Armor in front (document 06-02). It routes everything to the web gateway. No service mesh is installed.
+| Alternatives | Ingress: superseded by the Gateway API. A service mesh for mutual TLS and traffic policies: valuable with dozens of services, heavy for six that mostly exchange messages; its sidecars would also raise the Autopilot bill.
+| Consequences | Nothing to run at the entry point. Without a mesh, encryption between pods and call policies are not transparent: network policies restrict who may call whom, tokens are validated by every service, and resilience is in the client code (document 05-02).
+| Owner | {role-net} {role-platform}
+|===
+
+[[ADR-PLT-020]]
+=== ADR-PLT-020 — Identity delegated to Keycloak; every service validates the token
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-18 · Keycloak and tokens are asked by the brief
+| Context | Accounts, credentials and roles are a solved problem and a dangerous one to solve again ({FR-IAM-006}).
+| Decision | Keycloak {v-keycloak} is the identity provider. Sign-in follows OpenID Connect with the authorization code flow. Every service is a resource server: it validates the signature, the issuer, the audience and the expiry of the token of each request, and decides on roles itself, denying by default ({NFR-SEC-001}, {NFR-SEC-002}).
+| Alternatives | Authentication written in a service of ours: passwords in our databases. Trusting the web gateway and passing identity in plain headers: any pod that can reach a service could impersonate anyone.
+| Consequences | No service ever sees a password. The identity provider must be available to sign in, not to validate a token, since signing keys are cached. Keycloak is one more component to operate, back up and upgrade.
+| Owner | {role-sec}
+|===
+
+[[ADR-PLT-021]]
+=== ADR-PLT-021 — The actor's token is relayed between services
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | Four synchronous calls exist between services. Each happens while serving the request of a person: a customer checking out, a customer viewing a cart, an administrator entering stock.
+| Decision | A service that calls another passes on the access token of the actor it is serving. The called service applies its ordinary rules to that actor. No service has an identity of its own for calling another over REST. Messages on the bus are authorized differently, by the rights on topics and subscriptions (document 03-05).
+| Alternatives | A technical identity per service with wide read rights: internal interfaces that answer for any customer, and a second set of authorization rules to keep correct.
+| Consequences | There is no internal interface to protect: the order service reads the cart of a customer exactly as that customer would. A synchronous call cannot be made outside a request, which is consistent with the rule that everything else travels as messages. The token must still be valid when relayed; calls happen within the same second.
+| Owner | {role-sec} {role-arch}
+|===
+
+[[ADR-PLT-022]]
+=== ADR-PLT-022 — The outcome of an order is polled, not pushed
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | An order is acknowledged as pending and decided a few seconds later ({NFR-PERF-003}). The storefront must show the outcome.
+| Decision | The storefront asks for the order at short intervals until it is no longer pending, then stops ({UC-ORD-003}). The read is cheap and served from the order's own table.
+| Alternatives | Server-sent events or a WebSocket: instant, but long-lived connections through the load balancer and the web gateway, and a fan-out from the saga to the right replica, for a wait of a few seconds.
+| Consequences | Nothing new to build or operate; a refresh of the page shows the truth. The storefront makes a few extra requests per order. If orders start taking minutes, or if other live updates appear, pushing becomes worth its cost.
+| Owner | {role-sol}
+|===
+
+== Code and build
+
+.Strategy question
+****
+What strategy lets six services look alike without being tied together?
+****
+
+[[ADR-PLT-023]]
+=== ADR-PLT-023 — One repository, one build, one shared technical starter, no shared domain code
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | Six services, a web gateway, a front end, contracts, infrastructure and documentation are maintained by one team. Each service needs the same technical plumbing: outbox, inbox, envelope, error format, security and observability settings.
+| Decision | Everything lives in one repository, with one Maven build of several modules. A single shared library, a Spring Boot starter, holds the technical plumbing and nothing else. No domain class, no data transfer object and no contract class is shared between services.
+| Alternatives | One repository per service: independence the team does not need yet, and six copies of every convention. Sharing nothing: the outbox written six times, six ways. Sharing domain types: services that can no longer change alone.
+| Consequences | A change across contracts, services and documentation is one pull request. The pipeline must build and deploy only what changed. The starter couples services by its version: it is kept small, versioned with the repository, and an architecture rule forbids business types in it.
+| Owner | {role-arch} {role-devops}
+|===
+
+[[ADR-PLT-024]]
+=== ADR-PLT-024 — Java {v-java} and the Spring Boot {v-spring-boot} line
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19 · Spring Boot is imposed by the brief
+| Context | Spring Boot is imposed. Its line and the Java release must be chosen for a project that starts now and must be supported for years.
+| Decision | Java {v-java}, the current long-term support release, and Spring Boot {v-spring-boot}, with the compatible versions of document 04-01. A newer Spring Boot line is adopted only once the Google Cloud integration supports it.
+| Alternatives | The previous Spring Boot line: its free support ends on {eol-spring-boot-40}. The next one: still a release candidate when this was written.
+| Consequences | Records, sealed types, pattern matching and virtual threads are available ({ADR-PLT-003}). The line is supported until {eol-spring-boot}; an upgrade must be planned before then. Some libraries lag behind a new major line: document 04-01 lists the points to watch.
+| Owner | {role-arch}
+|===
+
+[[ADR-PLT-025]]
+=== ADR-PLT-025 — HTTP service clients and Resilience4j for synchronous calls
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | The brief mentions OpenFeign for calls between services, and asks for circuit breakers, retries and time limits.
+| Decision | Synchronous calls use the declarative HTTP service clients of Spring Framework {v-spring-framework}, generated from the OpenAPI contract of the called service. Time limits, retries, circuit breakers and bulkheads come from Resilience4j {v-resilience4j} and from the framework's own retry support (document 05-02).
+| Alternatives | OpenFeign: declared feature-complete by its maintainers, who point to the framework's clients. A service mesh for resilience: not installed ({ADR-PLT-019}).
+| Consequences | One client style, generated from contracts, with no extra dependency. Resilience settings live in each calling service and must be tested there. Few outgoing calls exist — four between services, and one to each of the two providers — so the configuration stays small.
+| Owner | {role-arch} {role-sre}
+|===
+
+== Platform and delivery
+
+.Strategy question
+****
+What strategy records here the platform decisions that other lots detail?
+****
+
+These four decisions are argued in the documents of folders 06 and 05.
+They are listed here so that the register is complete.
+
+[[ADR-PLT-026]]
+=== ADR-PLT-026 — One Google Cloud project, one Autopilot cluster, three namespaces
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-18 · validated by the product owner; GKE Autopilot is imposed by the brief
+| Context | The brief asks for three environments — test, integration, production — on GKE Autopilot, and for costs kept low.
+| Decision | One project and one Autopilot cluster host the three environments as three namespaces, isolated by network policies, identities and quotas. The layout with one project per environment is described as the target for a company, and not deployed (document 06-01).
+| Alternatives | Three projects and three clusters: the isolation a company needs, at three times the fixed cost.
+| Consequences | One cluster to pay for and to upgrade. Isolation between environments is logical, not physical: a mistake in a policy or a cluster-wide incident touches production. Names of topics and databases carry the environment.
+| Owner | {role-cloud} {role-platform}
+|===
+
+[[ADR-PLT-027]]
+=== ADR-PLT-027 — GitHub Actions to integrate, Cloud Deploy to deliver
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | The brief mentions Jenkins. The repository is hosted on GitHub and the platform on Google Cloud.
+| Decision | GitHub Actions builds, tests, scans and publishes images. Cloud Deploy promotes a release from test to integration to production, with an approval before production (document 06-05). GitHub authenticates to Google Cloud without any stored key.
+| Alternatives | Jenkins: a server to host, secure and upgrade for a single repository. Deploying from the build pipeline: no record of what runs where, and no approval step.
+| Consequences | No pipeline server to run. Two tools instead of one, with a clear border: an image and its attestations on one side, their promotion on the other.
+| Owner | {role-devops}
+|===
+
+[[ADR-PLT-028]]
+=== ADR-PLT-028 — OpenTelemetry towards the observability services of Google Cloud
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19
+| Context | The brief lists Zipkin, Loki, Prometheus and Grafana. On GKE, logs written to standard output and metrics exposed for scraping are collected by managed services.
+| Decision | Services emit traces through OpenTelemetry to Cloud Trace, write structured logs to standard output for Cloud Logging, and expose metrics collected by the managed Prometheus service and shown in Grafana (document 05-03). On a workstation one container provides the same signals.
+| Alternatives | Self-hosted Zipkin and Loki: two stateful systems to run, for what the platform already provides.
+| Consequences | Nothing to operate for observability, and one protocol in the code. Traces and logs are tied to Google Cloud tooling; the code is not, since it speaks OpenTelemetry.
+| Owner | {role-sre}
+|===
+
+[[ADR-PLT-029]]
+=== ADR-PLT-029 — Documentation as code
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-18 · validated by the product owner
+| Context | The specification is some fifty documents full of cross-references and diagrams, and it must stay true while the code is written.
+| Decision | Documents are AsciiDoc sources and diagrams are text, kept in the repository, reviewed like code and built into PDF by a local toolchain that also checks every identifier and reference (document 00-01).
+| Alternatives | A word processor and a drawing tool: no review of changes, no automatic check, diagrams that drift from the text.
+| Consequences | A broken reference fails the build. Authors must write markup and accept layout decided by a theme.
+| Owner | {role-arch}
+|===
