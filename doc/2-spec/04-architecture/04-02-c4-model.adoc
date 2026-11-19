@@ -1,0 +1,194 @@
+= C4 Model: The Platform at Four Zoom Levels
+:doc-id: 04-02
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: System context, containers, components and deployment of the platform, following the C4 model, with the path of a request through them.
+include::../_shared/attributes.adoc[]
+
+== How to read the model
+
+.Strategy question
+****
+What strategy lets a newcomer, an architect and an operator each find the picture they need without drowning in the others'?
+****
+
+The C4 model describes a software system at four zoom levels, each answering one question for one audience.
+A diagram never mixes two levels.
+
+.The four levels and where they are
+[%unbreakable, cols="3,5,4,4", options="header"]
+|===
+| Level | Question | Audience | Where
+| 1. System context | Who uses the system, and what does it depend on? | Everyone | This document
+| 2. Containers | What runs, in which technology, and who talks to whom? | Architects, engineers, operators | This document
+| 3. Components | What is inside one container? | Engineers of that container | This document for the order service; document 04-03 for the common structure
+| 4. Code | Which classes implement a component? | Engineers | Class diagrams of document 02-02
+|===
+
+A _container_, in this model, is something that runs or stores data on its own: an application, a database, a message topic.
+It is not a Docker container, although most of ours happen to run in one.
+
+Two more views complete the four levels: where the containers are deployed, and how one request travels through them.
+
+Owner: {role-arch} {role-sol}
+
+== Level 1: system context
+
+.Strategy question
+****
+What strategy draws the line between what we build and what we rely on?
+****
+
+plantuml::diagrams/c4-context.puml[format=svg, align=center]
+
+The platform has three kinds of users and two external systems.
+The identity provider is not drawn here: it is a product we do not build, but we deploy and operate it, so it sits inside the system boundary and appears at the next level ({ADR-PLT-020}).
+
+.What crosses the boundary
+[%unbreakable, cols="4,5,6", options="header"]
+|===
+| Neighbor | What we ask of it | What happens when it fails
+| Payment provider | Charge, cancel and refund a payment, identified by a reference of ours | Orders are not charged late; they are rejected or handed to a person (document 03-03)
+| E-mail provider | Deliver an e-mail | Orders are unaffected; e-mails are sent again later, then recorded as failed ({FR-NOT-003})
+|===
+
+== Level 2: containers
+
+.Strategy question
+****
+What strategy shows every running piece and every conversation, on diagrams that stay readable?
+****
+
+The containers are drawn twice: once for what is synchronous and stored, once for messages.
+A single diagram with both would hide the most important property of the architecture: the two kinds of exchange do not mix.
+
+plantuml::diagrams/c4-container.puml[format=svg, align=center]
+
+.Containers
+[cols="3,4,7,4", options="header"]
+|===
+| Container | Technology | Responsibility | State it holds
+| Storefront | Angular {v-angular}, TypeScript {v-typescript}; runs in the browser | Every screen: shop, account, orders, and the administration area shown to administrators | None. It holds no token ({ADR-PLT-018})
+| Web gateway | Spring Cloud Gateway, Spring Cloud {v-spring-cloud} | Signs users in, keeps their session, forwards each request to a service with the access token, serves the storefront files | Sessions, in its own database
+| Identity provider | Keycloak {v-keycloak} | Accounts, credentials, roles; issues and signs tokens | Its own database
+| Catalog service | Spring Boot {v-spring-boot}, Java {v-java} | Products, categories, prices; the availability shown to customers | Catalog store: PostgreSQL, Firestore or a file ({ADR-PLT-013})
+| Inventory service | Same | Stock on hand, reservations, stock movements | Inventory database
+| Cart service | Same | Carts and favorites | Cart store: PostgreSQL, Firestore or a file
+| Order service | Same | Orders, their history, and the two sagas | Order database
+| Payment service | Same | Payments and refunds, through the payment provider | Payment database
+| Notification service | Same | E-mails about orders | Notification database
+| Databases | PostgreSQL {v-postgresql} on Cloud SQL | One database per service ({ADR-PLT-012}) | –
+| Topics | Google Cloud Pub/Sub | Five topics, seven subscriptions and their dead-letter topics (document 03-05) | Messages not yet acknowledged
+|===
+
+Three properties can be read on the diagram.
+
+* *One way in.* The browser reaches the web gateway and the sign-in pages of the identity provider, and nothing else. No service is exposed outside the cluster.
+* *Few synchronous calls.* Four arrows link services to each other, all of them reads towards the catalog or the cart, all made while serving a person's request with that person's token ({ADR-PLT-021}). Nothing calls the order, payment or notification services synchronously except the web gateway.
+* *No shared data.* Every service has a database, and reaches no other; the arrows from the services to their databases are left out of the diagram for that reason.
+
+The payment and notification services expose no business interface over HTTP.
+They are reached by messages only; an administrator sees the payment of an order through the order service, which records what the payment service told it.
+
+plantuml::diagrams/c4-container-messaging.puml[format=svg, align=center]
+
+The order service is the only one that sends commands, and only the three services of a saga publish anything.
+The catalog, the cart and the notification service listen and never answer.
+The messages themselves, their order and their guarantees are specified in the documents of folder 03.
+
+== Level 3: components
+
+.Strategy question
+****
+What strategy keeps six services recognizable from one another once you open them?
+****
+
+Every service has the same inner structure: inbound adapters, use cases, a domain, outbound adapters ({ADR-PLT-002}).
+Document 04-03 specifies it once, with the rules that enforce it.
+The order service is shown here because it uses every kind of component.
+
+plantuml::diagrams/c4-component-order.puml[format=svg, align=center]
+
+.What each service adds to the common structure
+[cols="3,6,6", options="header"]
+|===
+| Service | Inbound | Outbound
+| Catalog | REST for visitors and administrators; a subscriber for stock availability | One of three stores; no publication
+| Inventory | REST for administrators; a subscriber for the commands of the sagas; the task that expires reservations | PostgreSQL with outbox; a client of the catalog, used the first time a SKU is seen
+| Cart | REST for customers; a subscriber for confirmed orders | One of three stores; a client of the catalog
+| Order | REST for customers and administrators; subscribers for inventory and payment events; the deadline task | PostgreSQL with outbox; clients of the catalog and of the cart
+| Payment | A subscriber for the commands of the sagas | PostgreSQL with outbox; the adapter of the payment provider, simulated in this release
+| Notification | A subscriber for order events | PostgreSQL; the adapter of the e-mail provider
+| Web gateway | HTTP from the browser | The identity provider; the four services with a REST interface; its session store
+|===
+
+The web gateway is not built like the six services.
+It has no domain and no use case: it is configuration — routes, security, session — on a ready-made product, and the architecture rules of document 04-03 that concern domain and application do not apply to it.
+
+== Level 4: code
+
+.Strategy question
+****
+What strategy avoids drawing what the code already says?
+****
+
+Class diagrams are kept for what must be agreed before the code exists: the domain.
+They are in document 02-02, one per bounded context, and are the only diagrams at this level.
+
+Adapters, controllers and configuration are not drawn.
+Their structure is fixed by the package layout and the rules of document 04-03, and for the two services with several modules a diagram is generated from the code at each build ({ADR-PLT-004}).
+A hand-drawn diagram of that code would be wrong within a month.
+
+== Deployment
+
+.Strategy question
+****
+What strategy shows where everything runs without repeating the platform documents?
+****
+
+plantuml::diagrams/c4-deployment.puml[format=svg, align=center]
+
+The diagram is an overview of production.
+The three environments share one project and one cluster and differ by their namespace ({ADR-PLT-026}).
+Network layout and addresses are in document 06-02, Kubernetes objects and sizing in document 06-03.
+
+.Where each container runs
+[%unbreakable, cols="4,5,6", options="header"]
+|===
+| Container | Runs on | Note
+| Storefront | The user's browser | Its files are served by the web gateway
+| Web gateway, six services | Pods of the GKE Autopilot cluster | Stateless ({NFR-SCAL-001}); several replicas across zones in production ({NFR-AVAIL-002})
+| Identity provider | Pods of the same cluster | Its database is on the same Cloud SQL instance
+| Databases | Cloud SQL | Reached on a private address, never from outside
+| Topics and subscriptions | Pub/Sub | Created by Terraform, never by a service
+| Secrets | Secret Manager | Read by a service through its own identity ({NFR-SEC-004})
+|===
+
+== A request through the containers
+
+.Strategy question
+****
+What strategy makes the static pictures come alive on the one request that matters most?
+****
+
+The checkout is the request that crosses the most containers.
+The diagram follows it from the browser to the database, and stops where the messages take over.
+
+plantuml::diagrams/c4-dynamic-checkout.puml[format=svg, align=center]
+
+.What each container does to the request
+[cols="3,12", options="header"]
+|===
+| Container | Its part
+| Load balancer | Ends the encrypted connection, applies the firewall and the rate limits, forwards to the web gateway ({ADR-PLT-019}).
+| Web gateway | Finds the session from the cookie, checks the anti-forgery token, renews the access token if it is about to expire, and forwards the request with that token. It does not look at the body.
+| Order service | Validates the token and the role itself. Reads the cart and the catalog with the same token, compares them with what the customer reviewed, and creates the order, its saga and the first command in one transaction ({FR-ORD-003}). Answers at once ({NFR-PERF-002}).
+| Cart and catalog services | Answer two reads. If either is unavailable the checkout is refused cleanly: nothing was created.
+| Pub/Sub | Carries the rest of the placement, asynchronously. The customer's request is over by then.
+|===
+
+The synchronous part of a checkout therefore depends on four containers of ours: the web gateway, the order service, the cart and the catalog.
+The asynchronous part depends on the inventory and the payment, and no failure there can make the request itself fail: it changes the outcome of the order, which the storefront reads afterwards ({ADR-PLT-022}).
+
+Owner: {role-sol} {role-sre}

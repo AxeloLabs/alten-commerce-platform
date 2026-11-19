@@ -1,0 +1,21 @@
+@startuml
+!include <C4/C4_Context>
+title System context
+
+Person(visitor, "Visitor", "Browses the catalog without an account")
+Person(customer, "Customer", "Fills a cart, orders, follows and cancels orders")
+Person(admin, "Administrator", "Manages catalog and stock, fulfills orders, resolves orders under review")
+
+System(platform, "Alten Commerce Platform", "Online store: catalog, stock, cart, orders, payments, notifications, identity")
+
+System_Ext(psp, "Payment provider", "Charges, cancels and refunds payments. Simulated in this release")
+System_Ext(mail, "E-mail provider", "Delivers e-mails to customers")
+
+Rel(visitor, platform, "Browses and registers", "HTTPS")
+Rel(customer, platform, "Shops and orders", "HTTPS")
+Rel(admin, platform, "Administers", "HTTPS")
+Rel(platform, psp, "Charges, cancels, refunds", "HTTPS")
+Rel(platform, mail, "Sends e-mails", "HTTPS")
+
+SHOW_LEGEND()
+@enduml

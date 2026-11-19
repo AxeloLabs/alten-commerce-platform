@@ -1,0 +1,35 @@
+@startuml
+title A checkout through the containers
+actor Customer as C
+participant "Storefront\n(browser)" as SPA
+participant "Load\nbalancer" as LB
+participant "Web\ngateway" as GW
+participant "Order\nservice" as O
+participant "Cart\nservice" as K
+participant "Catalog\nservice" as CAT
+database "Order\ndatabase" as DB
+queue "Pub/Sub" as PS
+
+C -> SPA : submits the checkout
+SPA -> LB : POST /api/v1/orders\nsession cookie, anti-forgery token
+LB -> GW : forwards
+note over GW : finds the session,\nadds the access token
+GW -> O : POST /v1/orders, access token
+note over O : validates the token,\nchecks the role
+O -> K : GET /v1/cart, same token
+K --> O : the lines of this customer
+O -> CAT : GET /v1/products?sku=…
+CAT --> O : current prices, status, availability
+note over O : nothing changed since\nthe review: the order is created
+O -> DB : one transaction: order PENDING,\nsaga, ReserveStock in the outbox
+O --> GW : 201 Created, order PENDING
+GW --> SPA : 201 Created
+SPA --> C : "your order is being processed"
+O ->> PS : the relay publishes ReserveStock
+note over PS : the saga continues\nas messages (document 03-03)
+loop until the order is no longer pending
+  SPA -> GW : GET /api/v1/orders/{number}
+  GW -> O : GET /v1/orders/{number}
+  O --> SPA : status
+end
+@enduml

@@ -1,0 +1,39 @@
+@startuml
+!include <C4/C4_Deployment>
+title Deployment: production, overview
+
+Deployment_Node(browser, "Customer's device", "Web browser") {
+  Container(spa, "Storefront", "Angular")
+}
+
+Deployment_Node(gcp, "Google Cloud project", "One region, three zones") {
+  Deployment_Node(edge, "Edge", "Managed") {
+    Container(lb, "Load balancer", "Gateway API, Cloud Armor", "TLS, firewall, rate limiting")
+  }
+  Deployment_Node(gke, "GKE Autopilot cluster", "Kubernetes") {
+    Deployment_Node(ns, "Namespace prod", "test and integration are two more namespaces") {
+      Container(gw, "Web gateway", "2 replicas or more")
+      Container(svc, "Six services", "2 replicas or more each on the order path")
+      Container(kc, "Identity provider", "Keycloak, 2 replicas")
+    }
+  }
+  Deployment_Node(managed, "Managed services", "Regional") {
+    ContainerDb(sql, "Cloud SQL", "PostgreSQL, high availability", "One database per service")
+    ContainerQueue(pubsub, "Pub/Sub", "Topics, subscriptions, dead letters")
+    Container(secrets, "Secret Manager", "Secrets")
+    Container(registry, "Artifact Registry", "Signed images")
+    Container(obs, "Cloud Logging, Cloud Trace, Managed Prometheus", "Observability")
+  }
+}
+
+Rel(spa, lb, "HTTPS")
+Rel(lb, gw, "HTTP inside the cluster network")
+Rel(lb, kc, "Sign-in pages")
+Rel(gw, svc, "REST")
+Rel(svc, sql, "SQL, private address")
+Rel(svc, pubsub, "Publishes and pulls")
+Rel(svc, secrets, "Reads at start")
+Rel(svc, obs, "Logs, traces, metrics")
+
+SHOW_LEGEND()
+@enduml

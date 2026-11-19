@@ -1,0 +1,33 @@
+@startuml
+!include <C4/C4_Container>
+title Containers: messages on Pub/Sub
+
+System_Boundary(platform, "Alten Commerce Platform") {
+  Container(ord, "Order service", "Spring Boot", "Conducts the sagas")
+  Container(inv, "Inventory service", "Spring Boot", "")
+  Container(pay, "Payment service", "Spring Boot", "")
+  Container(cat, "Catalog service", "Spring Boot", "")
+  Container(cart, "Cart service", "Spring Boot", "")
+  Container(notif, "Notification service", "Spring Boot", "")
+  ContainerQueue(invc, "inventory.commands", "Pub/Sub topic")
+  ContainerQueue(inve, "inventory.events", "Pub/Sub topic")
+  ContainerQueue(payc, "payment.commands", "Pub/Sub topic")
+  ContainerQueue(paye, "payment.events", "Pub/Sub topic")
+  ContainerQueue(orde, "order.events", "Pub/Sub topic")
+}
+
+Rel(ord, invc, "Publishes commands")
+Rel(invc, inv, "Delivers")
+Rel(inv, inve, "Publishes events")
+Rel(inve, ord, "Delivers answers")
+Rel(inve, cat, "Delivers availability")
+Rel(ord, payc, "Publishes commands")
+Rel(payc, pay, "Delivers")
+Rel(pay, paye, "Publishes events")
+Rel(paye, ord, "Delivers answers")
+Rel(ord, orde, "Publishes events")
+Rel(orde, cart, "Delivers confirmations")
+Rel(orde, notif, "Delivers every order event")
+
+SHOW_LEGEND()
+@enduml

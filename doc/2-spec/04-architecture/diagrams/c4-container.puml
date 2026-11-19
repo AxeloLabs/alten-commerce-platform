@@ -1,0 +1,41 @@
+@startuml
+!include <C4/C4_Container>
+title Containers: synchronous calls and data
+
+Person(user, "Visitor, customer, administrator")
+System_Ext(psp, "Payment provider", "Simulated")
+System_Ext(mail, "E-mail provider")
+
+System_Boundary(platform, "Alten Commerce Platform") {
+  Container(spa, "Storefront", "Angular, in the browser", "Shop and administration screens")
+  Container(gw, "Web gateway", "Spring Cloud Gateway", "Sign-in, session, routing, token relay")
+  Container(kc, "Identity provider", "Keycloak", "Accounts, roles, tokens")
+  Container(ord, "Order service", "Spring Boot", "Orders and their sagas")
+  Container(cart, "Cart service", "Spring Boot", "Carts and favorites")
+  Container(inv, "Inventory service", "Spring Boot", "Stock and reservations")
+  Container(cat, "Catalog service", "Spring Boot", "Products, prices, availability")
+  Container(pay, "Payment service", "Spring Boot", "Payments and refunds")
+  Container(notif, "Notification service", "Spring Boot", "E-mails to customers")
+  ContainerDb(db, "Databases", "PostgreSQL on Cloud SQL", "One database per service. Each service reaches its own, and only its own.")
+}
+
+Rel(user, spa, "Uses")
+Rel(spa, gw, "Calls", "HTTPS, session cookie")
+Rel_R(spa, kc, "Sign-in pages", "OpenID Connect")
+Rel_R(gw, kc, "Gets tokens", "OpenID Connect")
+Rel(gw, ord, "Forwards", "REST, token")
+Rel(gw, cart, "Forwards", "REST, token")
+Rel(gw, inv, "Forwards", "REST, token")
+Rel(gw, cat, "Forwards", "REST, token")
+Rel(ord, cart, "Reads the cart", "REST")
+Rel(ord, cat, "Reads prices", "REST")
+Rel(cart, cat, "Reads prices", "REST")
+Rel(inv, cat, "Checks a new SKU", "REST")
+Rel(pay, psp, "Charges, cancels, refunds", "HTTPS")
+Rel(notif, mail, "Sends", "HTTPS")
+Lay_D(cat, db)
+Lay_R(cat, pay)
+Lay_R(pay, notif)
+
+SHOW_LEGEND()
+@enduml

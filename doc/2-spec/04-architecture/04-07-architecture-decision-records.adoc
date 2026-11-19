@@ -335,7 +335,7 @@ What strategy exposes the platform to a browser safely, and keeps what services 
 |===
 | Status | {st-proposed} · 2026-11-19
 | Context | Traffic must enter the cluster over HTTPS, with a certificate, a web application firewall and rate limiting. Inside the cluster, services call each other a little.
-| Decision | The entry point is declared with the Kubernetes Gateway API and implemented by a managed Google load balancer, with Cloud Armor in front (document 06-02). It routes everything to the web gateway. No service mesh is installed.
+| Decision | The entry point is declared with the Kubernetes Gateway API and implemented by a managed Google load balancer, with Cloud Armor in front (document 06-02). It routes the sign-in pages to the identity provider and everything else to the web gateway. No service mesh is installed.
 | Alternatives | Ingress: superseded by the Gateway API. A service mesh for mutual TLS and traffic policies: valuable with dozens of services, heavy for six that mostly exchange messages; its sidecars would also raise the Autopilot bill.
 | Consequences | Nothing to run at the entry point. Without a mesh, encryption between pods and call policies are not transparent: network policies restrict who may call whom, tokens are validated by every service, and resilience is in the client code (document 05-02).
 | Owner | {role-net} {role-platform}
