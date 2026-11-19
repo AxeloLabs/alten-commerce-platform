@@ -1,0 +1,17 @@
+@startuml
+title What the backlog holds, and what closes each entry
+
+skinparam componentStyle rectangle
+skinparam rectangle {
+  RoundCorner 8
+}
+
+rectangle "**Specification**, in the repository\nEpics and stories · use cases and their scenarios\nCreation prompts and the tests they deliver" as SPEC #FFF8E1
+rectangle "**Backlog**: issues\nOne entry per epic, per story and per increment,\nfound by its identifier" as BACK #E3F2FD
+rectangle "**Pull request**\nOne per increment; merging it closes the increment" as PR #C8E6C9
+rectangle "**Pipeline**\nGates and tests; a story is closed when its scenarios pass" as PIPE #F4F7F9
+
+SPEC -down-> BACK : generated
+BACK -down-> PR : worked on in
+PR -down-> PIPE : proven by
+@enduml

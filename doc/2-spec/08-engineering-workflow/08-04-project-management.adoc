@@ -1,0 +1,305 @@
+= Project Management: Backlog, Milestones, Roles and Risks
+:doc-id: 08-04
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: How the construction of the platform is steered: where the backlog lives and how it is generated from the specification, the board, the milestones and what can be cut, what ready and done mean, the working agreements, the roles, the risks and what is reported.
+include::../_shared/attributes.adoc[]
+
+== How the project is steered
+
+.Strategy question
+****
+What strategy tells, at any moment, what is done, what comes next and what is at risk, without anyone maintaining a second plan by hand?
+****
+
+The specification is the plan.
+It already says what to build, in which order (document 08-03), and which tests prove each part (document 07-02).
+Project management adds only what a specification cannot hold: the state of the work, today.
+
+.Four principles
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Principle | Meaning
+| One plan | The backlog is generated from the specification. Nobody types a story or a task that the specification does not contain; to change the plan, one changes the specification.
+| Done is measured | An item is done when the pipeline says so: its tests pass. Nobody declares a percentage.
+| One place | Backlog, code, review and delivery are in the same tool, linked by the identifiers of this specification
+| Small steps, few at a time | An increment is a pull request. Finishing one comes before starting another.
+|===
+
+.What is kept where
+[%unbreakable, cols="4,5,6", options="header"]
+|===
+| Thing | Place | Answers
+| What to build, and why | The specification, in the repository | What is the plan?
+| Units of work and their state | GitHub Issues ({ADR-PLT-032}) | What is in progress, what is blocked?
+| A change | A pull request | What exactly was done, and who reviewed it?
+| The view | One GitHub Project | Where are we in the milestone?
+| The truth about "done" | The pipeline (document 06-05) | Does it work?
+|===
+
+The brief suggested Jira.
+The repository, the reviews and the pipeline are on GitHub, and agents drive it from the command line: a second product would add an account, a connector and a place where the state can differ.
+Should an employer impose Jira, the mapping below applies unchanged; only the tool differs.
+
+Owner: {role-swe} {role-devops}
+
+== The backlog
+
+.Strategy question
+****
+What strategy keeps the backlog and the specification from telling two different stories?
+****
+
+plantuml::diagrams/backlog-model.puml[format=svg, align=center, pdfwidth=52%]
+
+.From the specification to the backlog
+[cols="3,5,7", options="header"]
+|===
+| Item of the specification | Entry of the backlog | Closed when
+| Epic | An issue, parent of its stories | All its stories are closed
+| User story | An issue, sub-issue of its epic. It lists the use cases that realize it and the increments that build them. | The acceptance scenarios of its use cases pass in the pipeline; for a story on a critical path, its end-to-end test passes on a deployed environment
+| Creation prompt | An issue: the unit of work. Its body is the filled prompt of document 08-03. | Its pull request is merged
+| – | A defect: the identifier of what is violated, and the test that shows it | The pull request that makes the test pass is merged
+| – | A gap of the specification, reported by an agent or a person | The specification is corrected, or the product owner accepts it as it is
+| – | A risk of the register below | The risk is gone, or accepted
+|===
+
+.How an entry is written
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Field | Rule
+| Title | The identifier, then the title of the specification: `CRE-ORD-002 — Place-order saga`. The identifier is what links everything; it is never left out.
+| Kind | A label: `epic`, `story`, `increment`, `defect`, `spec-gap`, `risk`
+| Context | A label from the context codes of this specification: `ctx:ord`, `ctx:cat`…
+| Priority | For stories, the priority of the specification: `must`, `should`, `could`
+| Critical path | A label, for stories and defects that touch one. They are handled first.
+| Milestone | The milestone of document 08-03
+|===
+
+.Generated, not typed
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Subject | Rule
+| Source | The registry of identifiers that the build of this specification produces, the same that feeds document 00-03: each epic, story and creation prompt with its title and its links
+| Tool | A script of the repository, run by a person, that creates or updates the issues through the command line of GitHub. It finds an existing entry by the identifier in its title, so that running it twice changes nothing.
+| Direction | From the specification to the backlog, never back. A title or a link is corrected in the specification, and the script is run again.
+| What the script never touches | The state of an entry, its comments, its assignee: those belong to the people who work
+| An identifier that disappears | Its entry is closed as not planned, with a reference to the change of the specification
+|===
+
+.The two commands the script is made of
+[source,shell]
+----
+gh issue create --title "CRE-ORD-002 — Place-order saga" \
+  --label "increment,ctx:ord" --milestone "M1 — Services" \
+  --body-file build/prompts/CRE-ORD-002.md
+
+gh project item-add <project-number> --owner <owner> --url <issue-url>
+----
+
+Creating about a hundred issues in a repository is visible to everyone who watches it.
+The script is therefore run on purpose, by the owner of the repository, once the specification is approved.
+
+== The board
+
+.Strategy question
+****
+What strategy shows the state of the work at a glance, to someone who was not there yesterday?
+****
+
+One project holds every entry.
+
+.States
+[%unbreakable, cols="3,8,4", options="header"]
+|===
+| State | Meaning | Who moves it
+| Backlog | Exists, not yet startable | The script
+| Ready | Meets the definition of ready below | The developer
+| In progress | A branch exists | The developer
+| In review | A pull request is open | The developer, or an automation of the project
+| Blocked | Waits for a decision or for a correction of the specification. The reason is written on the entry. | The developer
+| Done | Merged; for a story, proven by the pipeline | An automation of the project, when the entry is closed
+|===
+
+.Views
+[%unbreakable, cols="3,12", options="header"]
+|===
+| View | Shows
+| Current milestone | A board of the increments of the milestone, by state. The daily view.
+| By service | A table grouped by context: the parallel tracks of document 08-03
+| Critical paths | The stories and defects that carry the label: what must never wait
+| Stories | The stories by epic, with what remains to build for each
+| Roadmap | The milestones in time, once the pace is known
+|===
+
+.Limits on work in progress
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Limit | Reason
+| One increment in progress per track | An agent works on one increment at a time on one branch
+| At most three increments in review | Review is the scarce resource: a person reads every change. When three wait, nothing new starts.
+| A blocked entry is looked at the same day | A gap of the specification stops a track until it is settled
+|===
+
+== Milestones and scope
+
+.Strategy question
+****
+What strategy turns forty-three increments into a few moments where something can be shown and decided?
+****
+
+.Milestones
+[cols="2,6,7", options="header"]
+|===
+| Milestone | Can be shown | Proves
+| M0 — Foundations | A pull request going through every gate; the local platform starting | The conventions hold before any business code depends on them
+| M1 — Services | Each service through its interface, on a workstation | Every business rule, in unit and component tests; the acceptance scenarios in memory
+| M2 — Saga | The nineteen saga scenarios passing, failures provoked | {CP-ORD-001} to {CP-ORD-004} below the browser: the heart of the brief
+| M3 — Storefront | The purchase in a browser, on the local platform | The six critical paths end to end; {CP-CAT-001} and {CP-IAM-001}
+| M4 — Delivery | The platform on GKE, deployed by the pipeline | The proof of concept; the cost guardrails
+|===
+
+A milestone is reached when the release auditor of document 08-03 finds nothing missing and the product owner accepts it.
+
+.If time is short: what to cut, in this order
+[cols="1,6,8", options="header"]
+|===
+| # | Cut | Price
+| 1 | The document and file stores: {CRE-CAT-003}, {CRE-CART-003} | The brief's requirement of three interchangeable stores is specified and not demonstrated
+| 2 | The longer load runs and the dashboards of {CRE-PLT-016} and {CRE-PLT-017} | Performance is specified, measured by one short run only
+| 3 | Cancellation and fulfillment: {CRE-ORD-003}, and their parts of {CRE-ORD-006}, {CRE-ORD-009} and {CRE-ORD-010} | Two validated journeys are absent; no critical path is affected
+| 4 | The administration screens, replaced by calls to the interfaces during the demonstration | The administrator's journeys are shown without a screen
+|===
+
+What is never cut: the foundations, the saga and its scenarios, the security of the edge, the cost guardrails.
+They are what the brief is about.
+
+.The first deployment
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| When | After M3, for the demonstration. Before that, everything runs on a workstation and in the pipeline, at no cloud cost.
+| Rehearsal | One deployment of a few hours, some days earlier, to meet the surprises of a first time — a certificate, a quota, a right. At the hourly cost of document 06-06, three hours cost about half a dollar.
+| Procedure | The first-deployment steps of the runbook (document 06-07): the budget first, by the owner
+| End | The scheduled destruction, at the deadline given when the environment is created ({ADR-PLT-030})
+|===
+
+== Ready and done
+
+.Strategy question
+****
+What strategy prevents starting what cannot be finished, and calling finished what is not?
+****
+
+.Definitions
+[cols="3,6,6", options="header"]
+|===
+| For | Ready when | Done when
+| An increment | Its row exists in the catalog of document 08-03; the documents it reads are approved; the increments before it are merged; no gap of the specification is open on its subject | Its pull request is merged: every gate passes; the tests it names exist under their identifiers; each finding of an expert is fixed or dismissed with a reason; the report of the author is read, and each gap it mentions has an entry
+| A story | Its use cases and acceptance scenarios are approved | The acceptance scenarios of its use cases pass in the pipeline; on a critical path, its end-to-end test passes on a deployed environment
+| A defect | It names the identifier that is violated and how to see it | A test that failed because of it passes, and stays in the suite
+| A milestone | – | The release auditor reports nothing missing; the product owner accepts it
+|===
+
+"It works on my workstation" is not a state of the board.
+
+== Working agreements
+
+.Strategy question
+****
+What strategy makes every change traceable to the reason it was made?
+****
+
+[cols="3,12", options="header"]
+|===
+| Subject | Agreement
+| Branch | One per increment, named after it: `cre-ord-002-place-order-saga`. Short-lived.
+| Commit | Small and frequent, on the branch. The message starts with the identifier of the increment or of the defect.
+| Pull request | One per increment. Its description follows a template: the identifier; what was built; each test identifier and its state; the assumptions and the gaps of the specification met; the findings of the experts and what was done about each.
+| Review | By a person, always (document 08-02). In a team, not the person who launched the agent.
+| Merge | Only with every gate passing. The pull request closes its entry of the backlog by naming it.
+| A gap of the specification | Never settled in the code. An entry is opened, the track waits or takes the most conservative reading, and the specification is corrected by its own pull request.
+| A decision | A choice between alternatives that was not in the specification becomes a decision record (document 04-07), in the same pull request as the specification change
+| Versions | A dependency is upgraded by an increment of its own, never in passing
+|===
+
+== Roles
+
+.Strategy question
+****
+What strategy makes clear who decides what, when one person and several agents hold every role?
+****
+
+.Who decides
+[cols="4,7,4", options="header"]
+|===
+| Decision | Decided by | Proposed by
+| Scope, priorities, accepting a milestone | The product owner | Anyone
+| Spending: creating the environment, its deadline, the budget | The owner of the cloud account | {role-cloud}
+| Architecture: a new decision record | {role-arch} {role-sol} | Anyone, an agent included
+| Merging a change | The reviewer | The author
+| Dismissing a finding of an expert | The reviewer, with a written reason | –
+| Deploying to production | The approver of the environment (document 06-05) | The pipeline
+| Changing a gate, a threshold, the harness | The owners named on those files | Anyone
+|===
+
+An agent proposes, builds and reviews.
+It decides nothing in this table and is accountable for nothing: accountability stays with the person who launched it (document 08-02).
+
+In the proof of concept one person holds every role of the role tags of this specification.
+The tags still matter: they say which hat is worn when a decision is taken, and which checklist applies.
+
+== Risks
+
+.Strategy question
+****
+What strategy deals with what can go wrong before it does?
+****
+
+.Register, at the start of the construction
+[cols="5,4,6,2", options="header"]
+|===
+| Risk | First sign | Response | Owner
+| The mutation tool does not run on JUnit {v-junit} | The gate fails to start in {CRE-PLT-001} | Tried in the very first increment. If it cannot run: the gate is suspended, written down as such, and the test reviewer of document 08-03 carries the question until it can. | {role-qa}
+| The bus emulator behaves unlike the real bus | A scenario passes in containers and fails in `test` | The behaviors that differ — schemas, order, dead letters — are tested on the real bus ({TI-PLT-004}) | {role-swe}
+| More code is written than one person can read | Increments wait in review | Increments sized for one sitting; at most three in review; experts read first | {role-arch}
+| The specification has gaps found during construction | Entries labeled `spec-gap` accumulate | Agents must report, never fill silently; the specification is corrected first; a track may wait | {role-sol}
+| The demonstration date comes before M4 | The pace measured at M0 and M1 | The ordered cuts above; never the foundations | Product owner
+| The environment is left running | A budget alert | Destruction on a deadline, checked every half hour; alerts at half, nine tenths and all of the budget (document 06-06) | {role-cloud}
+| The certificate or the host name of the proof of concept is refused | The first deployment | The rehearsal; a certificate signed by ourselves as a fallback (document 06-02) | {role-net}
+| A new minor release of Spring Boot during the project | Its announcement | Versions are pinned; the upgrade is an increment of its own, after the demonstration | {role-arch}
+| One developer | Unavailability | Everything is in the repository: specification, prompts, backlog. Another person, or another agent, can take the next increment. | Product owner
+| An agent does something it should not | A refused command in the telemetry; a surprising change | The harness of document 08-02: the agent holds nothing with which to harm the cloud | {role-sec}
+|===
+
+The register is reviewed at each milestone: risks that passed are closed, and what the milestone revealed is added.
+
+== Reporting
+
+.Strategy question
+****
+What strategy reports progress with numbers that nobody had to estimate?
+****
+
+.At each milestone
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Number | Source
+| Increments merged, of 43 | The board
+| Stories done, of 39, and of those on critical paths | The pipeline: acceptance scenarios passing
+| Identifiers with a passing test, by type | The traceability matrix of document 00-03, joined with the test reports
+| Findings of experts: fixed, dismissed, open | The pull requests
+| Gaps of the specification: found, corrected | The backlog
+| Delivery measures | Document 06-05
+| Cost so far, once an environment exists | The billing export (document 06-06)
+|===
+
+.Forecasting
+****
+No duration is estimated in this specification: nobody has yet built a platform with this factory.
+The pace is measured during M0 — increments merged per day of work — and the forecast is the number of increments left divided by that pace.
+It is stated as a range, and corrected at each milestone.
+****
+
+Owner: {role-swe} {role-devops}
