@@ -1,0 +1,287 @@
+= Test Catalog and Matrices: Every Test Named, Every Requirement Covered
+:doc-id: 07-02
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The catalog of unit, component, integration and end-to-end tests with their identifiers and families, and the matrices that show which tests cover each rule, quality requirement, critical path and saga scenario.
+include::../_shared/attributes.adoc[]
+
+== How to read the catalog
+
+.Strategy question
+****
+What strategy lets anyone check, from a requirement, which tests prove it, and from a failing test, what is broken?
+****
+
+A catalog entry is a named group of tests about one subject: one test class, or a few.
+Its identifier is the tag of those tests in the code and the name under which their result is reported; a failing build names catalog entries, not file paths.
+
+.Columns
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Column | Content
+| ID | `TU` unit, `TC` component, `TI` integration, `TE2E` end-to-end; then the context
+| Family | Nominal, error, edge or invariant (document 07-01). An entry may cover several.
+| What it proves | The situation and the expected outcome, in one sentence. The complete cases are the cells, rules and scenarios it refers to.
+| Verifies | The rules, use cases, scenarios or requirements proven by the entry
+|===
+
+The catalog is written before the code and grows with it.
+An entry may be split when its subject grows; its identifier is then kept by the part that keeps its meaning, as for every identifier of this specification.
+
+Owner: {role-qa}
+
+== Unit tests
+
+.Strategy question
+****
+What strategy proves every business rule in milliseconds?
+****
+
+Unit tests exercise the domain and nothing else (document 07-01).
+Together they must cover every line and every branch of the domain packages ({NFR-MAINT-001}).
+
+.Order
+[cols="3,3,9,5", options="header"]
+|===
+| ID | Family | What it proves | Verifies
+| [[TU-ORD-001]]TU-ORD-001 | Nominal, error | An order is created with its lines, its address and a total equal to the sum of its lines; anything less is refused | {FR-ORD-001} {FR-ORD-004}
+| [[TU-ORD-002]]TU-ORD-002 | Nominal | Each allowed change of order status succeeds, with its guard | {FR-ORD-010}
+| [[TU-ORD-003]]TU-ORD-003 | Invariant | Every other pair of statuses is refused; nothing leaves a final status | {FR-ORD-010}
+| [[TU-ORD-004]]TU-ORD-004 | Invariant | Lines, prices and address cannot change after placement; a rejection carries exactly one reason | {FR-ORD-002} {FR-ORD-008} {FR-ORD-011}
+| [[TU-ORD-005]]TU-ORD-005 | Nominal, error | Place-order saga: one test per transition P01 to P16, each from every state it applies to | {FR-ORD-006} {FR-ORD-007} {FR-ORD-015}
+| [[TU-ORD-006]]TU-ORD-006 | Invariant | Place-order saga: every cell of the grid marked as having no effect records the event and changes neither the state nor what is sent | {NFR-REL-002}
+| [[TU-ORD-007]]TU-ORD-007 | Edge | A suspended saga handles each late answer exactly as in the step it remembers | {FR-ORD-016}
+| [[TU-ORD-008]]TU-ORD-008 | Nominal, error | The three requests of an administrator, from each remembered step; refused in every other state; never a confirmation once a refund was requested | {FR-ORD-018}
+| [[TU-ORD-009]]TU-ORD-009 | Edge | Deadlines: the order deadline before the review deadline; a new review deadline when the saga leaves suspension; a deadline emptied once handled; a deadline and an answer at the same instant | {FR-ORD-015} {FR-ORD-016}
+| [[TU-ORD-010]]TU-ORD-010 | Edge | Defensive transitions P20 to P23: a late reservation is released, a late confirmation is returned, a capture on a rejected order and a refund on a confirmed one raise the alert | {NFR-REL-002}
+| [[TU-ORD-011]]TU-ORD-011 | Invariant | Over thousands of generated sequences of events: an order is confirmed only with a captured payment and a confirmed reservation; it is rejected only when it holds no payment; it is never confirmed after its refund was requested; every sequence ends or reaches a person | {FR-ORD-007} {FR-ORD-008} {NFR-REL-003}
+| [[TU-ORD-012]]TU-ORD-012 | Nominal, error, edge | Cancel-order saga: transitions C01 to C06 and every cell of its grid | {FR-ORD-012} {FR-ORD-014}
+| [[TU-ORD-013]]TU-ORD-013 | Nominal, edge | Amounts: the worked examples of the rules; the smallest and the largest price; no rounding | {FR-ORD-004}
+|===
+
+.Inventory and payment
+[cols="3,3,9,5", options="header"]
+|===
+| ID | Family | What it proves | Verifies
+| [[TU-INV-001]]TU-INV-001 | Invariant | Holding, confirming, releasing and returning keep on hand and reserved non-negative, and reserved never above on hand | {FR-INV-001} {FR-INV-002}
+| [[TU-INV-002]]TU-INV-002 | Nominal, error | A reservation covers every line or none | {FR-INV-003}
+| [[TU-INV-003]]TU-INV-003 | Nominal, edge | The answer of the inventory to each request in each status of the reservation: every row of the table of document 02-03 | {FR-INV-005} {NFR-REL-002}
+| [[TU-INV-004]]TU-INV-004 | Edge | A reservation expires at its instant; confirming an expired one reserves again or fails; a request received after its instant reserves nothing | {FR-INV-004} {FR-INV-005}
+| [[TU-INV-005]]TU-INV-005 | Error, invariant | An adjustment never brings on hand below reserved; every change of stock leaves a movement | {FR-INV-006} {FR-INV-008}
+| [[TU-INV-006]]TU-INV-006 | Invariant | Returned stock is counted once, however many times the return is asked | {FR-ORD-012}
+| [[TU-PAY-001]]TU-PAY-001 | Nominal, invariant | Each change of payment status; the three final statuses never change | {FR-PAY-001} {FR-PAY-005}
+| [[TU-PAY-002]]TU-PAY-002 | Nominal, edge | The answer of the payment service to each request in each status of the payment: every row of the table of document 02-03 | {FR-PAY-001} {FR-PAY-006}
+| [[TU-PAY-003]]TU-PAY-003 | Edge | A charge requested after its instant is recorded as canceled and never sent; a cancellation with no payment leaves a canceled payment | {FR-PAY-005}
+| [[TU-PAY-004]]TU-PAY-004 | Invariant | A payment is refunded only if captured, for its full amount, once | {FR-PAY-002} {FR-PAY-006}
+|===
+
+.Catalog, cart, notification, platform
+[cols="3,3,9,5", options="header"]
+|===
+| ID | Family | What it proves | Verifies
+| [[TU-CAT-001]]TU-CAT-001 | Nominal, error | A product is created as a draft; it is published only when complete | {FR-CAT-001} {FR-CAT-004}
+| [[TU-CAT-002]]TU-CAT-002 | Edge | Prices: the bounds of the range, a third decimal, zero | {FR-CAT-002}
+| [[TU-CAT-003]]TU-CAT-003 | Invariant | A retired product is never published again; its SKU never changes | {FR-CAT-005}
+| [[TU-CAT-004]]TU-CAT-004 | Nominal, edge | The availability level from the quantity and the threshold; an older announcement never replaces a newer one | {FR-CAT-008}
+| [[TU-CAT-005]]TU-CAT-005 | Error | A change based on an outdated version is refused | {FR-CAT-009}
+| [[TU-CART-001]]TU-CART-001 | Nominal, edge | Adding, setting and removing lines; the tenth unit and the eleventh; the fiftieth line and the next | {FR-CART-002} {FR-CART-004}
+| [[TU-CART-002]]TU-CART-002 | Nominal, edge | The view of a cart: totals from current prices, flagged lines left out of the total, checkout allowed or not | {FR-CART-005} {FR-CART-010}
+| [[TU-CART-003]]TU-CART-003 | Invariant | The quantities of a confirmed order leave the cart once | {FR-CART-007}
+| [[TU-CART-004]]TU-CART-004 | Nominal, edge | A favorite is marked once; the hundredth and the next | {FR-CART-008}
+| [[TU-NOT-001]]TU-NOT-001 | Nominal | The content of each e-mail: number, lines, total, status, and the truth about what was charged or refunded | {FR-NOT-004}
+| [[TU-NOT-002]]TU-NOT-002 | Invariant | One e-mail per event at most, whatever the state of the record when the event comes back | {FR-NOT-002}
+| [[TU-PLT-001]]TU-PLT-001 | Edge | Value objects refuse what is not a value: an amount with three decimals, an empty SKU, a quantity of zero | {FR-CAT-002}
+| [[TU-PLT-002]]TU-PLT-002 | Invariant | The architecture rules: one test per rule, {AR-PLT-001} to {AR-PLT-026} | {NFR-MAINT-002}
+|===
+
+== Component tests
+
+.Strategy question
+****
+What strategy proves that a service keeps its promises, without starting the others?
+****
+
+A component test drives one service through its interfaces, with its real adapters and simulated neighbors (document 07-01).
+
+.By service
+[cols="3,3,9,5", options="header"]
+|===
+| ID | Family | What it proves | Verifies
+| [[TC-CAT-001]]TC-CAT-001 | Nominal, edge | Browsing: each filter, each sort, paging, a size above the maximum, an empty result | {UC-CAT-001} {FR-CAT-007} {FR-CAT-010}
+| [[TC-CAT-002]]TC-CAT-002 | Nominal, error | Administration of a product from creation to retirement, with versions and every refusal | {UC-CAT-003} {UC-CAT-004} {UC-CAT-005} {UC-CAT-006}
+| [[TC-CAT-003]]TC-CAT-003 | Nominal, edge | An availability event updates what is shown; an older one is ignored; a duplicate changes nothing | {FR-CAT-008} {EVT-INV-007}
+| [[TC-CAT-004]]TC-CAT-004 | Nominal, error | A visitor never sees a draft or a retired product; the read of referenced products requires a signed-in actor and includes retired ones | {UC-CAT-002} {FR-CAT-003} {FR-CAT-005}
+| [[TC-INV-001]]TC-INV-001 | Nominal, error | An adjustment changes the stock, records the movement and announces the new availability; a SKU unknown to the catalog is refused | {UC-INV-001} {FR-INV-009}
+| [[TC-INV-002]]TC-INV-002 | Nominal, edge | Each command of a saga is answered by the right event, in one transaction with the inbox and the outbox; the same command twice has its effect once | {CMD-INV-002} {CMD-INV-003} {CMD-INV-004} {CMD-INV-005}
+| [[TC-INV-003]]TC-INV-003 | Edge | The expiry task takes a lease, expires what is due, and announces the availability | {FR-INV-004}
+| [[TC-CART-001]]TC-CART-001 | Nominal, error, edge | The cart through its interface, prices read from a simulated catalog; with the catalog unavailable, the last known prices and no checkout | {UC-CART-001} {UC-CART-002} {UC-CART-003}
+| [[TC-CART-002]]TC-CART-002 | Nominal, invariant | A confirmed order empties its quantities from the cart, once, even delivered twice | {FR-CART-007} {EVT-ORD-001}
+| [[TC-CART-003]]TC-CART-003 | Nominal, error | Favorites through their interface | {UC-CART-004}
+| [[TC-ORD-001]]TC-ORD-001 | Nominal, invariant | A checkout creates the order, its saga and the first command in one transaction and answers at once; the same checkout again returns the same order | {UC-ORD-001} {FR-ORD-009}
+| [[TC-ORD-002]]TC-ORD-002 | Error | Each refusal of a checkout, with its code: {ERR-ORD-001}, {ERR-ORD-002}, {ERR-ORD-003}, and {ERR-PLT-008} when the cart or the catalog does not answer | {FR-ORD-003} {FR-ORD-017}
+| [[TC-ORD-003]]TC-ORD-003 | Nominal, edge | Each answer of the inventory and of the payment is handled in one transaction — inbox, saga, order, outbox — and routed to the saga that asked | {NFR-REL-001} {NFR-REL-002}
+| [[TC-ORD-004]]TC-ORD-004 | Edge | The deadline task takes a lease on due sagas and handles the order deadline before the review deadline | {FR-ORD-015} {FR-ORD-016}
+| [[TC-ORD-005]]TC-ORD-005 | Nominal, error | Order history and tracking; another customer's order is "not found" | {UC-ORD-002} {UC-ORD-003} {FR-IAM-004}
+| [[TC-ORD-006]]TC-ORD-006 | Nominal, error | Cancellation and fulfillment through their interface, with every refusal | {UC-ORD-004} {UC-ORD-006}
+| [[TC-ORD-007]]TC-ORD-007 | Nominal, error | Decisions on an order under review, with the refusals {ERR-ORD-006}, {ERR-ORD-007} and {ERR-ORD-008}; the search of orders by an administrator | {UC-ORD-005} {UC-ORD-007}
+| [[TC-PAY-001]]TC-PAY-001 | Nominal, error, edge | Each command, against the simulated provider scripted by each token; the three steps around the call, with the service stopped between any two | {UC-PAY-001} {FR-PAY-001} {FR-PAY-007}
+| [[TC-PAY-002]]TC-PAY-002 | Error, edge | A cancellation is left unacknowledged while the provider cannot be reached, and succeeds when it can; a refund that fails is reported and can be retried | {UC-PAY-002} {FR-PAY-005} {FR-PAY-006}
+| [[TC-NOT-001]]TC-NOT-001 | Nominal, error, invariant | Each order event produces its e-mail once; the provider failing leads to retries, then to "not sent" and the alert, without a dead letter | {UC-NOT-001} {FR-NOT-002} {FR-NOT-003}
+|===
+
+.For every service
+[cols="3,3,9,5", options="header"]
+|===
+| ID | Family | What it proves | Verifies
+| [[TC-PLT-001]]TC-PLT-001 | Nominal, error | Every request and answer of the REST interface conforms to its contract, error answers included | {NFR-MAINT-003}
+| [[TC-PLT-002]]TC-PLT-002 | Nominal, edge | Every message sent conforms to its schema and its envelope; a message of an unknown type is acknowledged and counted; a message whose envelope and payload disagree is not handled | {NFR-MAINT-003}
+| [[TC-PLT-003]]TC-PLT-003 | Error, invariant | Deny by default; every cell of the authorization matrix that concerns the service, allowed and denied alike | {NFR-SEC-002} {FR-IAM-005}
+| [[TC-PLT-004]]TC-PLT-004 | Error | Every error code of the service is produced, with its status and its fields; an unexpected error shows nothing internal | {NFR-USAB-002} {NFR-SEC-008}
+| [[TC-PLT-005]]TC-PLT-005 | Nominal, error, edge | The web gateway: the session cookie and its attributes, the anti-forgery token, one token renewal for parallel requests, the identity provider unavailable | {UC-IAM-002} {NFR-SEC-001}
+| [[TC-PLT-006]]TC-PLT-006 | Nominal, error, edge, invariant | Every acceptance scenario of document 01-08 that concerns one service is bound and passes | {NFR-MAINT-001}
+|===
+
+== Integration tests
+
+.Strategy question
+****
+What strategy proves that the pieces work with the real technology, and that orders survive what the saga specification says they survive?
+****
+
+.Adapters against the real technology
+[cols="3,3,9,5", options="header"]
+|===
+| ID | Family | What it proves | Verifies
+| [[TI-PLT-001]]TI-PLT-001 | Nominal, edge | The outbox relay on PostgreSQL: with two relays, the messages of each order leave in the order they were written; a refused row is parked and blocks only its key and topic | {NFR-REL-001} {NFR-REL-005}
+| [[TI-PLT-002]]TI-PLT-002 | Invariant | The unit of work: an aggregate, the message handled and the messages to send are saved together or not at all | {NFR-REL-001}
+| [[TI-PLT-003]]TI-PLT-003 | Edge | Two writers on one aggregate: one succeeds, the other is run again on the fresh state | {NFR-REL-002}
+| [[TI-PLT-004]]TI-PLT-004 | Nominal, error | On the real bus: a message that breaks the schema is refused at publication; messages of one key arrive in order; filters deliver only what they should; a message that keeps failing reaches its dead-letter topic after ten attempts | {NFR-REL-002} {NFR-OBS-004}
+| [[TI-PLT-005]]TI-PLT-005 | Nominal | Every migration applies to an empty database and to the previous schema; every entity matches the migrated schema | {NFR-REL-004}
+| [[TI-PLT-006]]TI-PLT-006 | Error | In `test`: a service can reach its own database, topics and secrets, and no other | {NFR-SEC-004}
+| [[TI-PLT-007]]TI-PLT-007 | Nominal | A trace started at the web gateway continues through the outbox and the bus to the last consumer; every log line of the way carries the trace and the saga identifiers | {NFR-OBS-001} {NFR-OBS-002}
+| [[TI-CAT-001]]TI-CAT-001 | Nominal, error, edge | The persistence contract of the catalog passes on PostgreSQL, on Firestore — emulator, then the real service — and on files | {NFR-MAINT-004}
+| [[TI-CART-001]]TI-CART-001 | Nominal, error, edge | The persistence contract of the cart passes on the three stores | {NFR-MAINT-004}
+| [[TI-INV-001]]TI-INV-001 | Invariant | Ten orders reserve the last five units at the same time: five are held, five rejected, nothing is negative, nothing deadlocks | {FR-INV-002} {FR-INV-003}
+| [[TI-ORD-020]]TI-ORD-020 | Invariant | The database itself refuses a second pending order of a customer and a second order for one checkout, even if the code let them through | {FR-ORD-009} {FR-ORD-017}
+|===
+
+.Saga scenarios, several services together
+[cols="3,3,9,5", options="header"]
+|===
+| ID | Family | What it proves | Verifies
+| [[TI-ORD-001]]TI-ORD-001 | Nominal | An order is placed and confirmed; the cart is emptied; one e-mail | {SC-ORD-001}
+| [[TI-ORD-002]]TI-ORD-002 | Error | Payment refused: the stock is released, the order rejected | {SC-ORD-002}
+| [[TI-ORD-003]]TI-ORD-003 | Error | Stock not available: rejected, the payment never requested | {SC-ORD-003}
+| [[TI-ORD-004]]TI-ORD-004 | Edge | The inventory does not answer: rejected at the order deadline; the late reservation is released | {SC-ORD-004}
+| [[TI-ORD-005]]TI-ORD-005 | Edge | The provider does not answer and nothing was captured: canceled, then rejected | {SC-ORD-005}
+| [[TI-ORD-006]]TI-ORD-006 | Edge | The provider does not answer but captured: the order is carried through | {SC-ORD-006}
+| [[TI-ORD-007]]TI-ORD-007 | Invariant | The order service restarts after the debit: confirmed, charged once | {SC-ORD-007}
+| [[TI-ORD-008]]TI-ORD-008 | Invariant | Every message of the nominal scenario delivered twice: the outcome of a single delivery | {SC-ORD-008}
+| [[TI-ORD-009]]TI-ORD-009 | Invariant | A service stopped between its commit and its publication: the message leaves after the restart | {SC-ORD-009}
+| [[TI-ORD-010]]TI-ORD-010 | Invariant | An answer and a deadline handled at the same instant by two replicas: the state of a sequential handling | {SC-ORD-010}
+| [[TI-ORD-011]]TI-ORD-011 | Edge | Paid, stock not confirmed before the review delay: under review, then confirmed by itself when the inventory returns | {SC-ORD-011}
+| [[TI-ORD-012]]TI-ORD-012 | Error | Paid, then the stock is gone: refunded, then rejected | {SC-ORD-012}
+| [[TI-ORD-013]]TI-ORD-013 | Error | A refund keeps failing: under review, never recorded as done; a retry succeeds later | {SC-ORD-013}
+| [[TI-ORD-014]]TI-ORD-014 | Nominal | A confirmed order is canceled: stock returned, payment refunded | {SC-ORD-014}
+| [[TI-ORD-015]]TI-ORD-015 | Edge | Nobody can tell whether the payment was captured: under review; the cancellation gets through later; rejected | {SC-ORD-015}
+| [[TI-ORD-016]]TI-ORD-016 | Edge | The payment service is down past the order deadline: nothing is charged when it returns | {SC-ORD-016}
+| [[TI-ORD-017]]TI-ORD-017 | Edge | An administrator rejects a paid order whose stock is confirmed afterwards: refunded once, the units back on sale | {SC-ORD-017}
+| [[TI-ORD-018]]TI-ORD-018 | Edge | Paid, stock confirmed late but before the review delay: confirmed, never under review | {SC-ORD-018}
+| [[TI-ORD-019]]TI-ORD-019 | Edge | A cancellation meets a silent inventory and is retried: the units are counted once | {SC-ORD-019}
+|===
+
+How each of these scenarios is set up, driven and observed is specified in document 07-03.
+
+== End-to-end tests
+
+.Strategy question
+****
+What strategy proves that the store works for a customer, with as few slow tests as possible?
+****
+
+End-to-end tests cover the critical paths of document 01-02 and little else.
+They drive the storefront in a browser, on a deployed environment, and observe what a person would: screens and e-mails.
+
+[cols="3,3,9,5", options="header"]
+|===
+| ID | Family | What it proves | Verifies
+| [[TE2E-ORD-001]]TE2E-ORD-001 | Nominal | A customer signs in, fills a cart, pays, sees the order confirmed, receives the e-mail; the stock and the cart are updated | {CP-ORD-001} {JRN-ORD-001}
+| [[TE2E-ORD-002]]TE2E-ORD-002 | Error | With a declined means of payment, the order is rejected, the customer is told why and that nothing was charged, the cart is kept | {CP-ORD-002}
+| [[TE2E-ORD-003]]TE2E-ORD-003 | Error | Two customers want the last unit: one order is confirmed, the other rejected before any payment | {CP-ORD-003}
+| [[TE2E-ORD-004]]TE2E-ORD-004 | Edge, invariant | With a provider that does not answer, the order ends rejected or under review, never pending, and the customer is never charged without an order | {CP-ORD-004}
+| [[TE2E-CAT-001]]TE2E-CAT-001 | Nominal | An administrator creates a product, enters stock, publishes it; a visitor finds it; a customer buys it | {CP-CAT-001} {JRN-CAT-002} {JRN-INV-001}
+| [[TE2E-IAM-001]]TE2E-IAM-001 | Error, invariant | A visitor cannot reach a cart; a customer cannot reach the administration nor another customer's order; an administrator cannot place an order | {CP-IAM-001}
+| [[TE2E-ORD-005]]TE2E-ORD-005 | Nominal | A customer cancels a confirmed order and is told it is refunded; an administrator ships and delivers another | {JRN-ORD-003} {JRN-ORD-004}
+| [[TE2E-ORD-006]]TE2E-ORD-006 | Nominal | An administrator finds an order under review and resolves it | {JRN-ORD-005}
+| [[TE2E-PLT-001]]TE2E-PLT-001 | Nominal | Smoke: the storefront loads, the catalog answers, a test account signs in and reads its orders. Run after every deployment, everywhere. | {NFR-AVAIL-001}
+| [[TE2E-PLT-002]]TE2E-PLT-002 | Invariant | The screens of the customer journeys pass the automated accessibility checks, on phone and desktop sizes | {NFR-USAB-001}
+|===
+
+== Matrices
+
+.Strategy question
+****
+What strategy shows at a glance that nothing required is left without a test?
+****
+
+The complete links, identifier by identifier, are generated by the build into document 00-03.
+The matrices below are the summary a reviewer reads.
+
+.Business rules by context
+[cols="3,5,5,4,3", options="header"]
+|===
+| Rules | Unit | Component | Integration | End-to-end
+| Identity and access | – | {TC-PLT-003} {TC-PLT-005} {TC-ORD-005} | {TI-PLT-006} | {TE2E-IAM-001}
+| Catalog | {TU-CAT-001} to {TU-CAT-005} | {TC-CAT-001} to {TC-CAT-004} | {TI-CAT-001} | {TE2E-CAT-001}
+| Inventory | {TU-INV-001} to {TU-INV-006} | {TC-INV-001} to {TC-INV-003} | {TI-INV-001} | {TE2E-ORD-003}
+| Cart and favorites | {TU-CART-001} to {TU-CART-004} | {TC-CART-001} to {TC-CART-003} | {TI-CART-001} | {TE2E-ORD-001}
+| Order | {TU-ORD-001} to {TU-ORD-013} | {TC-ORD-001} to {TC-ORD-007} | {TI-ORD-001} to {TI-ORD-020} | {TE2E-ORD-001} to {TE2E-ORD-006}
+| Payment | {TU-PAY-001} to {TU-PAY-004} | {TC-PAY-001} {TC-PAY-002} | {TI-ORD-005} {TI-ORD-006} {TI-ORD-013} {TI-ORD-016} | {TE2E-ORD-002} {TE2E-ORD-004}
+| Notification | {TU-NOT-001} {TU-NOT-002} | {TC-NOT-001} | {TI-ORD-001} | {TE2E-ORD-001}
+|===
+
+.Quality requirements
+[cols="4,7,6", options="header"]
+|===
+| Requirement | Proven by | Where it is specified
+| {NFR-PERF-001} to {NFR-PERF-005}, {NFR-SCAL-001} | The load tests | Document 07-04
+| {NFR-AVAIL-002}, {NFR-AVAIL-003}, {NFR-REL-004} | The resilience tests: loss of an instance, of a service, a deployment under load | Document 07-03
+| {NFR-AVAIL-004} | The restore drill | Document 06-07
+| {NFR-REL-001} | {TI-PLT-001} {TI-PLT-002} {TI-ORD-009} | This document
+| {NFR-REL-002} | {TU-ORD-006} {TI-PLT-003} {TI-ORD-008} {TI-ORD-010} | This document
+| {NFR-REL-003} | {TU-ORD-011} {TI-ORD-004} {TI-ORD-011} {TI-ORD-015} | This document
+| {NFR-REL-005} | {TI-PLT-001}, and the publication delay measured during the load tests | This document; document 07-04
+| {NFR-SEC-001} to {NFR-SEC-008} | {TC-PLT-003} {TC-PLT-004} {TC-PLT-005} {TI-PLT-006}, and the security tests | This document; document 07-04
+| {NFR-OBS-001}, {NFR-OBS-002} | {TI-PLT-007} | This document
+| {NFR-OBS-003}, {NFR-OBS-004} | The alert tests: each alert is provoked in `test` | Document 07-03
+| {NFR-MAINT-001} to {NFR-MAINT-005} | The gates of the build | Document 07-01
+| {NFR-USAB-001}, {NFR-USAB-002} | {TE2E-PLT-002} {TC-PLT-004} | This document
+| {NFR-COST-001}, {NFR-COST-002} | A review of the budget configuration; the sleep and destruction jobs run in `test` | Document 06-06
+|===
+
+.Critical paths
+[%unbreakable, cols="4,5,6", options="header"]
+|===
+| Critical path | End-to-end test | Also proven below by
+| {CP-ORD-001} | {TE2E-ORD-001} | {TI-ORD-001}
+| {CP-ORD-002} | {TE2E-ORD-002} | {TI-ORD-002}
+| {CP-ORD-003} | {TE2E-ORD-003} | {TI-ORD-003} {TI-INV-001}
+| {CP-ORD-004} | {TE2E-ORD-004} | {TI-ORD-004} to {TI-ORD-019}
+| {CP-CAT-001} | {TE2E-CAT-001} | {TC-CAT-002} {TC-INV-001}
+| {CP-IAM-001} | {TE2E-IAM-001} | {TC-PLT-003}
+|===
+
+.Families by level
+[%unbreakable, cols="3,4,4,4,4", options="header"]
+|===
+| Level | Nominal | Error | Edge | Invariant
+| Unit | Every rule | Every refusal of the domain | Limits of quantities, prices, instants; late answers | Grids, generated sequences, final statuses
+| Component | Every endpoint and message | Every error code; every denied cell | Duplicates, restarts between steps | Idempotence; deny by default
+| Integration | The nominal saga; adapters | Refusals across services | Silences, late answers, retries | Atomicity, order, no oversell
+| End-to-end | The purchase; the administration | Declined payment; last unit | A provider that does not answer | Nobody reaches what is not theirs
+|===
+
+A requirement, a critical path or a saga scenario that has no test fails the build of this specification today, and will fail the build of the code tomorrow: the same registry of identifiers checks both.
+
+Owner: {role-qa}
