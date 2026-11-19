@@ -83,6 +83,8 @@
 :v-checkov: 3.4
 // --- Observability
 :v-otel-lgtm: 0.41
+:v-grafana: 13.2
+:v-podman: 5.8
 // --- Workstation
 :v-intellij: 2026.3
 :v-plantuml-bundled: 1.2026.2

@@ -8,7 +8,7 @@ Person(admin, "Administrator", "Manages catalog and stock, fulfills orders, reso
 
 System(platform, "Alten Commerce Platform", "Online store: catalog, stock, cart, orders, payments, notifications, identity")
 
-System_Ext(psp, "Payment provider", "Charges, cancels and refunds payments. Simulated in this release")
+System_Ext(psp, "Payment provider", "Charges, cancels and refunds payments. Simulated in this release, by an adapter inside the payment service")
 System_Ext(mail, "E-mail provider", "Delivers e-mails to customers")
 
 Rel(visitor, platform, "Browses and registers", "HTTPS")

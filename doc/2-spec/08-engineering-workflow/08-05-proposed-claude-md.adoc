@@ -1,6 +1,6 @@
 = Proposed CLAUDE.md: The Instruction File Given to Every Agent
 :doc-id: 08-05
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The instruction file that every AI agent reads at the start of a session in this repository: what it is for, its text as validated, why each part is there and what really enforces it, the rules loaded by folder, and how the file is kept true.
@@ -167,7 +167,7 @@ None of them relies on the file to be respected: the right column says what stop
 | Never weaken a test or a threshold | The shortest way to a green build | The thresholds have owners; reviewers read the tests first
 | One increment, one scope | A change that touches everything cannot be reviewed | The scope of the prompt; the review
 | Never deploy, never touch the cloud | The one kind of mistake that cannot be taken back | The agent holds no identity that can (document 08-02)
-| Never read credentials | – | The sandbox and the read refusals
+| Never read credentials | – | The session account holds none; the sandbox and the read refusals
 | Never work around a refusal | An agent that meets a refusal tends to look for another way | The refusal is repeated by layers the agent cannot reach
 |===
 
@@ -210,6 +210,8 @@ paths:
 - A business refusal is returned as a result. Exceptions are for what should not happen.
 - No clock and no random identifier: both are parameters.
 ----
+
+The rule files are written with the harness ({CRE-PLT-002}).
 
 The brief wondered whether its habit of opening every section with a "strategy" question belonged in this file.
 It does not: it is a convention of the documents, useless to an agent that writes Java.

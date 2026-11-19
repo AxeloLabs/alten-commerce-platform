@@ -1,6 +1,11 @@
 // ids:end
 == Inventory
 
+.Strategy question
+****
+What strategy describes how stock is entered, corrected and consulted?
+****
+
 The inventory is the only place that knows what can really be sold.
 
 [[UC-INV-001]]

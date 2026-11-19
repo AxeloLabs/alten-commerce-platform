@@ -1,6 +1,11 @@
 // ids:end
 == Identity and access
 
+.Strategy question
+****
+What strategy decides who may do what, before any business function runs?
+****
+
 Accounts and credentials belong to the identity provider; the platform decides what each role may do.
 
 [[UC-IAM-001]]

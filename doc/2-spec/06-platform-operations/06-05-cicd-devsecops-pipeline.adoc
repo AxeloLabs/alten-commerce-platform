@@ -1,6 +1,6 @@
 = CI/CD and DevSecOps Pipeline: From a Commit to Production, Gate by Gate
 :doc-id: 06-05
-:revnumber: 0.3
+:revnumber: 0.4
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How a change is integrated and delivered, the gates it must pass and what each one blocks, how the pipeline authenticates, how production is reached and left, and how delivery is measured.
@@ -198,7 +198,8 @@ What strategy gives a pipeline the power to deploy without leaving a key that co
 | Production | The deployment identity of `prod` is issued only to a job of the main branch, bound to the environment `prod`, after the approval. A run cannot obtain it by naming the environment: the approval is enforced by GitHub before the job starts.
 | Third-party steps | Pinned to an exact commit, and few. Each job declares the minimum rights it needs.
 | Code from outside | A pull request from a fork runs without any credential and without any secret.
-| The pipeline's own secrets | The token of the code analysis, and nothing else. Readable by runs of branches of the repository, never by runs of forks.
+| The pipeline's own secrets | Two. The token of the code analysis, readable by runs of branches of the repository, never by runs of forks. The key of the model provider used by the expert agents, kept in an environment that only the main branch may use: their workflow runs as defined on the main branch (document 08-02).
+| Changes to pipeline definitions | Pushed by a person, and reviewed by the owners of those files. The tokens of AI agents have no right on them (document 08-02).
 |===
 
 == Measuring delivery

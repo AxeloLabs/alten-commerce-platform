@@ -30,7 +30,7 @@ rectangle "Observability" as OBS #FFF8E1 {
 }
 
 rectangle "Delivery" as DEL #FCE4EC {
-  rectangle "Terraform · GitHub Actions · Cloud Deploy\nSonarQube · Grype · cosign" as L1
+  rectangle "Terraform · GitHub Actions · Helm\nSonarQube · Grype · cosign" as L1
 }
 
 FRONT -down-> EDGE

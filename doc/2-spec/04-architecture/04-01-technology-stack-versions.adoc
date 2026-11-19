@@ -1,6 +1,6 @@
 = Technology Stack and Versions: Every Tool, Its Job and Its Version
 :doc-id: 04-01
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-18
 :revremark: Draft
 :description: The complete technology stack by category, with the version of each tool, its purpose, the reason it was chosen and what was rejected.
@@ -235,7 +235,7 @@ The strategy, the saga dashboards and the alerts are in document 05-03.
 | Structured logging | Spring Boot | Writes logs as JSON on standard output, with trace, saga and order identifiers. | Built in. GKE collects standard output: no log agent or appender in the services.
 | Cloud Logging, Cloud Trace, Cloud Monitoring | Managed services | Store and search logs, display traces, raise alerts. | Native to GKE.
 | Managed Service for Prometheus | Managed service | Scrapes the metrics endpoint of each service. | Enabled by default on Autopilot.
-| Grafana | Current | Dashboards for services and for the order flow. | The standard dashboard tool on Prometheus data.
+| Grafana | {v-grafana} | Dashboards for services and for the order flow. | The standard dashboard tool on Prometheus data.
 | otel-lgtm | {v-otel-lgtm} | Logs, metrics and traces in one container on the workstation. | The same signals locally as in the cloud, with nothing to operate.
 |===
 
@@ -255,8 +255,8 @@ The levels, families and tools are detailed in document 07-01.
 | Tool | Version | What it does for us | Why this one
 | JUnit | {v-junit} | The test engine of everything. | Managed by Spring Boot.
 | AssertJ, Mockito | {v-assertj}, {v-mockito} | Fluent assertions; test doubles, used sparingly outside the domain. | Managed by Spring Boot.
-| ArchUnit | {v-archunit} | Turns the architecture rules into tests that fail the build. | Reads Java 25 class files.
-| JaCoCo | {v-jacoco} | Measures coverage; enforces 100 % on domain packages. | Supports Java 25.
+| ArchUnit | {v-archunit} | Turns the architecture rules into tests that fail the build. | Reads Java {v-java} class files.
+| JaCoCo | {v-jacoco} | Measures coverage; enforces 100 % on domain packages. | Supports Java {v-java}.
 | PIT | {v-pitest} | Mutation testing: checks that the tests would notice a bug. | Makes the 100 % coverage meaningful. To be confirmed with JUnit {v-junit} before it becomes a gate.
 | Cucumber-JVM | {v-cucumber} | Executes the Gherkin acceptance scenarios. | Runs on the JUnit platform.
 | Testcontainers | {v-testcontainers} | Real PostgreSQL and Google emulators in tests. | Managed by Spring Boot; modules for PostgreSQL, Pub/Sub and Firestore.
@@ -285,7 +285,7 @@ What strategy makes code style and static checks something the build decides, no
 | Spotless, google-java-format | {v-spotless}, {v-google-java-format} | Formats the code and fails the build on a deviation. | Formatting is automatic and not negotiable.
 | Checkstyle | {v-checkstyle} | Checks what a formatter cannot: naming, imports, documentation. | Ships the Google rule set.
 | Error Prone, NullAway | {v-error-prone}, {v-nullaway} | Catch bug patterns and null dereferences at compile time. | Works with the JSpecify annotations Spring Framework 7 uses.
-| SonarQube | {v-sonarqube} | Quality gate: duplication, complexity, security hotspots, coverage on new code. | The reference. Hosted or self-hosted edition is decided in document 06-05.
+| SonarQube | Hosted edition: no version of ours | Quality gate: duplication, complexity, security hotspots, coverage on new code. | The reference. The hosted edition is retained (document 06-05); the server edition, {v-sonarqube}, is the alternative where a company hosts its own.
 | ESLint, Prettier | angular-eslint {v-angular-eslint} | The same for the storefront. | The Angular standard.
 |===
 
@@ -305,7 +305,6 @@ What strategy keeps the storefront simple while the back end carries the complex
 | TypeScript | {v-typescript} | Typed language of the storefront. | The version Angular requires.
 | Node.js | {v-node} | Builds and tests the storefront. | Active long-term support line.
 | Generated API client | OpenAPI Generator | Typed access to the services. | Generated from the same contract as the server.
-| nginx | Current stable | Serves the built storefront from a container. | Small, standard, stateless.
 |===
 
 Owner: {role-swe}
@@ -321,7 +320,7 @@ What strategy runs the same artifact on a workstation and in production?
 |===
 | Tool | Version | What it does for us | Why this one
 | Docker image format | OCI | One image per service, built in two stages, with the application split in layers. | Imposed. An explicit Dockerfile keeps the build auditable.
-| Podman or Docker | Current | Builds and runs images locally; runs the local dependencies with Compose. | Both produce and run the same images.
+| Podman or Docker | Podman {v-podman} | Builds and runs images locally; runs the local dependencies with Compose. | Both produce and run the same images.
 | GKE Autopilot | Kubernetes {v-kubernetes} | Runs the platform. Google manages nodes, upgrades and security hardening; we pay for what pods request. | Imposed.
 | Gateway API | GKE managed | The entry point: a Google load balancer configured from Kubernetes, with TLS and routing. | The successor of Ingress; the community ingress controller was retired in 2026.
 | Helm | {v-helm} | Packages the deployment of each service: one shared chart, one values file per service and per environment. | Versioned releases and rollbacks. YAML throughout.
@@ -344,7 +343,7 @@ What strategy makes an environment something we can recreate, review and destroy
 | Terraform | {v-terraform} | Declares every Google Cloud resource: network, cluster, database, topics and subscriptions, identities, budgets. | Imposed. Changes are reviewed as code; an environment is reproducible and can be destroyed to stop its cost.
 | Google provider | {v-terraform-google-full} | The Terraform provider for Google Cloud. | Current major line.
 | GitHub Actions | Hosted | Continuous integration and delivery: build, tests, quality and security gates, image publication, then deployment to each environment with Helm, with an approval before production ({ADR-PLT-031}). | The repository is on GitHub. Authenticates to Google Cloud without a key (action {v-google-auth-action}).
-| Renovate | Current | Proposes dependency updates as pull requests. | Keeps the stack current without manual tracking.
+| Renovate | Hosted application: no version of ours | Proposes dependency updates as pull requests. | Keeps the stack current without manual tracking.
 |===
 
 Owner: {role-devops} {role-cloud}
@@ -364,7 +363,7 @@ What strategy proves that what runs in production is what we built, and that it 
 | Grype | {v-grype} | Scans dependencies and images for known vulnerabilities. | Open source, pairs with Syft.
 | cosign | {v-cosign} | Signs images; the cluster can refuse unsigned ones. | The standard for image signing.
 | Checkov | {v-checkov} | Scans Terraform and Kubernetes files for insecure settings. | Covers both.
-| CodeQL | Current | Static security analysis of Java and TypeScript. | Native to GitHub.
+| CodeQL | Hosted: run by the code scanning of GitHub | Static security analysis of Java and TypeScript. | Native to GitHub.
 |===
 
 Every scanner and every pipeline action is pinned to an exact digest, not to a moving tag: in 2026 the release pipeline of a widely used scanner was compromised, and a moving tag would have pulled the tampered version.
@@ -423,8 +422,13 @@ It is written here with its reason, and the most structural ones are detailed as
 | Trivy | Replaced | Works, but its release pipeline was compromised in March 2026. Grype and Syft are retained; whatever is used is pinned by digest.
 | k6 | Alternative | Equally capable. Gatling is preferred for scenarios in Java and its license.
 | Gradle | Alternative | Equally capable. Maven is preferred for its ubiquity in enterprise Java teams.
-| Jira | Deferred | Used only if the organization requires it; the backlog structure is the same.
-| GKE and gcloud MCP servers for the AI agent | Not needed | They add nothing the `gcloud` and `kubectl` command lines do not already do, and they widen what an agent can change. See document 08-02.
+| Jira | Not retained | The backlog lives in GitHub Issues and Projects ({ADR-PLT-032}). Should an employer impose Jira, the backlog would be structured the same way.
+| Cloud Build | Not retained | Google's build service would do the work of GitHub Actions, away from the repository, its reviews and its backlog. A second home for pipeline definitions adds nothing at this size.
+| nginx | Not needed | The web gateway serves the files of the storefront: one workload less (document 04-03).
+| Mermaid | Not retained | Renders in many viewers without a tool, and suits simple flows. PlantUML is kept because one syntax covers UML, C4, state, sequence and network diagrams with addresses, with a shared style and a build that needs no network ({ADR-PLT-029}).
+| Graphviz, written by hand | Used underneath | PlantUML lays out most of its diagrams with it. Writing its language directly gives boxes and arrows, without the notations of UML or C4.
+| Micro front ends | Not retained | The storefront is one Angular application, built and released as a whole: one team, one design, one release. Splitting it would add a composition layer and several pipelines, for no independent team to benefit.
+| GKE and gcloud MCP servers for the AI agent | Not needed | They add nothing the `gcloud` and `kubectl` command lines do not already do, and they widen what an agent can change. See documents 08-01 and 08-02.
 |===
 
 == Points to watch

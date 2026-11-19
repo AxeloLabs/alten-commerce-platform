@@ -1,6 +1,6 @@
 = Epics and User Stories: The Backlog of the First Release
 :doc-id: 01-04
-:revnumber: 0.3
+:revnumber: 0.4
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Epics, user stories with priority, estimate and acceptance criteria, and the story map.
@@ -98,6 +98,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 [[EPIC-IAM-001]]
 == EPIC-IAM-001 — Account and access
 
+.Strategy question
+****
+What strategy lets a visitor become a known customer without the store building an identity system?
+****
+
 [cols="2,11"]
 |===
 | Journey | {JRN-IAM-001}
@@ -153,6 +158,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 [[EPIC-CAT-001]]
 == EPIC-CAT-001 — Product discovery
 
+.Strategy question
+****
+What strategy lets anyone find a product, and know whether it can be bought, without signing in?
+****
+
 [cols="2,11"]
 |===
 | Journey | {JRN-CAT-001}
@@ -207,6 +217,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 
 [[EPIC-CAT-002]]
 == EPIC-CAT-002 — Catalog administration
+
+.Strategy question
+****
+What strategy lets an administrator change what is sold without ever changing what was already ordered?
+****
 
 [cols="2,11"]
 |===
@@ -289,6 +304,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 [[EPIC-INV-001]]
 == EPIC-INV-001 — Stock management
 
+.Strategy question
+****
+What strategy keeps the stock true while customers and administrators change it at the same time?
+****
+
 [cols="2,11"]
 |===
 | Journey | {JRN-INV-001}
@@ -340,6 +360,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 
 [[EPIC-CART-001]]
 == EPIC-CART-001 — Shopping cart
+
+.Strategy question
+****
+What strategy keeps a cart useful while prices and stock move under it?
+****
 
 [cols="2,11"]
 |===
@@ -408,6 +433,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 [[EPIC-CART-002]]
 == EPIC-CART-002 — Favorites
 
+.Strategy question
+****
+What strategy lets a customer keep products in mind without filling a cart?
+****
+
 [cols="2,11"]
 |===
 | Journey | {JRN-CART-002}
@@ -459,6 +489,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 
 [[EPIC-ORD-001]]
 == EPIC-ORD-001 — Checkout and order placement
+
+.Strategy question
+****
+What strategy turns a cart into an order that is either fully confirmed or fully undone?
+****
 
 {critical}
 
@@ -547,6 +582,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 [[EPIC-PAY-001]]
 == EPIC-PAY-001 — Payment and refund
 
+.Strategy question
+****
+What strategy makes sure a customer is charged once, and only for an order that exists?
+****
+
 {critical}
 
 [cols="2,11"]
@@ -589,6 +629,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 [[EPIC-ORD-002]]
 == EPIC-ORD-002 — Order tracking
 
+.Strategy question
+****
+What strategy tells a customer where an order stands without a call to support?
+****
+
 [cols="2,11"]
 |===
 | Journey | {JRN-ORD-002}
@@ -626,6 +671,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 
 [[EPIC-NOT-001]]
 == EPIC-NOT-001 — Customer notifications
+
+.Strategy question
+****
+What strategy keeps the customer informed by e-mail without ever delaying an order?
+****
 
 [cols="2,11"]
 |===
@@ -678,6 +728,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 [[EPIC-ORD-003]]
 == EPIC-ORD-003 — Order cancellation
 
+.Strategy question
+****
+What strategy lets a customer change their mind and puts stock and money back where they were?
+****
+
 [cols="2,11"]
 |===
 | Journey | {JRN-ORD-003}
@@ -716,6 +771,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 [[EPIC-ORD-004]]
 == EPIC-ORD-004 — Order fulfillment
 
+.Strategy question
+****
+What strategy moves a paid order to the customer's door, one visible step at a time?
+****
+
 [cols="2,11"]
 |===
 | Journey | {JRN-ORD-004}
@@ -752,6 +812,11 @@ Each row is a slice that could be released on its own: the first row is the smal
 
 [[EPIC-ORD-005]]
 == EPIC-ORD-005 — Order supervision and recovery
+
+.Strategy question
+****
+What strategy gives a person the last word when the platform cannot settle an order alone?
+****
 
 [cols="2,11"]
 |===

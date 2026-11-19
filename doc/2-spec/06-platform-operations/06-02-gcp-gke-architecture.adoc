@@ -1,6 +1,6 @@
 = GCP and GKE Architecture: The Project, the Network and Its Addresses, the Cluster
 :doc-id: 06-02
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The Google Cloud resources of the platform, the network with its address plan, the paths of traffic, the cluster and the managed services, and how the layout can grow.
@@ -31,7 +31,7 @@ The platform uses managed services wherever one exists, so that the only thing t
 | Secrets | Secret Manager | Document 05-04
 | Images | Artifact Registry | One repository, in a location that spans several regions; images signed and attested by the pipeline
 | Admission of images | Binary Authorization, with a key in the key management service | Only attested images run (document 06-05)
-| Outgoing traffic | Cloud NAT | One known address for calls to providers
+| Outgoing traffic | Cloud NAT | One known address for calls to real providers. Nothing uses it while both providers are simulated inside the platform.
 | Observability | Cloud Logging, Cloud Trace, Managed Service for Prometheus | Document 05-03
 | Outside probe, alert channels | Cloud Monitoring | The probe and the notifications of document 05-03
 | Access to internal screens | Identity-Aware Proxy | Grafana and the administration console of the identity provider, for named people only
@@ -214,7 +214,7 @@ What strategy sets up each managed service so that it is private, recoverable an
 | Artifact Registry | One repository, in a location that spans several regions, so that images survive the loss of the region; tags cannot be moved once pushed. Images are scanned by the pipeline, not by the registry (document 06-05).
 | Certificate Manager | One certificate for the six host names, validated through the DNS zone
 | Cloud Armor | One policy on the entry point: managed rules, rate limits, a stricter limit on sign-in and checkout. Not in the proof of concept.
-| Cloud NAT | One reserved address; used by the payment and notification services only. Not in the proof of concept: both providers are simulated inside the platform, and nothing calls out.
+| Cloud NAT | One reserved address, for the payment and notification services only, the day they call real providers. In this release both providers are simulated inside the platform, in every environment: nothing calls out, and the proof of concept does not create the address.
 | Firestore | One database in native mode, used by the contract tests of `test`; none in production as long as PostgreSQL is the store
 |===
 

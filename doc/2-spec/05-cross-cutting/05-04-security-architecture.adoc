@@ -1,6 +1,6 @@
 = Security Architecture: Who May Do What, and How Each Layer Enforces It
 :doc-id: 05-04
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: What is protected and against whom, sign-in and sessions, authorization in services, protection of data and secrets, identities of workloads, network controls, audit and security testing.
@@ -67,7 +67,7 @@ plantuml::diagrams/signin-bff.puml[format=svg, align=center]
 | Repeated failures | Detected by the identity provider, which slows further attempts on the account. The message never says which of the address or the password was wrong ({FR-IAM-007}).
 | Second factor | None in this release, for customers and administrators alike: a decision of the product owner on 2026-11-19. An administrator account therefore rests on its password, on the slowing of repeated failures and on the audit of what it does. A second factor is a setting of the identity provider and can be required later without any change of code.
 | Where it is reached | On a host name of its own, one per environment, distinct from that of the store: a script running in a page of the store is on another origin and cannot read what the identity provider answers. Only the addresses of sign-in, registration and sign-out of the realm of the environment are routed from outside; the administration console and the administration realm are not. The clients that the product creates by default for browsers are disabled.
-| Tokens | Access tokens live 5 minutes. Refresh tokens are single-use: each renewal replaces the previous one, and a reused one ends the session.
+| Tokens | Access tokens are JSON Web Tokens (JWT) signed by the identity provider; they live 5 minutes. Refresh tokens are single-use: each renewal replaces the previous one, and a reused one ends the session.
 | Session at the provider | Ends after 30 minutes without activity, and after 10 hours whatever the activity.
 | Sign-out | Ends the session at the web gateway and at the identity provider. A session ended at the provider is ended at the gateway too.
 |===

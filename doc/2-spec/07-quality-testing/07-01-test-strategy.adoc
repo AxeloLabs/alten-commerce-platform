@@ -1,6 +1,6 @@
 = Test Strategy: What Is Tested, at Which Level, with What, and When
 :doc-id: 07-01
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The levels and kinds of test of the platform, what each one proves, the tools, the place of acceptance scenarios, the rules for test data and test doubles, the quality gates, and where each test runs.
@@ -46,7 +46,7 @@ plantuml::diagrams/test-pyramid.puml[format=svg, align=center, pdfwidth=85%]
 | Unit (`TU`) | One aggregate, value object, domain service or saga | Nothing is started. Time and identifiers are given by the test. No mock: the domain has no dependency to replace. | JUnit {v-junit}, AssertJ {v-assertj}
 | Component (`TC`) | One service, through its interfaces: REST requests, messages in, messages out | Real: its database, the bus emulator, its own adapters. Simulated: the other services and the providers. | Spring Boot test support, Testcontainers {v-testcontainers}, Microcks {v-microcks}, WireMock {v-wiremock}; H2 {v-h2} for persistence slices
 | Integration (`TI`) | One adapter against the technology it adapts; or several services together on one scenario | Real: PostgreSQL, Pub/Sub, Firestore, the services involved. Simulated: the providers. | Testcontainers; a composition of containers for several services; the `test` environment for the real bus and the real document database
-| End-to-end (`TE2E`) | A critical path, from the browser to the e-mail | Everything is real and deployed. The providers are the simulated ones of the platform. | Playwright {v-playwright}
+| End-to-end (`TE2E`) | A critical path, from the browser to the e-mail | Everything is real: the complete platform, in containers before a deployment exists, then deployed. The providers are the simulated ones of the platform. | Playwright {v-playwright}
 |===
 
 .How many, how fast, where
@@ -56,7 +56,7 @@ plantuml::diagrams/test-pyramid.puml[format=svg, align=center, pdfwidth=85%]
 | Unit | Many hundreds | Milliseconds | At every build, on a workstation and in the pipeline
 | Component | About a hundred | Seconds | At every build
 | Integration | Some dozens | Seconds to minutes | Adapters: at every build, in containers. Several services together: in a composition of containers, on the pull requests that concern them (document 07-03). What needs the real bus or the real document database: after deployment, in `test`
-| End-to-end | A handful per critical path | Minutes | After deployment to `integration`; a subset after every deployment, everywhere
+| End-to-end | A handful per critical path | Minutes | Against the complete composition of containers, on a workstation; after deployment to `integration`; a subset after every deployment, everywhere
 |===
 
 == Kinds of test
@@ -75,6 +75,7 @@ Each is a purpose; most are served by one of the four levels above.
 | Kind | Purpose here | Done with | Level
 | Unit | Every business rule; every cell of the state grids | JUnit | TU
 | Component | A service keeps its contract, with its real adapters | Spring Boot tests, Testcontainers | TC
+| Storefront component | A screen behaves as its use case says, errors and empty states included | The test tooling of Angular {v-angular}, with the web gateway simulated from the contracts | TC
 | Interface, on inputs and outputs | Every request and answer of a REST interface, every message in and out, conforms to its contract — errors included | Microcks against the OpenAPI and AsyncAPI documents; schema validation of messages | TC
 | Integration | An adapter works with the real technology; services work together | Testcontainers; the deployed environments | TI
 | Acceptance | The behavior agreed with the business holds | The Gherkin scenarios of document 01-08, run by Cucumber {v-cucumber} against the application code of the services assembled in memory; those tagged for it, again through the storefront | TC, TE2E

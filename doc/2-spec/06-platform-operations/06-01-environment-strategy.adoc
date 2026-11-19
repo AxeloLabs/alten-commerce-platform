@@ -1,6 +1,6 @@
 = Environment Strategy: Three Environments, One Cluster, and the Path to Production
 :doc-id: 06-01
-:revnumber: 0.3
+:revnumber: 0.4
 :revdate: 2026-11-19
 :revremark: Draft
 :description: What each environment is for, how the three are separated inside one project and one cluster, what may differ between them, how a version is promoted, and the layout a company would use.
@@ -57,11 +57,11 @@ The two deployments are _profiles_ of the same code: they differ by values, neve
 | Replicas | Two or more in production | One of everything
 | Database | A dedicated instance with a standby | A small shared instance, no standby
 | Entry point | Load balancer, managed firewall, a bought domain name | Load balancer only, a free host name
-| Outgoing address | Yes | None: the providers are simulated inside
+| Outgoing address | Yes, for the day a real provider is called | None. In both profiles the providers of this release are simulated inside the platform.
 | Dashboards | Grafana | The views of the provider
 | Tests after deployment | The suites of each environment | The critical paths; the other suites on request
 | Lifetime | Permanent | Destroyed by the pipeline at a deadline given at creation
-| Cost | Hundreds of euros per month | About four euros per day (document 06-06)
+| Cost | Several hundred USD per month | About 4 USD per day (document 06-06)
 | What it demonstrates | Availability, resilience, promotion between environments | That the platform works end to end on the real cloud services
 |===
 
@@ -130,7 +130,7 @@ An environment is the same software and the same descriptions, with different va
 [cols="4,3,3,3", options="header"]
 |===
 | Value | test | integration | prod
-| Replicas of each service | 1 | 2 | 2 or more, autoscaled
+| Replicas of each service | 1 | 2 | 2 to 6, autoscaled. The notification service and the identity provider differ (document 06-03).
 | Running when unused | No | No | Always
 | Host name | A name of its own | A name of its own | The name of the store
 | Payment and e-mail providers | Simulated | Simulated | Simulated in this release

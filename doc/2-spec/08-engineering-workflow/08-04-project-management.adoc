@@ -1,6 +1,6 @@
 = Project Management: Backlog, Milestones, Roles and Risks
 :doc-id: 08-04
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How the construction of the platform is steered: where the backlog lives and how it is generated from the specification, the board, the milestones and what can be cut, what ready and done mean, the working agreements, the roles, the risks and what is reported.
@@ -58,7 +58,7 @@ plantuml::diagrams/backlog-model.puml[format=svg, align=center, pdfwidth=52%]
 |===
 | Item of the specification | Entry of the backlog | Closed when
 | Epic | An issue, parent of its stories | All its stories are closed
-| User story | An issue, sub-issue of its epic. It lists the use cases that realize it and the increments that build them. | The acceptance scenarios of its use cases pass in the pipeline; for a story on a critical path, its end-to-end test passes on a deployed environment
+| User story | An issue, sub-issue of its epic. It lists the use cases that realize it and the increments that build them. | The acceptance scenarios of its use cases pass in the pipeline; for a story on a critical path, its end-to-end test passes against the complete platform
 | Creation prompt | An issue: the unit of work. Its body is the filled prompt of document 08-03. | Its pull request is merged
 | – | A defect: the identifier of what is violated, and the test that shows it | The pull request that makes the test pass is merged
 | – | A gap of the specification, reported by an agent or a person | The specification is corrected, or the product owner accepts it as it is
@@ -88,15 +88,22 @@ plantuml::diagrams/backlog-model.puml[format=svg, align=center, pdfwidth=52%]
 | An identifier that disappears | Its entry is closed as not planned, with a reference to the change of the specification
 |===
 
-.The two commands the script is made of
+.The commands the script relies on
 [source,shell]
 ----
+# once: the labels; the milestones are created through the interface of GitHub
+gh label create increment
+gh label create ctx:ord
+
+# for each entry
 gh issue create --title "CRE-ORD-002 — Place-order saga" \
   --label "increment,ctx:ord" --milestone "M1 — Services" \
-  --body-file build/prompts/CRE-ORD-002.md
+  --body-file prompts/CRE-ORD-002.md
 
 gh project item-add <project-number> --owner <owner> --url <issue-url>
 ----
+
+The link between a story and its epic, and the closing of a story, go through the programming interface of GitHub: a job of the pipeline on the main branch closes each story whose acceptance scenarios all pass, by its identifier.
 
 Creating about a hundred issues in a repository is visible to everyone who watches it.
 The script is therefore run on purpose, by the owner of the repository, once the specification is approved.
@@ -114,7 +121,7 @@ One project holds every entry.
 [%unbreakable, cols="3,8,4", options="header"]
 |===
 | State | Meaning | Who moves it
-| Backlog | Exists, not yet startable | The script
+| Backlog | Exists, not yet startable | Set when the entry is created
 | Ready | Meets the definition of ready below | The developer
 | In progress | A branch exists | The developer
 | In review | A pull request is open | The developer, or an automation of the project
@@ -146,7 +153,7 @@ One project holds every entry.
 
 .Strategy question
 ****
-What strategy turns forty-three increments into a few moments where something can be shown and decided?
+What strategy turns fifty-one increments into a few moments where something can be shown and decided?
 ****
 
 .Milestones
@@ -154,9 +161,9 @@ What strategy turns forty-three increments into a few moments where something ca
 |===
 | Milestone | Can be shown | Proves
 | M0 — Foundations | A pull request going through every gate; the local platform starting | The conventions hold before any business code depends on them
-| M1 — Services | Each service through its interface, on a workstation | Every business rule, in unit and component tests; the acceptance scenarios in memory
-| M2 — Saga | The nineteen saga scenarios passing, failures provoked | {CP-ORD-001} to {CP-ORD-004} below the browser: the heart of the brief
-| M3 — Storefront | The purchase in a browser, on the local platform | The six critical paths end to end; {CP-CAT-001} and {CP-IAM-001}
+| M1 — Services | Each service through its interface, on a workstation | Every business rule, in unit and component tests
+| M2 — Services together | The ninety-six acceptance scenarios and the nineteen saga scenarios passing, failures provoked | {CP-ORD-001} to {CP-ORD-004} below the browser: the heart of the brief
+| M3 — Storefront | The purchase in a browser, on the complete platform in containers | The six critical paths end to end; {CP-CAT-001} and {CP-IAM-001}
 | M4 — Delivery | The platform on GKE, deployed by the pipeline | The proof of concept; the cost guardrails
 |===
 
@@ -167,12 +174,12 @@ A milestone is reached when the release auditor of document 08-03 finds nothing 
 |===
 | # | Cut | Price
 | 1 | The document and file stores: {CRE-CAT-003}, {CRE-CART-003} | The brief's requirement of three interchangeable stores is specified and not demonstrated
-| 2 | The longer load runs and the dashboards of {CRE-PLT-016} and {CRE-PLT-017} | Performance is specified, measured by one short run only
-| 3 | Cancellation and fulfillment: {CRE-ORD-003}, and their parts of {CRE-ORD-006}, {CRE-ORD-009} and {CRE-ORD-010} | Two validated journeys are absent; no critical path is affected
-| 4 | The administration screens, replaced by calls to the interfaces during the demonstration | The administrator's journeys are shown without a screen
+| 2 | The dashboards of {CRE-PLT-022} and the longer load runs of {CRE-PLT-023} | Performance is specified, measured by one short run only
+| 3 | Cancellation and fulfillment: {CRE-ORD-003}, and their parts of {CRE-ORD-006}, {CRE-ORD-010} and {CRE-ORD-011} | Two validated journeys are absent, with the two saga scenarios of cancellation ({TI-ORD-014}, {TI-ORD-019}) and their end-to-end test. The critical paths, which concern the placement of an order, are untouched.
+| 4 | The administration screens for orders, {CRE-ORD-011}, replaced by calls to the interface during the demonstration | An order under review is resolved without a screen. The screens for the catalog and the stock stay: a critical path needs them.
 |===
 
-What is never cut: the foundations, the saga and its scenarios, the security of the edge, the cost guardrails.
+What is never cut: the foundations, the saga that places an order with its seventeen scenarios, the security of the edge, the cost guardrails.
 They are what the brief is about.
 
 .The first deployment
@@ -197,7 +204,7 @@ What strategy prevents starting what cannot be finished, and calling finished wh
 |===
 | For | Ready when | Done when
 | An increment | Its row exists in the catalog of document 08-03; the documents it reads are approved; the increments before it are merged; no gap of the specification is open on its subject | Its pull request is merged: every gate passes; the tests it names exist under their identifiers; each finding of an expert is fixed or dismissed with a reason; the report of the author is read, and each gap it mentions has an entry
-| A story | Its use cases and acceptance scenarios are approved | The acceptance scenarios of its use cases pass in the pipeline; on a critical path, its end-to-end test passes on a deployed environment
+| A story | Its use cases and acceptance scenarios are approved | The acceptance scenarios of its use cases pass in the pipeline, which happens from M2 on; on a critical path, its end-to-end test passes against the complete platform
 | A defect | It names the identifier that is violated and how to see it | A test that failed because of it passes, and stays in the suite
 | A milestone | – | The release auditor reports nothing missing; the product owner accepts it
 |===
@@ -270,6 +277,9 @@ What strategy deals with what can go wrong before it does?
 | The certificate or the host name of the proof of concept is refused | The first deployment | The rehearsal; a certificate signed by ourselves as a fallback (document 06-02) | {role-net}
 | A new minor release of Spring Boot during the project | Its announcement | Versions are pinned; the upgrade is an increment of its own, after the demonstration | {role-arch}
 | One developer | Unavailability | Everything is in the repository: specification, prompts, backlog. Another person, or another agent, can take the next increment. | Product owner
+| The confinement of agent sessions does not hold with the build | {CRE-PLT-002} cannot prove it on the reference workstation | Agent sessions move to a disposable virtual machine; until then no agent session runs on an account that holds a cloud sign-in (document 08-02) | {role-sec}
+| The agent product changes, or its quota is reached | A setting that no longer exists; a session refused | Prompts, experts and rules are plain files of the repository: another agent product, or a person, can read them. Work continues by hand. | {role-platform}
+| Model usage costs more than expected | The usage measured during M0 | Experts run only on the changes that concern them, with a limit per run; the pace is adjusted to the plan of the account | Product owner
 | An agent does something it should not | A refused command in the telemetry; a surprising change | The harness of document 08-02: the agent holds nothing with which to harm the cloud | {role-sec}
 |===
 
@@ -286,7 +296,7 @@ What strategy reports progress with numbers that nobody had to estimate?
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Number | Source
-| Increments merged, of 43 | The board
+| Increments merged, of 51 | The board
 | Stories done, of 39, and of those on critical paths | The pipeline: acceptance scenarios passing
 | Identifiers with a passing test, by type | The traceability matrix of document 00-03, joined with the test reports
 | Findings of experts: fixed, dismissed, open | The pull requests

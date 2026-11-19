@@ -1,6 +1,6 @@
 = Architecture Big Picture: The Whole Platform in Ten Pages
 :doc-id: 00-02
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The platform on one page, then one short answer to each question a reader asks first: how an order is placed, how data stays consistent, how errors and failures are handled, how the platform is observed, deployed, secured, paid for, built and proven, with the document that holds the detail.
@@ -91,7 +91,7 @@ An order is confirmed only with a captured payment and a confirmed reservation. 
 An order is rejected only when it holds no payment. +
 A customer is charged at most once per order, and refunded at most once. +
 Available stock is never negative. +
-No order stays pending: after two minutes it is settled, and after five more a person knows.
+No order stays pending unnoticed: at its deadline it is settled or being settled, and what is still open at the review delay is shown to a person.
 ****
 
 Detail: document 03-03 for the saga; 03-06 for outbox, inbox and idempotence; 02-03 for the grids; 04-06 for the patterns, with what two-phase commit is and why it is not used.
@@ -132,6 +132,7 @@ What strategy answers "what if this server dies?" for every piece of the platfor
 | A service is slow or overloaded | The caller gives up at its time limit; after repeated failures a circuit breaker stops calling for a while; a limit on concurrent calls keeps one slow neighbor from exhausting everything | A clear "try again", or a degraded answer: the cart shows the last known prices
 | A service is down | Messages wait on the bus; orders in progress wait, then end at their deadlines | Orders are rejected uncharged, or shown under review; browsing continues if the catalog is up
 | The payment provider does not answer | The payment is canceled, or found captured and carried through; if nobody can tell, the order goes under review | Never a charge without an order
+| The identity provider is down | Open sessions are kept; a request that needs a renewed token is answered "try again" | Nobody can sign in for a while; browsing continues
 | The message bus is unavailable | Services keep saving; messages wait in the outboxes and leave in order afterwards | Orders settle late, at their deadlines
 | The database fails over | About a minute of clean refusals, then everything resumes | A minute of "try again"
 | A zone is lost | Replicas in the other zones serve; the database fails over | The same minute
@@ -280,12 +281,12 @@ Twenty-six architecture rules, checked at every build, keep the rings apart.
 | Acceptance | The ninety-six scenarios agreed with the business, written before the code
 | Component | Each service keeps its contracts, with its real adapters
 | Integration | The pieces work with the real technology; the nineteen saga scenarios, failures provoked
-| End to end | The six critical paths, in a browser, on a deployed environment
+| End to end | The six critical paths, in a browser, against the complete platform
 |===
 
 Every use case, rule, scenario and test has an identifier, and the build of this specification refuses a rule without a test, or a test that nothing builds.
 
-The platform is built by AI agents, in forty-three increments, each checked by gates, by independent expert agents and by a person; the agents work in a harness that leaves them no right on the cloud.
+The platform is built by AI agents, in fifty-one increments, each checked by gates, by independent expert agents and by a person; the agents work in a harness that leaves them no right on the cloud.
 
 Detail: documents 04-03 and 04-04 for the code; folder 07 for the tests; 08-02 and 08-03 for the agents.
 

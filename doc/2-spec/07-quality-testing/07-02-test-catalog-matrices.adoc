@@ -1,6 +1,6 @@
 = Test Catalog and Matrices: Every Test Named, Every Requirement Covered
 :doc-id: 07-02
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The catalog of unit, component, integration and end-to-end tests with their identifiers and families, and the matrices that show which tests cover each rule, quality requirement, critical path and saga scenario.
@@ -143,6 +143,20 @@ A component test drives one service through its interfaces, with its real adapte
 | [[TC-PLT-007]]TC-PLT-007 | Persistence slices on H2: every entity maps to and from its domain object without loss; every simple query of a relational store returns what its port promises | Nominal, edge | {ADR-PLT-015}
 |===
 
+.The storefront
+[cols="3,9,3,5", options="header"]
+|===
+| ID | What it proves | Family | Verifies
+| [[TC-PLT-008]]TC-PLT-008 | The shell of the storefront: the signed-in state; a message for every error code and the generic one, with its reference, for an unknown code; no token in any storage of the browser; every call made through a client generated from the contract | Nominal, error, invariant | {NFR-USAB-002} {NFR-SEC-001}
+| [[TC-CAT-005]]TC-CAT-005 | The catalog screens: list, filters, search, product page, availability; an empty result; the catalog unavailable | Nominal, error, edge | {UC-CAT-001} {UC-CAT-002}
+| [[TC-CAT-006]]TC-CAT-006 | The administration of the catalog and of the stock: products of every status, each refusal shown with its reason, an outdated version refused and explained, a stock adjustment | Nominal, error | {UC-CAT-003} {UC-CAT-004} {UC-CAT-005} {UC-CAT-006} {UC-INV-001} {UC-INV-002}
+| [[TC-CART-004]]TC-CART-004 | The cart and favorites screens: the counter, flagged lines, the limits, a checkout that is offered only when it is allowed | Nominal, edge | {UC-CART-001} {UC-CART-002} {UC-CART-003} {UC-CART-004}
+| [[TC-ORD-008]]TC-ORD-008 | Checkout and orders: the page asks for the outcome until the order is settled; each outcome is shown with the truth about what was charged; a checkout whose outcome is unknown is shown as such; history, tracking, cancellation | Nominal, error, edge | {UC-ORD-001} {UC-ORD-002} {UC-ORD-003} {UC-ORD-004} {ERR-PLT-011}
+| [[TC-ORD-009]]TC-ORD-009 | The administration of orders: search, shipping and delivery, an order under review with its three decisions and their refusals | Nominal, error | {UC-ORD-005} {UC-ORD-006} {UC-ORD-007}
+|===
+
+A storefront test drives the screens of the application with the web gateway simulated from the contracts: no service runs.
+
 == Integration tests
 
 .Strategy question
@@ -205,7 +219,7 @@ What strategy proves that the store works for a customer, with as few slow tests
 ****
 
 End-to-end tests cover the critical paths of document 01-02 and little else.
-They drive the storefront in a browser, on a deployed environment, and observe what a person would: screens and e-mails.
+They drive the storefront in a browser, against the complete platform — in containers before a deployment exists, then deployed —, and observe what a person would: screens and e-mails.
 
 [cols="3,9,3,5", options="header"]
 |===
@@ -237,10 +251,10 @@ The matrices below are the summary a reviewer reads.
 |===
 | Rules | Unit | Component | Integration | End-to-end
 | Identity and access | – | {TC-PLT-003} {TC-PLT-005} {TC-ORD-005} | {TI-IAM-001} {TI-IAM-002} {TI-PLT-006} | {TE2E-IAM-001}
-| Catalog | {TU-CAT-001} to {TU-CAT-005} | {TC-CAT-001} to {TC-CAT-004} | {TI-CAT-001} | {TE2E-CAT-001}
+| Catalog | {TU-CAT-001} to {TU-CAT-005} | {TC-CAT-001} to {TC-CAT-006} | {TI-CAT-001} | {TE2E-CAT-001}
 | Inventory | {TU-INV-001} to {TU-INV-006} | {TC-INV-001} to {TC-INV-003} | {TI-INV-001} | {TE2E-ORD-003}
-| Cart and favorites | {TU-CART-001} to {TU-CART-004} | {TC-CART-001} to {TC-CART-003} | {TI-CART-001} | {TE2E-ORD-001}
-| Order | {TU-ORD-001} to {TU-ORD-013} | {TC-ORD-001} to {TC-ORD-007} | {TI-ORD-001} to {TI-ORD-020} | {TE2E-ORD-001} to {TE2E-ORD-006}
+| Cart and favorites | {TU-CART-001} to {TU-CART-004} | {TC-CART-001} to {TC-CART-004} | {TI-CART-001} | {TE2E-ORD-001}
+| Order | {TU-ORD-001} to {TU-ORD-013} | {TC-ORD-001} to {TC-ORD-009} | {TI-ORD-001} to {TI-ORD-020} | {TE2E-ORD-001} to {TE2E-ORD-006}
 | Payment | {TU-PAY-001} to {TU-PAY-004} | {TC-PAY-001} {TC-PAY-002} | {TI-ORD-005} {TI-ORD-006} {TI-ORD-013} {TI-ORD-016} | {TE2E-ORD-002} {TE2E-ORD-004}
 | Notification | {TU-NOT-001} {TU-NOT-002} | {TC-NOT-001} | {TI-ORD-001} | {TE2E-ORD-001}
 |===
@@ -272,7 +286,7 @@ The matrices below are the summary a reviewer reads.
 | {CP-ORD-001} | {TE2E-ORD-001} | {TI-ORD-001}
 | {CP-ORD-002} | {TE2E-ORD-002} | {TI-ORD-002}
 | {CP-ORD-003} | {TE2E-ORD-003} | {TI-ORD-003} {TI-INV-001}
-| {CP-ORD-004} | {TE2E-ORD-004} | {TI-ORD-004} to {TI-ORD-019}
+| {CP-ORD-004} | {TE2E-ORD-004} | {TI-ORD-004} to {TI-ORD-013}, {TI-ORD-015} to {TI-ORD-018}
 | {CP-CAT-001} | {TE2E-CAT-001} | {TC-CAT-002} {TC-INV-001}
 | {CP-IAM-001} | {TE2E-IAM-001} | {TC-PLT-003}
 |===

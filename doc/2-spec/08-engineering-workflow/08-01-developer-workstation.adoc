@@ -1,6 +1,6 @@
 = Developer Workstation: IDE, JDK, Command-Line Tools and AI Assistant
 :doc-id: 08-01
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: What a workstation needs to build, test, deploy and document the platform, how it is installed, and what requires administrator rights.
@@ -132,6 +132,8 @@ Where the HTTP client is missing, requests are kept as shell scripts in the repo
 
 Code style, inspections and run configurations that must be shared are committed with the repository; personal settings are not.
 
+Nothing in the project depends on the editor: Visual Studio Code offers the same previews through its AsciiDoc and PlantUML extensions.
+
 .Installation without administrator rights
 [source,shell,subs="+attributes"]
 ----
@@ -179,6 +181,8 @@ If a test library proves incompatible with Podman, Docker Engine is the fallback
 
 The payment and e-mail providers need no container: in this release they are simulated by an adapter inside the payment and notification services (document 02-02).
 
+The whole platform — the six services, the web gateway and the identity provider — can also be started from its images with the same tooling: the saga scenarios and the end-to-end tests run against that composition (document 08-03).
+
 == Google Cloud access
 
 .Strategy question
@@ -203,6 +207,8 @@ When the Google Cloud CLI was installed from system packages, the plugin is a sy
 ----
 sudo dnf install google-cloud-cli-gke-gcloud-auth-plugin
 ----
+
+These commands are typed on the developer's own account, never in a session of the AI assistant: such a session runs under an account of its own, which holds no sign-in to the cloud (document 08-02).
 
 What an identity may do in each environment, and which commands are forbidden, is defined in documents 06-06 and 08-02.
 
@@ -239,6 +245,10 @@ This section covers only what is installed.
 /plugin install context7@claude-plugins-official
 /plugin install security-guidance@claude-plugins-official
 /plugin install commit-commands@claude-plugins-official
+/plugin install pr-review-toolkit@claude-plugins-official
+/plugin install feature-dev@claude-plugins-official
+/plugin install frontend-design@claude-plugins-official
+/plugin install terraform@claude-plugins-official
 ----
 
 .Model Context Protocol servers: what is connected and what is not
@@ -246,7 +256,7 @@ This section covers only what is installed.
 |===
 | Server | Decision | Reason
 | Context7 | Connected | Read-only documentation lookup. Directly improves the correctness of generated code on Spring Boot {v-spring-boot} and Angular {v-angular}.
-| Playwright | Connected | Lets the assistant open the storefront and check what it built.
+| Playwright | Connected for storefront work only | Lets the assistant open the storefront on the local platform and check what it built. A browser is power as well as knowledge: it is not started for other work (document 08-02).
 | BootUI | Optional, development only | Lets the assistant inspect a service running locally: beans, configuration, endpoints.
 | GKE (open source) | Not connected | Exposes tools that create, update and apply resources, with no documented read-only mode. `kubectl`, under explicit permission rules, gives finer control.
 | gcloud (preview) | Not connected | A single tool that runs any `gcloud` command with the developer's identity. Nothing the command line does not already do, and still a preview.
@@ -294,6 +304,7 @@ Each line was checked by running the tool, not by reading its documentation.
 | Install the GKE authentication plugin | Administrator rights | First connection to the cluster
 | Enable the Podman socket | Changes a user service of the workstation | First Testcontainers run
 | `gcloud auth login` | Interactive sign-in | Any Google Cloud access
+| Create the account that the sessions of the AI assistant run under | Administrator rights (document 08-02) | Development phase
 | Install the Claude Code plugins | Changes the assistant's own configuration | Development phase
 | Choose the IntelliJ IDEA license | Personal or company account | Advanced Spring tooling only
 |===

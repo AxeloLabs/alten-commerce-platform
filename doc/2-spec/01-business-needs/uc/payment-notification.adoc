@@ -1,6 +1,11 @@
 // ids:end
 == Payment
 
+.Strategy question
+****
+What strategy describes how a payment is taken and given back, whatever the provider answers?
+****
+
 Payment and refund are never started by a person.
 They are steps of an order: each is included in the use cases that need it and cannot be started on its own.
 Their primary actor is the customer on whose behalf they run.
@@ -93,6 +98,11 @@ Their primary actor is the customer on whose behalf they run.
 
 // ids:end
 == Notification
+
+.Strategy question
+****
+What strategy describes when the customer is written to, and what happens when the e-mail cannot be sent?
+****
 
 [[UC-NOT-001]]
 === UC-NOT-001 — Notify the customer by e-mail

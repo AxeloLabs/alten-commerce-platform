@@ -1,6 +1,6 @@
 = Saga and Resilience Test Scenarios: Provoking Each Failure on Purpose
 :doc-id: 07-03
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How the promises of the saga and of the resilience strategy are tested: the means to provoke each failure, the two sets of delays, the sheet of each saga scenario, the systematic sweeps, the resilience tests of the platform and the tests of alerts.
@@ -293,6 +293,7 @@ An alert is three things, and each is tested where it is cheapest.
 |===
 
 An alert provoked for real must arrive within 5 minutes of its condition and name its runbook ({NFR-OBS-004}).
+Each of these tests declares itself in the snapshot of the environment while it runs (document 08-03), and restores what it disturbed: it purges the dead letter it caused, resolves the order it left under review, puts the label back.
 
 .In the proof of concept ({ADR-PLT-030})
 [%unbreakable, cols="4,11", options="header"]

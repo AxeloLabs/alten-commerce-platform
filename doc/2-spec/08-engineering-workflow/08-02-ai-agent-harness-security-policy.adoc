@@ -1,9 +1,9 @@
 = AI Agent Harness and Security Policy: What an Agent May Read, Run and Reach, and Who Answers for It
 :doc-id: 08-02
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
-:description: The security policy for AI coding agents on this project: the threats, the eight layers of control, what an agent may do, what it can never do, how its work is reviewed, what leaves the workstation, what is recorded, and the answers to a company's security review.
+:description: The security policy for AI coding agents on this project: the threats, the nine layers of control, the account that agent sessions run under, what an agent may do, what it can never do, how its work is reviewed, what leaves the workstation, what is recorded, and the answers to a company's security review.
 include::../_shared/attributes.adoc[]
 
 == What a harness is
@@ -33,15 +33,15 @@ A security review therefore asks about the harness, and this document is the ans
 [cols="4,6,5", options="header"]
 |===
 | Threat | Example | Stopped by
-| A destructive command | An agent "cleans up" by deleting a database, a branch or a directory outside the project | Sandbox; no cloud identity; the forbidden list of document 06-06
-| A leak of secrets | A credential file is read and ends up in a prompt, a log or a commit | Read denied on credential locations; secrets scan; no production secret on a workstation
-| A leak of code or data | Source code or personal data is sent to a place it should not go | Network allow list; contractual terms of the model provider; no production data on a workstation
+| A destructive command | An agent "cleans up" by deleting a database, a branch or a directory outside the project | The session account, which holds no cloud sign-in; the sandbox; the forbidden list of document 06-06
+| A leak of secrets | A credential file is read and ends up in a prompt, a log or a commit | The session account, which holds none; the secrets scan; no production secret on a workstation
+| A leak of code | Source code is sent to a place it should not go | The contractual terms of the model provider; the network allow list for sandboxed commands. Not fully: see "Data and confidentiality".
 | Deception by content | A web page, an issue, a dependency or a tool result contains text written to be obeyed: "ignore your instructions and…" | Untrusted content is data; nothing dangerous is within reach; a person reviews every change
-| A poisoned extension | A plug-in or a tool server that does more than it says | Allow list of sources; review of every change to the harness configuration
-| An invented dependency | The agent adds a package that does not exist, or that an attacker registered under a plausible name | New dependencies are asked, checked, scanned
+| A poisoned extension | A plug-in or a tool server that does more than it says | Allow list of sources; review of every change to the harness configuration; the session account
+| An invented dependency | The agent adds a package that does not exist, or that an attacker registered under a plausible name | New dependencies are asked, checked by a person, scanned
 | Plausible but wrong code | It compiles, passes the tests it wrote itself, and misses the rule | Tests derived from the specification, not from the code; independent verification (document 08-03); human review
-| A weakened gate | The agent makes a failing test pass by deleting it, or lowers a threshold | Pipeline definitions and thresholds have owners; the reviewers check the tests first
-| A runaway cost | A loop of sessions, or a cloud resource left running | Turn and spending limits; no right to create cloud resources; the budget of document 06-06
+| A weakened gate | The agent makes a failing test pass by deleting it, or lowers a threshold | Thresholds have owners; an agent cannot push a pipeline definition; the reviewers check the tests first
+| A runaway cost | A loop of sessions, or a cloud resource left running | No right to create cloud resources; limits on the runs of the pipeline; the budget of document 06-06
 |===
 
 Owner: {role-sec}
@@ -58,22 +58,49 @@ The harness is built in layers, and each layer assumes that the one inside it ha
 
 plantuml::diagrams/harness-layers.puml[format=svg, align=center, pdfwidth=85%]
 
-.The eight layers
+.The nine layers
 [cols="3,6,6", options="header"]
 |===
 | Layer | What it does | If it fails
-| 1. Data path and terms | Decides which provider receives the prompts and the code, and under which contract | Covered by the rule that no secret and no production data is ever on the workstation
+| 1. Data path and terms | Decides which provider receives the prompts and the code, and under which contract | No secret and no production data is ever on the workstation
 | 2. Managed settings | The company's policy, installed by an administrator, that a user or a repository cannot override | The project's own settings apply the same rules; the outer layers do not depend on it
-| 3. Sandbox | The operating system confines every command the agent runs: which directories it can write, which hosts it can reach | Permission rules still ask before commands that matter
-| 4. Permission rules | Three lists: what runs without asking, what is asked each time, what never runs | The sandbox still confines the command
-| 5. Hooks | A program of ours inspects a tool call before it runs and can refuse it: a deterministic check, not a judgment of the model | Permission rules and sandbox remain
-| 6. Identity | The agent holds no credential able to change a cloud resource, a cluster or the main branch | Nothing: this layer is outside the workstation and does not depend on the harness
-| 7. Repository and pipeline | The main branch accepts only reviewed pull requests that pass every gate | The cloud guardrails
-| 8. Cloud guardrails | Rights, deletion protection, budget and scheduled destruction (document 06-06) | –
+| 3. Session account | Agent sessions run under an operating-system account of their own. It holds the repository, the tools and one token limited to the repository: nothing of the developer. | The outer layers: that token can only push a branch
+| 4. Sandbox | The operating system confines the ordinary commands the agent runs: which directories they can write, which hosts they can reach. The build, which starts containers, cannot run inside it. | The session account: an unconfined command finds nothing but the repository
+| 5. Permission rules | Three lists: what runs without asking, what is asked each time, what never runs | The sandbox still confines the command
+| 6. Hooks | A program of ours inspects a tool call before it runs and can refuse it: a deterministic check, not a judgment of the model | Permission rules and sandbox remain
+| 7. Identity | No token or credential that an agent can obtain is able to change a cloud resource, a cluster, a pipeline definition or the main branch | Nothing: this layer is outside the workstation and does not depend on the harness
+| 8. Repository and pipeline | The main branch accepts only reviewed pull requests that pass every gate | The cloud guardrails
+| 9. Cloud guardrails | Rights, deletion protection, budget and scheduled destruction (document 06-06) | –
 |===
 
-The decisive property is in the last three lines.
-An agent whose harness is entirely bypassed is still an account that can push a branch and open a pull request, and nothing more.
+The decisive property is this.
+An agent that escapes layers 4 to 6 is a process on an account that holds one token; that token can push a branch and open a pull request, and nothing more.
+It is true only because of layer 3: on the developer's own account, a sign-in to the cloud would sit a few directories away.
+
+== The session account
+
+.Strategy question
+****
+What strategy makes sure that an agent which escapes every rule of the workstation still finds nothing there?
+****
+
+.What the account is
+[cols="3,12", options="header"]
+|===
+| Subject | Rule
+| Holds | The working copy of the repository; the toolchain of document 08-01; the rootless container engine; one token of the source host, limited to this repository; the sign-in to the model provider
+| Does not hold | Any sign-in to Google Cloud; any cluster configuration; the keys, password stores and browser profiles of the developer; any other repository
+| Why it exists | The tests of the build start containers. On Linux the sandbox of the tool cannot give a command access to the container engine: its documentation says so, and offers to exclude such commands, which then run with all the rights of their account. Code that the agent has just written therefore runs unconfined, without a question, at every build. That is acceptable on an account with nothing to take, and on no other.
+| Who creates it | The owner of the workstation, once: creating an account needs administrator rights (document 08-01)
+| The developer's own work | Signing in to Google Cloud, applying the `owner` root, pushing a change of pipeline definition, reading production signals: on the developer's own account, never in an agent session
+| Equivalent | A disposable virtual machine, or a remote development environment, that holds the same things and nothing else. In a company it is usually that.
+|===
+
+.Proven, not assumed
+****
+The first increments of the construction set this account up on the reference workstation, and {CRE-PLT-002} proves three things by running them: the whole build passes, containers included; no cloud sign-in, cluster configuration or key of the developer can be read from a session; a command of the forbidden list is refused.
+Until that proof exists this layer is a design, and the register of risks of document 08-04 carries it as such.
+****
 
 == What an agent may do
 
@@ -90,19 +117,19 @@ The policy therefore makes the safe majority silent, and keeps questions for the
 |===
 | Subject | Without asking | Asked each time | Never
 | Files of the repository | Read; write in the working copy | Write to pipeline definitions, to the harness configuration, to the quality thresholds | Read or write outside the working copy, except caches of the build tools
-| Credentials | – | – | Read any credential location: environment files, keys, cloud and cluster configuration of the user
+| Credentials | – | – | Read any credential location: environment files, keys, cloud and cluster configuration
 | Build and tests | Build, format, run every test, start the local platform in containers | – | –
-| Git | Status, diff, log, branch, add, commit on a work branch | Push a work branch; open a pull request | Push to the main branch; force a push; skip the checks of a commit; rewrite history
+| Git | Status, diff, log, branch, add, commit on a work branch | Push a work branch; open a pull request | Push to the main branch; force a push; skip the checks of a commit; rewrite history; push a pipeline definition: a person pushes those
 | Network | The package registries and the documentation sites of the allow list | Any other host | –
 | Dependencies | – | Add or upgrade a dependency | Install anything system-wide; pipe a download into a shell
-| Infrastructure code | Edit; validate; render a chart; scan | Compute a plan, with a read-only identity | Apply, destroy, change a state
-| Cloud and cluster | – | Read `test`: list, describe, logs | Any change, anywhere; anything in `integration` or `prod`; every command of the forbidden list of document 06-06
+| Infrastructure code | Edit; validate; render a chart; scan | – | Compute a plan, apply, destroy, change a state. The pipeline computes the plan of a pull request and posts it.
+| Cloud and cluster | – | Where a company gives the session a read-only identity on `test`: list, describe, read logs | Any change, anywhere; anything in `integration` or `prod`; every command of the forbidden list of document 06-06
 | Administrator rights | – | – | Any use
 | The harness itself | – | – | Disable the sandbox; switch to a mode that skips permissions; edit the managed settings
 |===
 
 The "never" column of the cloud is the list of document 06-06, enforced a second time.
-It is written once there, and the rules of the harness are generated from it, so that the two cannot drift.
+It is written once there, and the refusals of the harness are generated from it, so that the two cannot drift.
 
 .Excerpt of the shared settings of the repository
 [source,json]
@@ -111,6 +138,7 @@ It is written once there, and the rules of the harness are generated from it, so
   "permissions": {
     "defaultMode": "default",
     "disableBypassPermissionsMode": "disable",
+    "disableAutoMode": "disable",
     "allow": [
       "Bash(./mvnw *)", "Bash(pnpm run *)", "Bash(buf lint *)",
       "Bash(git status)", "Bash(git diff *)", "Bash(git log *)",
@@ -119,27 +147,30 @@ It is written once there, and the rules of the harness are generated from it, so
     ],
     "ask": [
       "Bash(git push *)", "Bash(gh pr create *)",
-      "Bash(kubectl get *)", "Bash(kubectl describe *)", "Bash(kubectl logs *)",
-      "Bash(terraform plan *)"
+      "Bash(kubectl get *)", "Bash(kubectl describe *)", "Bash(kubectl logs *)"
     ],
     "deny": [
-      "Read(./.env)", "Read(./.env.*)", "Read(~/.ssh/**)",
+      "Read(**/.env)", "Read(**/.env.*)", "Read(~/.ssh/**)",
       "Read(~/.config/gcloud/**)", "Read(~/.kube/**)",
       "Bash(sudo *)",
-      "Bash(git push --force *)", "Bash(git commit --no-verify *)",
-      "Bash(terraform apply *)", "Bash(terraform destroy *)", "Bash(terraform state *)",
+      "Bash(git push --force *)", "Bash(git * --no-verify*)",
+      "Bash(terraform plan *)", "Bash(terraform apply *)",
+      "Bash(terraform destroy *)", "Bash(terraform state *)",
       "Bash(helm install *)", "Bash(helm upgrade *)", "Bash(helm rollback *)",
       "Bash(helm uninstall *)",
       "Bash(kubectl apply *)", "Bash(kubectl delete *)", "Bash(kubectl exec *)",
       "Bash(kubectl edit *)", "Bash(kubectl patch *)", "Bash(kubectl scale *)",
+      "Bash(kubectl cp *)", "Bash(kubectl port-forward *)",
       "Bash(gcloud * delete *)", "Bash(gcloud * add-iam-policy-binding *)",
-      "Bash(gcloud iam service-accounts keys *)"
+      "Bash(gcloud iam service-accounts keys *)", "Bash(gcloud billing *)",
+      "Bash(gcloud pubsub subscriptions seek *)"
     ]
   },
   "sandbox": {
     "enabled": true,
     "failIfUnavailable": true,
     "allowUnsandboxedCommands": false,
+    "excludedCommands": ["./mvnw", "podman"],
     "filesystem": { "denyRead": ["~/.ssh", "~/.config/gcloud", "~/.kube", "~/.gnupg"] },
     "network": { "allowedDomains": ["repo.maven.apache.org", "registry.npmjs.org", "github.com"] }
   }
@@ -148,12 +179,13 @@ It is written once there, and the rules of the harness are generated from it, so
 
 The names of the settings are those of the Claude Code documentation as read on {revdate}; they are read again when the harness is installed, because the product changes faster than this specification.
 
-.Three things the excerpt does not say by itself
-[%unbreakable, cols="4,11", options="header"]
+.Four things the excerpt does not say by itself
+[cols="4,11", options="header"]
 |===
 | Subject | Rule
 | Order of evaluation | A refusal wins over a question, and a question over an authorization. An authorization can never carve an exception out of a refusal.
-| Rules on commands are not a boundary | A rule compares the text of a command, not what the command does: a forbidden command can be wrapped in a script. The product's documentation says so itself. These rules stop accidents and give early, clear refusals; the boundary is the sandbox, and behind it the identity that has no rights.
+| Rules on commands are not a boundary | A rule compares the text of a command, not what the command does: a forbidden command can be wrapped in a script, and an option can be placed where a pattern does not expect it. The product's documentation says so itself. These rules stop accidents and give early, clear refusals; the boundaries are the session account and the identity that has no rights. The commit checks that matter run again in the pipeline: skipping them locally gains nothing.
+| The two excluded commands | The build and the container engine run outside the sandbox. It is the price of tests on real technology, and the reason for the session account.
 | Where the settings live | Shared settings are in the repository, reviewed like code, and apply to everyone who works on it. Personal settings may add comfort, never remove a refusal. In a company the refusals, the sandbox and the two disabled modes are repeated in the managed settings, which nobody can override.
 |===
 
@@ -168,11 +200,12 @@ What strategy confines a command that nobody anticipated?
 [cols="4,11", options="header"]
 |===
 | Subject | Rule
-| Mechanism | Every shell command of the agent runs inside a confinement of the operating system: on Linux, an unprivileged container of the process with a filtering proxy for the network. A workstation where the confinement cannot start refuses to run the agent's commands rather than running them unconfined.
-| Files | Writes are limited to the working copy and to the caches of the build tools. Credential locations cannot be read, even by a command that the rules allow.
-| Network | Only the hosts of the allow list answer: the package registries and the source host. Everything else is refused, and the refusal is visible.
+| Mechanism | An ordinary shell command of the agent runs inside a confinement of the operating system: on Linux, an unprivileged container of the process with a filtering proxy for the network. A workstation where the confinement cannot start refuses to run the agent's commands rather than running them unconfined.
+| Files | A sandboxed command writes only in the working copy and in the caches of the build tools, and cannot read the credential locations
+| Network | A sandboxed command reaches only the hosts of the allow list: the package registries and the source host
 | Escape | A command that fails in the sandbox is not retried outside it. The setting that would allow the retry is off.
-| What the sandbox does not cover | The agent's own file and web tools, which follow the permission rules instead; hooks and locally started tool servers, which are our code and are reviewed as such; protocols other than the web ones. These limits are those stated by the product's documentation.
+| What runs outside it | The two excluded commands: the build and the container engine. The agent's own file and web tools, which follow the permission rules instead. Hooks and tool servers started on the workstation, which are our choices and are reviewed as such. All of these run with the rights of the session account, and that account is what bounds them.
+| What it does not filter | Protocols other than the web ones; and whatever the excluded commands do on the network. A test written by the agent can open a connection anywhere.
 | Containers | The local platform runs in rootless containers. The agent may start and stop them; it never mounts a directory outside the working copy into a container.
 |===
 
@@ -180,8 +213,9 @@ What strategy confines a command that nobody anticipated?
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Situation | Confinement
-| Ordinary development | The sandbox above, on the workstation
-| Long unattended sessions; work on untrusted input, such as reproducing a reported vulnerability | A disposable container or virtual machine holding only the working copy, with no credential at all; the result leaves it as a branch
+| Ordinary development | The session account and, inside it, the sandbox
+| Long unattended sessions; work on untrusted input, such as reproducing a reported vulnerability | A disposable virtual machine holding only the working copy, with no token at all; the result leaves it as a patch that a person applies
+| A company that must keep its source code from leaving | The same account or machine, with its outgoing traffic filtered at the network level: the sandbox alone does not give that guarantee
 | Agents in the pipeline | The runner itself is disposable; see below
 |===
 
@@ -196,9 +230,10 @@ What strategy makes sure a deceived agent finds nothing worth stealing and nothi
 [cols="4,5,6", options="header"]
 |===
 | System | Identity | Rights
-| Source host | A token limited to this repository | Push work branches; open and comment pull requests. No administration, no change to protections, no secrets of the pipeline.
+| Workstation | The session account | The repository and its tools. Nothing of the developer.
+| Source host | A token limited to this repository, held by the session account | Push work branches; open and comment pull requests. No right on pipeline definitions, no administration, no change to protections, no secret of the pipeline.
 | Main branch | None | Changed only by a reviewed pull request (document 06-05). The agent cannot approve or merge.
-| Cloud, to read `test` | A viewer identity, obtained for a short time by the developer and asked at each use | List, describe, read logs and metrics of `test`. Nothing else.
+| Cloud, to read `test` | In the proof of concept: none; the agent reads the snapshot that the pipeline writes (document 08-03). In a company: a read-only identity of its own, short-lived. | List, describe, read logs and metrics of `test`. Nothing else.
 | Cloud, to change anything | None | The pipeline is the only identity that changes a resource, and only from the main branch (document 06-04)
 | `integration` and `prod` | None | –
 | Databases | The local containers only | No session on any deployed database
@@ -208,7 +243,7 @@ What strategy makes sure a deceived agent finds nothing worth stealing and nothi
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Subject | Rule
-| On the workstation | Only the invented secrets of the local platform exist there: development realm, local database. They are worth nothing elsewhere.
+| On the session account | Only the invented secrets of the local platform exist there: development realm, local database. They are worth nothing elsewhere.
 | Real secrets | Live in Secret Manager, are read by workloads, and are never on a workstation (document 05-04). An agent cannot leak what it cannot reach.
 | In prompts | Never a secret, never personal data of a real person, never production data. A prompt is a message sent to a third party.
 | If a secret appears | In a file, a transcript or an answer: it is considered leaked and rotated, whoever saw it (document 05-04)
@@ -231,7 +266,7 @@ The policy does not rely on the agent resisting; it makes sure that obeying a pl
 | Source | Limit
 | Web pages | Fetching is asked outside the allow list; a fetched page is summarized as data
 | Issues, pull requests and comments written by others | Read as data. An agent run by the pipeline on a pull request from outside the team receives no secret and no write right.
-| Dependencies: their code, their documentation, their install scripts | Added only after a question; install scripts do not run with network access beyond the registries; the dependency scan of the pipeline
+| Dependencies: their code, their documentation, their install scripts | Added only after a question, and checked by a person; the dependency scan of the pipeline. Their code runs in the build, on the session account.
 | Results of tools and of commands | Data. A result that asks for an action is reported to the user, not acted upon.
 | The repository's own instructions | The instruction file, the rules, the skills and the settings are instructions to every future agent. A change to them is reviewed by their owners like a change to the pipeline.
 |===
@@ -241,9 +276,10 @@ The policy does not rely on the agent resisting; it makes sure that obeying a pl
 |===
 | Extension | Rule
 | Plug-ins | From the official marketplace only; the list is in the shared settings (document 08-01). In a company, the managed settings restrict the marketplaces that may be added.
-| Tool servers | The servers of document 08-01 and no other: they give knowledge, not power. A server declared by the repository is approved explicitly by each developer; in a company the managed settings hold the allow list.
+| Tool servers | The servers of document 08-01 and no other. A server declared by the repository is approved explicitly by each developer; in a company the managed settings hold the allow list. A server started on the workstation runs outside the sandbox, with the rights of the session account.
+| The browser server | A browser is power, not only knowledge: it is started for storefront work only, and pointed at the local platform
 | Skills and subagents | Files of the repository, reviewed. A verification subagent is declared with reading tools only: it cannot edit, and it cannot run a shell.
-| Hooks | Programs of the repository, reviewed. They run outside the sandbox with the developer's rights: they are short, they call nothing on the network, and a change to them needs the security owner.
+| Hooks | Programs of the repository, reviewed. They run outside the sandbox with the rights of the session account: they are short, they call nothing on the network, and a change to them needs the security owner.
 |===
 
 .Hooks of the project
@@ -269,10 +305,11 @@ What strategy keeps a person accountable for code they did not type?
 | Subject | Rule
 | One path | An agent's change is a pull request like any other. No gate of document 06-05 is lowered, skipped or replaced for it.
 | Tests come from the specification | The tests an increment must pass are named before the code exists (document 07-02). An agent does not decide what "done" means.
-| Independent verification | Expert agents review the change against the specification, in a separate session that has the specification and the diff but not the author's reasoning (document 08-03). They advise the reviewer; they do not replace the gates.
+| Independent verification | Expert agents review the change against the specification, in a separate session that has the specification and the change but not the author's reasoning (document 08-03). They advise the reviewer; they do not replace the gates.
 | A person decides | A person reads the change, the gates and the experts' findings, and merges. In a team that person is not the one who launched the agent. The agent cannot approve its own work.
 | Accountability | The person who launched the agent is the author of the change, in the sense that matters: they answer for it. The commit says which agent co-wrote it.
 | What reviewers look at first | The tests and the thresholds: a change that deletes a test, loosens an assertion or touches a gate is read with suspicion, whoever wrote it.
+| Pipeline definitions | An agent may edit one when its increment asks for it; a person reads the change and pushes it. The agent's token cannot.
 | Dependencies | A new dependency is checked by a person: it exists, it is the intended one, it is maintained, its license is acceptable, and it is in the stack of document 04-01 or justified
 | Undo | The harness can restore files its own tools edited, not what a command changed, and nothing outside the workstation. The only undo that counts is version control: an agent commits often, on its branch.
 |===
@@ -282,12 +319,16 @@ What strategy keeps a person accountable for code they did not type?
 |===
 | Subject | Rule
 | What runs | The verification experts of document 08-03, on a pull request, without a terminal
+| Definition | Their workflow runs as it is defined on the main branch, even when a pull request triggers it: the `pull_request_target` event of GitHub Actions. It reads the proposed change as data and never executes it: no build, no test, no script of the branch. A branch cannot change what this run does.
 | Tools | Reading tools only, and the right to comment the pull request. No shell, no write to the repository.
 | Limits | A maximum number of turns and a maximum spending per run, given on the command line
-| Secrets | The key of the model provider and nothing else. No cloud identity.
+| Secrets | The key of the model provider, kept in an environment of GitHub that only the main branch may use. No cloud identity.
 | Pull requests from outside | Not reviewed by agents automatically: a maintainer starts the review after reading the change
 | Their output | Comments. An expert never changes the code it reviews, and its finding is read by a person before anything is done about it.
 |===
+
+A workflow that a branch changes does run on its pull request, before any review.
+It reaches only what document 06-05 gives to a pull request — a read-only identity and the token of the code analysis —, and agents cannot create that situation: their token has no right on pipeline definitions.
 
 == Data and confidentiality
 
@@ -297,13 +338,20 @@ What strategy answers "where does our code go?" with facts instead of reassuranc
 ****
 
 .What leaves the workstation
-[%unbreakable, cols="4,11", options="header"]
+[cols="4,11", options="header"]
 |===
 | Data | Goes to
 | The prompts, the files the agent reads, the results of its commands | The model provider, to produce the answer
 | Usage figures and error reports | The publisher of the harness, unless disabled
-| Nothing else | The sandbox and the allow list see to it
+| What a sandboxed command sends | Only the hosts of the allow list
+| What the build sends | Nothing by design, and nothing technical prevents it: the build is not confined by the sandbox
 |===
+
+An allow list of hosts is not a guarantee against a leak of the source code.
+A host that accepts uploads, as the source host does, can receive whatever a session can read, and the build can open any connection.
+This policy does not claim otherwise.
+What it guarantees is narrower and firmer: a session can read nothing but this repository.
+A company for which the source code itself must not leave filters the outgoing traffic of the session account or machine.
 
 .Terms, by way of access
 [cols="4,6,5", options="header"]
@@ -324,7 +372,7 @@ A company verifies them in its own contract; this document does not replace that
 | Classified or export-controlled material | Never given to an agent, whatever the terms. This project contains none.
 | Personal and production data | Never on a workstation, hence never in a prompt
 | Usage reports | Disabled where the company asks for it, by the environment variables the product documents for that purpose
-| Local transcripts | Sessions are kept in clear text on the workstation, 30 days by default. The disk of a workstation is encrypted; the retention is shortened where the company asks.
+| Local transcripts | Sessions are kept in clear text on the session account, 30 days by default. The disk of a workstation is encrypted; the retention is shortened where the company asks.
 |===
 
 == What is recorded
@@ -340,9 +388,9 @@ What strategy reconstructs, months later, what an agent did and who let it?
 | Record | Content | Kept
 | Version control | Every change, its author, the agent that co-wrote it, the pull request, the review | For ever
 | Pull request | The gates, the experts' findings and what was done about each, the approval | For ever
-| Session transcript | Every prompt, tool call and result of a session | On the workstation, 30 days by default
+| Session transcript | Every prompt, tool call and result of a session | On the session account, 30 days by default
 | Telemetry of the harness | Sessions, tool decisions — allowed, asked, refused —, tokens and cost, exported in the OpenTelemetry format to the company's collector. The text of prompts is not exported unless a setting asks for it. | As the company's logs
-| Cloud audit logs | Every call made with the viewer identity | As document 05-03
+| Cloud audit logs | Every call made with a read-only identity, where one is given | As document 05-03
 |===
 
 .When something goes wrong
@@ -350,7 +398,7 @@ What strategy reconstructs, months later, what an agent did and who let it?
 |===
 | # | Step
 | 1 | Stop the session. Do not ask the agent to repair what it did: a person assesses first.
-| 2 | Revoke what the session could use: the token of the source host, the short-lived cloud identity
+| 2 | Revoke what the session could use: the token of the source host
 | 3 | Rotate any secret that appeared in the transcript, a file or an answer
 | 4 | Read the transcript: which instruction, from where, led to the action
 | 5 | Repair through the normal path: a reviewed change, or the runbook of document 06-07
@@ -367,35 +415,37 @@ What strategy turns this policy into the dozen answers a security officer will a
 [cols="5,7,4", options="header"]
 |===
 | Question | Answer | Enforced by
-| Can the agent delete or change something in production? | No. It holds no identity with any right on `integration` or `prod`, and none that can change `test`. | Cloud rights
+| Can the agent delete or change something in production? | No. It holds no identity with any right on `integration` or `prod`, and none that can change `test`. | Cloud rights; the session account
 | Can it merge its own code? | No. The main branch takes reviewed pull requests that pass every gate; a person merges. | Branch protection
-| Can it read our secrets? | Real secrets are not on the workstation. The locations of the developer's own credentials cannot be read by its commands or its tools. | Secret Manager; sandbox; read refusals
-| Where does our code go? | To the model provider, under the terms above, and nowhere else. | Network allow list; contract
+| Can it change the pipeline? | It can propose a change. Its token cannot push a pipeline definition: a person does, after reading it. | Rights of the token
+| Can it read our secrets? | Real secrets are not on the workstation, and the developer's own credentials are not on the account the agent runs under. | Secret Manager; the session account
+| Where does our code go? | To the model provider, under the terms above. Nothing else is meant to leave. The source code is the one thing a deceived agent could send elsewhere; no secret and no data would travel with it. | Contract; the session account; the allow list, within its limits
 | Is our code used to train a model? | Not under a commercial contract or through the company's cloud; under a consumer subscription, only if the user allows it. | Contract; account setting
-| What if it reads a malicious instruction? | It may follow it. It will find no credential to send, no host to send it to outside the allow list, and no right to change anything beyond a branch that a person reviews. | Layers 3, 6 and 7
+| What if it reads a malicious instruction? | It may follow it. It will find no credential to send, and no right to change anything beyond a branch that a person reviews. | Layers 3, 7 and 8
 | Can a developer switch the protections off? | Not the company's: managed settings cannot be overridden, and the modes that skip permissions are disabled there. | Managed settings
 | Who answers for what it wrote? | The person who launched it, named as author; the change says which agent co-wrote it. | Review rules
 | How do you know the code is right? | Tests named by the specification before the code, deterministic gates, independent expert agents, then a person. | Documents 06-05, 07-02, 08-03
 | Which extensions can it load? | Those of an allow list held in the repository and, in a company, in the managed settings. | Settings; review of their changes
 | What do you keep as evidence? | Version control, pull requests, transcripts, telemetry of tool decisions, cloud audit logs. | See "What is recorded"
-| What does it cost if it loops? | A session has a turn limit and a spending limit; it cannot create a cloud resource. | Limits; cloud rights
+| What does it cost if it loops? | In the pipeline a run has a limit of turns and of spending. On a workstation a person is present, and the spending is bounded by the plan of the account. In neither case can it create a cloud resource. | Limits; cloud rights
 |===
 
 .Two profiles
 [%unbreakable, cols="4,5,6", options="header"]
 |===
 | Subject | Proof of concept, one developer | Company
-| Managed settings | None: the same refusals are in the developer's own settings | Installed by the administrators of the workstations
+| Session account | A second account on the workstation, created once by its owner | A managed development environment, or the same
+| Managed settings | None: the same refusals are in the settings of the session account | Installed by the administrators of the workstations
 | Review by a second person | Not available: the developer reads and merges; the gates and the experts matter all the more | Required
 | Access to the model | A personal subscription, training refused | The company's contract, or its cloud provider
 | Telemetry | Local transcripts | Exported to the company's collector
-| Cloud identity of the agent | None at all: the developer runs the few cloud commands themselves | The viewer identity on `test`
+| Cloud identity of the agent | None at all: the developer runs the few cloud commands, on their own account | A read-only identity on `test`
 |===
 
 .What this policy does not claim
 ****
-It does not claim that an agent cannot be deceived, nor that a sandbox has no flaw.
-It claims that an agent which is deceived, in a sandbox that is breached, still holds nothing with which to harm production, and that what it writes is read before it counts.
+It does not claim that an agent cannot be deceived, that a sandbox has no flaw, or that source code cannot leave a workstation.
+It claims that an agent which is deceived, on an account that holds nothing, has nothing with which to harm production and no secret to give away, and that what it writes is read before it counts.
 ****
 
 Owner: {role-sec} {role-platform}

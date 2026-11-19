@@ -1,6 +1,6 @@
 = Documentation Guide: Structure, Identifiers, Conventions and Toolchain
 :doc-id: 00-01
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-18
 :revremark: Draft
 :description: How the specification is organized, identified, written, drawn and built.
@@ -260,6 +260,9 @@ On a real project one person often holds several roles; the tag names the hat, n
 | {role-qa} | Test strategy, acceptance scenarios, test catalog, quality gates
 |===
 
+A tag on the "Owner" line that closes the first section of a document applies to the whole document.
+A section whose owner differs carries its own line; a decision record and a row of a table may carry theirs.
+
 .Other badges
 [cols="4,11", options="header"]
 |===
@@ -283,8 +286,8 @@ Requirement wording:: A functional requirement is one sentence with "shall", ver
 Priority:: MoSCoW, shown with a badge. {must} is required for the first release, {should} is expected, {could} is optional, {wont} is explicitly out of scope.
 Authorization:: Every use case states what is {allowed} and what is {denied}, per actor.
 Tables before prose:: Catalogs (events, errors, tests, tools) are tables. Prose explains decisions, not inventories.
-Diagrams:: Every document that describes behavior contains at least one diagram. Every critical path has a sequence diagram: a business view of the nominal path in document 01-02, and a technical view of each scenario in document 03-03.
-Versions:: A version is never typed in a document. It is quoted from the shared attribute file, for example Spring Boot {v-spring-boot} on Java {v-java}.
+Diagrams:: Every document that describes behavior contains at least one diagram. Every critical path has a sequence diagram: a business view of the nominal path in document 01-02, and a technical view of each scenario in document 03-03. Sequence diagrams are where something happens over time: documents 00-02, 01-02, 03-03, 03-06, 04-02, 04-06, 05-01 and 05-04. Catalogs, registers and matrices are tables and carry no diagram.
+Versions:: The version of a technology that the platform uses is never typed in a document. It is quoted from the shared attribute file, for example Spring Boot {v-spring-boot} on Java {v-java}. Other versions are written as such: a range of compatibility, a release that was considered and not retained, the version of a standard.
 Decisions:: A choice between alternatives is recorded as an `ADR` and referenced from the text; the text does not re-argue it.
 
 == Templates

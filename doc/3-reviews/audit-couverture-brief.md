@@ -12,26 +12,28 @@ Rapport rendu le 2026-11-19 par un auditeur indépendant, en lecture seule. Il a
 
 ## 2. État des corrections
 
-À CORRIGER — plan arrêté le 2026-11-19, avant toute modification des documents.
+FAIT le 2026-11-19 : les seize points sont corrigés, par le commit « spec LOT 8 : corrections de la relecture indépendante et de l'audit du brief » qui suit celui de ce rapport. Cette passe de correction n'a pas été relue par un tiers.
+
+Deux choix sont des précisions de règle plutôt que des ajouts de contenu, et se discutent : l'étiquette de rôle d'un document vaut pour toutes ses sections ; « jamais de version tapée » vaut pour la version que la plateforme utilise. La version de Grafana (13.2) vient d'une recherche web du 2026-11-19 qui n'a pas pu être confirmée sur la page officielle : à revérifier à l'installation.
 
 | Remarque | Correction retenue | Documents | État |
 |---|---|---|---|
-| Question « stratégie » absente de 20 sections de premier niveau (13 epics, 7 groupes de cas d'utilisation) | Une question par section | `01-04`, `01-05` (fichiers `uc/`) | à faire |
-| « Microfrontends » cité par le brief, jamais traité | Dit en clair : une seule application Angular, pas de micro front ends, et pourquoi | `04-01` | à faire |
-| Étiquettes de rôle : une ou deux lignes « Owner » par document seulement | Règle écrite : l'étiquette d'un document vaut pour toutes ses sections, sauf mention contraire | `00-01` | à faire |
-| Mermaid, Graphviz et VS Code jamais nommés | Ajoutés aux outils envisagés et non retenus, avec la raison ; extensions VS Code citées | `04-01`, `08-01` | à faire |
-| Cloud Build jamais mentionné | Ajouté aux outils envisagés et non retenus | `04-01`, `04-07` | à faire |
-| Cinq outils avec « Current » au lieu d'un numéro de version | Numéro, ou la raison pour laquelle il n'y en a pas (service hébergé) | `04-01` | à faire |
-| Diagrammes de séquence : dix documents sans aucun diagramme, et la règle du guide plus étroite que la phrase du brief sans le dire | La lecture du brief est écrite dans le guide, avec la liste des documents qui portent des diagrammes de séquence | `00-01` | à faire |
-| Le mot « JWT » n'apparaît nulle part | Nommé là où les jetons sont décrits | `05-04` | à faire |
-| Schéma de la stack : « Cloud Deploy » encore affiché | Remplacé par GitHub Actions et Helm | `04-01` (schéma) | à faire |
-| Fournisseur de paiement simulé : dessiné comme un système externe, avec une adresse sortante « pour les appels aux fournisseurs » | Un seul énoncé partout : dans cette version, dans tous les environnements, les deux fournisseurs sont simulés par un adaptateur ; le système externe et l'adresse sortante sont la cible pour un vrai fournisseur | `04-02` (texte et schémas), `06-01`, `06-02` | à faire |
-| Réplicas : « chaque service » alors que la notification et le fournisseur d'identité font exception | Renvoi explicite aux exceptions | `06-01` | à faire |
-| Coût du POC : euros dans deux documents, dollars dans le chiffrage | Dollars partout, plafond en euros | `06-01`, `04-07` | à faire |
-| SonarQube : version d'un serveur alors que l'édition hébergée est retenue | Édition hébergée dite, sans numéro ; le serveur cité comme alternative | `04-01` | à faire |
-| Renvoi faux vers `08-02` pour les serveurs MCP | Corrigé | `04-01` | à faire |
-| Neuf plugins listés, cinq commandes d'installation | Les quatre commandes manquantes ajoutées | `08-01` | à faire |
-| Versions tapées en dur alors que le guide dit « jamais » | La règle est précisée : elle vaut pour la version que la plateforme utilise ; les autres mentions (plage de compatibilité, alternative, norme) restent en clair. Les mentions de NOTRE version passent par l'attribut | `00-01`, `04-01` | à faire |
+| Question « stratégie » absente de 20 sections de premier niveau (13 epics, 7 groupes de cas d'utilisation) | Une question par section | `01-04`, `01-05` (fichiers `uc/`) | fait |
+| « Microfrontends » cité par le brief, jamais traité | Dit en clair : une seule application Angular, pas de micro front ends, et pourquoi | `04-01` | fait |
+| Étiquettes de rôle : une ou deux lignes « Owner » par document seulement | Règle écrite : l'étiquette d'un document vaut pour toutes ses sections, sauf mention contraire | `00-01` | fait |
+| Mermaid, Graphviz et VS Code jamais nommés | Ajoutés aux outils envisagés et non retenus, avec la raison ; extensions VS Code citées | `04-01`, `08-01` | fait |
+| Cloud Build jamais mentionné | Ajouté aux outils envisagés et non retenus | `04-01`, `04-07` | fait |
+| Cinq outils avec « Current » au lieu d'un numéro de version | Grafana et Podman ont leur numéro ; Renovate, CodeQL et SonarQube sont des services hébergés, dit comme tel ; nginx n'était pas utilisé (la passerelle web sert l'interface) et passe dans les outils non retenus | `04-01`, `_shared/versions.adoc` | fait |
+| Diagrammes de séquence : dix documents sans aucun diagramme, et la règle du guide plus étroite que la phrase du brief sans le dire | La lecture du brief est écrite dans le guide, avec la liste des documents qui portent des diagrammes de séquence | `00-01` | fait |
+| Le mot « JWT » n'apparaît nulle part | Nommé là où les jetons sont décrits | `05-04` | fait |
+| Schéma de la stack : « Cloud Deploy » encore affiché | Remplacé par GitHub Actions et Helm | `04-01` (schéma) | fait |
+| Fournisseur de paiement simulé : dessiné comme un système externe, avec une adresse sortante « pour les appels aux fournisseurs » | Un seul énoncé partout : dans cette version, dans tous les environnements, les deux fournisseurs sont simulés par un adaptateur ; le système externe et l'adresse sortante sont la cible pour un vrai fournisseur | `04-02` (texte et schémas), `06-01`, `06-02` | fait |
+| Réplicas : « chaque service » alors que la notification et le fournisseur d'identité font exception | Renvoi explicite aux exceptions | `06-01` | fait |
+| Coût du POC : euros dans deux documents, dollars dans le chiffrage | Dollars partout, plafond en euros | `06-01`, `04-07` | fait |
+| SonarQube : version d'un serveur alors que l'édition hébergée est retenue | Édition hébergée dite, sans numéro ; le serveur cité comme alternative | `04-01` | fait |
+| Renvoi faux vers `08-02` pour les serveurs MCP | Corrigé | `04-01` | fait |
+| Neuf plugins listés, cinq commandes d'installation | Les quatre commandes manquantes ajoutées | `08-01` | fait |
+| Versions tapées en dur alors que le guide dit « jamais » | La règle est précisée : elle vaut pour la version que la plateforme utilise ; les autres mentions (plage de compatibilité, alternative, norme) restent en clair. Les mentions de NOTRE version passent par l'attribut | `00-01`, `04-01` | fait |
 
 ## 3. Rapport de l'auditeur
 

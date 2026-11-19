@@ -1,6 +1,6 @@
 = C4 Model: The Platform at Four Zoom Levels
 :doc-id: 04-02
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: System context, containers, components and deployment of the platform, following the C4 model, with the path of a request through them.
@@ -44,6 +44,9 @@ plantuml::diagrams/c4-context.puml[format=svg, align=center]
 
 The platform has three kinds of users and two external systems.
 The identity provider is not drawn here: it is a product we do not build, but we deploy and operate it, so it sits inside the system boundary and appears at the next level ({ADR-PLT-020}).
+
+The two providers are drawn as external systems because the design is made for real ones.
+In this release neither is called: each is simulated by an adapter inside the service that would call it, in every environment (document 02-02).
 
 .What crosses the boundary
 [%unbreakable, cols="4,5,6", options="header"]

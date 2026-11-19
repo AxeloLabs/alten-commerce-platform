@@ -1,6 +1,11 @@
 // ids:end
 == Catalog
 
+.Strategy question
+****
+What strategy describes every way a visitor reads the catalog and an administrator changes it?
+****
+
 The catalog is read by everyone and written by the administrator alone.
 
 [[UC-CAT-001]]

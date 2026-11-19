@@ -6,15 +6,15 @@ skinparam rectangle {
   RoundCorner 8
 }
 
-rectangle "**M0 — Foundations**\nCRE-PLT-001 to 009\nSkeleton, contracts, architecture rules,\nshared starter, local platform, acceptance harness" as M0 #FFF8E1
+rectangle "**M0 — Foundations**\nCRE-PLT-001 to 012  ·  CRE-IAM-001\nSkeleton, harness and experts, gates, contracts, architecture rules,\nshared starter, identity realm, local platform, acceptance harness" as M0 #FFF8E1
 
 rectangle "**M1 — The six services, in parallel**\nCatalog: CRE-CAT-001 to 003  ·  Inventory: CRE-INV-001, 002\nCart: CRE-CART-001 to 003  ·  Payment: CRE-PAY-001, 002\nOrder: CRE-ORD-001 to 007  ·  Notification: CRE-NOT-001" as M1 #E3F2FD
 
-rectangle "**M2 — The saga across services**\nCRE-ORD-008" as M2 #C8E6C9
+rectangle "**M2 — The services together**\nAcceptance scenarios: CRE-PLT-013  ·  CRE-ORD-009  ·  CRE-PAY-003\nSaga scenarios in containers: CRE-ORD-008" as M2 #C8E6C9
 
-rectangle "**M3 — Identity, edge and storefront**\nCRE-IAM-001, 002  ·  CRE-PLT-010  ·  CRE-CAT-004, 005\nCRE-CART-004  ·  CRE-ORD-009, 010  ·  CRE-PLT-011" as M3 #C8E6C9
+rectangle "**M3 — Edge and storefront**\nCRE-IAM-002  ·  CRE-PLT-014  ·  CRE-CAT-004, 005\nCRE-CART-004  ·  CRE-ORD-010, 011  ·  CRE-PLT-015" as M3 #C8E6C9
 
-rectangle "**M4 — Platform and delivery**\nCRE-PLT-012 to 017\nWritten at any time after M0; deployed last" as M4 #F4F7F9
+rectangle "**M4 — Platform and delivery**\nCRE-PLT-016 to 023\nWritten at any time after M0; deployed last" as M4 #F4F7F9
 
 M0 -down-> M1
 M1 -down-> M2

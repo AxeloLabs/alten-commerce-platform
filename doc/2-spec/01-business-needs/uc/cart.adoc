@@ -1,6 +1,11 @@
 // ids:end
 == Cart and favorites
 
+.Strategy question
+****
+What strategy describes what a customer can do with a cart and a list of favorites, limits included?
+****
+
 A cart and a list of favorites belong to one customer; they hold intentions and reserve nothing.
 
 [[UC-CART-001]]

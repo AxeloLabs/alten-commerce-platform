@@ -1,9 +1,9 @@
 = Software Factory: Creation and Verification Prompts
 :doc-id: 08-03
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
-:description: How the platform is built by AI agents from this specification: the forty-three creation prompts, in order, each with what it reads and the tests that prove it; the fourteen verification experts, with the full text of their prompts; and how a change goes from one to the others.
+:description: How the platform is built by AI agents from this specification: the fifty-one creation prompts, in order, each with what it reads and the tests that prove it; the fourteen verification experts, with the full text of their prompts; and how a change goes from one to the others.
 include::../_shared/attributes.adoc[]
 
 == The factory on one page
@@ -27,7 +27,7 @@ plantuml::diagrams/software-factory.puml[format=svg, align=center, pdfwidth=50%]
 | Given to | An author agent, on a branch | An expert agent, in a separate session
 | Says | What to build, what to read first, which tests prove it, what not to touch | What to compare with the specification, and how to report
 | Produces | A pull request | Findings
-| How many | 43 | 14
+| How many | 51 | 14
 |===
 
 .Three kinds of proof
@@ -70,8 +70,8 @@ What strategy cuts a platform into steps that an agent can finish and a person c
 | Always green | The main branch builds and passes every gate after each increment. Nothing is merged "to be fixed by the next one".
 |===
 
-Every creation prompt is the same frame, filled with one row of the catalog below.
-The frame is kept in the repository; the backlog entry of an increment (document 08-04) carries the filled text.
+Every creation prompt is the same frame, filled from one row of the catalog below: the row gives the substance, and the prompt adds the exact paths and sections.
+The filled prompts are files of the repository, written once and reviewed ({CRE-PLT-003}); the backlog entry of an increment (document 08-04) carries the same text.
 
 .The frame of a creation prompt
 [source,text]
@@ -99,14 +99,11 @@ METHOD
 1. Write the tests named below first, from the specification: one test per rule,
    per cell of a grid, per row of a table. Tag each test with its identifier.
 2. Write the code that makes them pass.
-3. Bind the acceptance scenarios tagged with the use cases named below, and add
-   these use cases to the list of delivered use cases.
-4. Run the whole build. Repair until it passes. Never make a test pass by
+3. Run the whole build. Repair until it passes. Never make a test pass by
    weakening it.
 
 DONE WHEN
 - These catalogued tests exist, carry their identifier and pass: <identifiers>.
-- The acceptance scenarios of these use cases are bound and pass: <identifiers>.
 - The whole build passes: formatting, static checks, architecture rules, coverage
   and mutation thresholds of the domain, contract conformance.
 - <the other conditions of the catalog row>
@@ -140,7 +137,7 @@ An agent that meets a gap in the specification and reports it has done its work;
 What strategy answers "in how many prompts?" with a list instead of a guess?
 ****
 
-Forty-three increments, in five milestones.
+Fifty-one increments, in five milestones.
 
 plantuml::diagrams/construction-order.puml[format=svg, align=center, pdfwidth=58%]
 
@@ -148,50 +145,90 @@ plantuml::diagrams/construction-order.puml[format=svg, align=center, pdfwidth=58
 [cols="2,5,8", options="header"]
 |===
 | Milestone | Increments | Reached when
-| M0 | Foundations: 9 | An empty service built on the starter passes every gate; the local platform starts with one command
-| M1 | The six services: 18 | Every service passes its unit and component tests; the acceptance scenarios of its use cases pass in memory
-| M2 | The saga across services: 1 | The nineteen saga scenarios pass in containers: the critical paths of the order are proven below the browser
-| M3 | Identity, edge and storefront: 9 | The end-to-end tests of the six critical paths pass on the local platform
-| M4 | Platform and delivery: 6 | The pipeline alone deploys the proof-of-concept profile; the smoke tests pass; the scheduled destruction has been proven once
+| M0 | Foundations: 13 | An empty service built on the starter passes every gate; the harness refuses what it must, and the experts comment a pull request; the local platform starts with one command
+| M1 | The six services: 18 | Every service passes its unit and component tests, and builds its image
+| M2 | The services together: 4 | The ninety-six acceptance scenarios pass in memory and the nineteen saga scenarios pass in containers: the critical paths of the order are proven below the browser
+| M3 | Edge and storefront: 8 | The end-to-end tests of the six critical paths pass against the complete platform, in containers
+| M4 | Platform and delivery: 8 | The pipeline alone deploys the proof-of-concept profile; the tests after deployment pass; the scheduled destruction has been proven once
 |===
 
-After M0 the six services are independent tracks: they share contracts, never code (document 04-03), so six agents can work on six branches at the same time.
-They meet at M2.
+After M0 the six services are independent tracks.
+Each is proven by its own unit and component tests, with its neighbors simulated from their contracts, so that six agents can work on six branches at the same time.
+They meet at M2, where the acceptance scenarios and the saga scenarios need all of them.
 The increments of M4 can be written at any time after M0, since writing and validating infrastructure code costs nothing; only the first deployment waits for M3.
 
-In each table, "Done when" lists the use cases whose acceptance scenarios must pass and the catalogued tests the increment delivers; the whole build passing is always implied.
+.Three rules that the tables imply
+[cols="4,11", options="header"]
+|===
+| Rule | Meaning
+| A stage of the pipeline comes with what it checks | The increment that creates a kind of thing adds the stage that checks it: the contracts with {CRE-PLT-005}, the acceptance scenarios with {CRE-PLT-012}, the saga scenarios with {CRE-ORD-008}, the storefront with {CRE-PLT-014}, charts and infrastructure with {CRE-PLT-016}. {CRE-PLT-004} adds the gates that concern everything.
+| A shared mechanism is proven before a service uses it | The starter increments prove their suites — contract conformance, error answers, authorization, messaging — on a minimal sample service that lives in the tests of the starter. Each service then runs the same suites on itself.
+| An image comes with its service | Each service increment produces the container image of its service, with the build configuration of {CRE-PLT-001}. The compositions of M2 and M3 start from these images.
+|===
+
+.Scope, by kind of increment
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Kind | May change
+| A domain increment | The domain packages of one service, and their tests
+| A service increment | The module of one service: application, adapters, migrations, configuration, tests
+| A starter increment | `platform-starter`
+| Contracts | `contracts/`
+| An acceptance increment | `acceptance/`
+| A storefront increment | `web/storefront`: the screens of the journeys it names, and their tests
+| A platform increment | `deploy/`, and the pipeline definitions it names
+| Harness and factory tooling | The settings and hooks of the harness, the rule files, the expert files, the prompt files
+|===
+
+In each table, "Done when" lists the catalogued tests that the increment delivers.
+A service increment also names the use cases it implements; their acceptance scenarios are bound at M2.
+The whole build passing is always implied.
+
+<<<
 
 .M0 — Foundations
 [cols="4,5,10,7", options="header"]
 |===
 | ID | Increment | Builds, and what to read | Done when
 | [[CRE-PLT-001]]CRE-PLT-001 | Repository and build skeleton
-| The layout of document 04-03; the parent build with every version and every quality gate; the toolchain file; the pipeline of a pull request with its build stage; the shared settings of the harness and the instruction file of the project. Documents 04-01, 04-03, 06-05, 08-01, 08-02, 08-05.
-| An empty module passes the whole build; the pipeline answers a pull request
-| [[CRE-PLT-002]]CRE-PLT-002 | Contracts
-| The OpenAPI document of each REST interface, the AsyncAPI documents, one Protobuf schema per topic, with their style rules and compatibility checks. Documents 03-02, 03-04, 04-05, 05-01.
+| The layout of document 04-03; the parent build with every version and every quality gate; the toolchain file; the build of an unprivileged, read-only image per service; the pipeline of a pull request with its build, architecture and domain stages; the instruction file of the project. Documents 04-01, 04-03, 06-03, 06-05, 08-01, 08-05.
+| An empty module passes the whole build; the pipeline answers a pull request; the mutation tool runs on the test engine, or its gate is recorded as suspended
+| [[CRE-PLT-002]]CRE-PLT-002 | Harness
+| The shared settings, the hooks, the generator of refusals from the forbidden list of document 06-06, the rule files by folder; the procedure that creates the session account. Documents 08-02, 08-05, 06-06.
+| On the reference workstation, under the session account: the build passes with its containers; no cloud login, cluster configuration or key of the developer can be found; a command of the forbidden list is refused
+| [[CRE-PLT-003]]CRE-PLT-003 | Experts, prompts and backlog tooling
+| The fourteen expert files; the workflow that runs them on a pull request, as defined on the main branch; the filled prompt of every increment, as files; the script that writes the backlog from the registry of identifiers. Documents 08-03, 08-04, 08-02.
+| The experts comment a sample pull request; every increment has its prompt file; the script, run twice against a test repository, changes nothing the second time
+| [[CRE-PLT-004]]CRE-PLT-004 | Gates that concern everything
+| The stages of the pipeline for secrets, code analysis, inventory and scan of dependencies, and the build of this specification; the file of dated exceptions. Document 06-05.
+| Each gate blocks a pull request made to trip it
+| [[CRE-PLT-005]]CRE-PLT-005 | Contracts
+| The OpenAPI document of each REST interface, the AsyncAPI documents, one Protobuf schema per topic, with their style rules, their compatibility checks and the contract stage of the pipeline. Documents 03-02, 03-04, 04-05, 05-01.
 | The contract stage passes; every command, event and error code of the specification has its schema
-| [[CRE-PLT-003]]CRE-PLT-003 | Architecture rules and conventions
+| [[CRE-PLT-006]]CRE-PLT-006 | Architecture rules and conventions
 | The twenty-six architecture rules as a test library of the starter; the marker annotations; the clock and the identifier generator. Document 04-03.
 | {TU-PLT-002}
-| [[CRE-PLT-004]]CRE-PLT-004 | Starter: errors and REST conventions
+| [[CRE-PLT-007]]CRE-PLT-007 | Starter: errors and REST conventions
 | Problem details with error codes, validation at the edge, paging, the platform error codes; the support for contract conformance tests. Documents 05-01, 04-05.
 | {TC-PLT-001} {TC-PLT-004}
-| [[CRE-PLT-005]]CRE-PLT-005 | Starter: reliable messaging and persistence
-| Envelope, subscriber skeleton, outbox, relay, inbox, unit of work for PostgreSQL, cleaning tasks, with their migrations and measures; the test support: containers, persistence slices on H2. Documents 03-04, 03-05, 03-06, 04-04.
+| [[CRE-PLT-008]]CRE-PLT-008 | Starter: reliable messaging and persistence
+| Envelope, subscriber skeleton, outbox, relay and its switch, inbox, unit of work for PostgreSQL, cleaning tasks, with their migrations and measures; the test support: containers, persistence slices on H2. Documents 03-04, 03-05, 03-06, 04-04.
 | {TC-PLT-002} {TC-PLT-007} {TI-PLT-001} {TI-PLT-002} {TI-PLT-003} {TI-PLT-005}
-| [[CRE-PLT-006]]CRE-PLT-006 | Starter: security
+| [[CRE-PLT-009]]CRE-PLT-009 | Starter: security
 | Resource-server defaults, role mapping, deny by default, relay of the actor's token; the authorization matrix as a data file and the suite generated from it. Documents 05-04, 01-05, 07-04.
 | {TC-PLT-003}
-| [[CRE-PLT-007]]CRE-PLT-007 | Starter: observability and resilience
+| [[CRE-PLT-010]]CRE-PLT-010 | Starter: observability and resilience
 | Structured logs with trace and saga identifiers, standard measures, masking, probes, clean shutdown; the defaults of outgoing calls: time limits, retries, circuit breakers, bulkheads. Documents 05-02, 05-03.
 | The starter's own tests: a log line carries the identifiers, a field marked secret is masked, a call is abandoned at its time limit
-| [[CRE-PLT-008]]CRE-PLT-008 | Local platform
-| The composition of containers of document 08-01: database, emulators of the bus and of the document database, identity provider with a development realm, telemetry stack; the script that loads synthetic data. Documents 08-01, 06-01.
-| The local platform starts with one command and stops leaving nothing behind
-| [[CRE-PLT-009]]CRE-PLT-009 | Acceptance harness
-| The module of acceptance tests: Cucumber reading the feature files of document 01-08 where they are; the assembly of the services in memory, with its bus and its clock; the list of delivered use cases, and the gate that fails when a scenario of a delivered use case has no binding. Documents 07-01, 01-08.
-| {TC-PLT-006}
+| [[CRE-IAM-001]]CRE-IAM-001 | Identity provider configuration
+| The realm as code: roles, clients, registration, password policy, slowing of repeated failures, single-use refresh tokens, one host name per environment, test accounts outside production. Document 05-04.
+| Implements {UC-IAM-001}. {TI-IAM-001} {TI-IAM-002}
+| [[CRE-PLT-011]]CRE-PLT-011 | Local platform
+| The composition of containers of document 08-01: database, emulators of the bus and of the document database, identity provider with the realm of {CRE-IAM-001}, telemetry stack; the script that loads synthetic data. Documents 08-01, 06-01.
+| The local platform starts with one command, and stops leaving nothing behind
+| [[CRE-PLT-012]]CRE-PLT-012 | Acceptance harness
+| The module of acceptance tests, with no scenario bound yet: Cucumber reading the feature files of document 01-08 where they are; the bus in memory that can hold, repeat and delay a message; the clock; the list of delivered use cases and the gate that reads it; the acceptance stage of the pipeline. Documents 07-01, 01-08.
+| One sample scenario, written for the purpose, is bound and passes; a scenario of a delivered use case with no binding fails the build
 |===
 
 .M1 — The six services
@@ -203,7 +240,7 @@ In each table, "Done when" lists the use cases whose acceptance scenarios must p
 | {TU-CAT-001} {TU-CAT-002} {TU-CAT-003} {TU-CAT-004} {TU-CAT-005} {TU-PLT-001}
 | [[CRE-CAT-002]]CRE-CAT-002 | Catalog service
 | Use cases, REST interface, PostgreSQL store and migrations, consumer of availability events, read of referenced products for our own services. Documents 01-05, 04-04, 04-05, 03-06.
-| {UC-CAT-001} {UC-CAT-002} {UC-CAT-003} {UC-CAT-004} {UC-CAT-005} {UC-CAT-006}; {TC-CAT-001} {TC-CAT-002} {TC-CAT-003} {TC-CAT-004}
+| Implements {UC-CAT-001} {UC-CAT-002} {UC-CAT-003} {UC-CAT-004} {UC-CAT-005} {UC-CAT-006}. {TC-CAT-001} {TC-CAT-002} {TC-CAT-003} {TC-CAT-004}
 | [[CRE-CAT-003]]CRE-CAT-003 | Catalog: document and file stores
 | The Firestore and file adapters behind the same ports; the persistence contract suite, run on the three stores. Document 04-04.
 | {TI-CAT-001}
@@ -212,13 +249,13 @@ In each table, "Done when" lists the use cases whose acceptance scenarios must p
 | {TU-INV-001} {TU-INV-002} {TU-INV-003} {TU-INV-004} {TU-INV-005} {TU-INV-006}
 | [[CRE-INV-002]]CRE-INV-002 | Inventory service
 | Use cases, administration interface, store written in SKU order, handlers of the commands of the sagas, expiry task with its lease, availability events. Documents 01-05, 03-06, 04-04.
-| {UC-INV-001} {UC-INV-002}; {TC-INV-001} {TC-INV-002} {TC-INV-003} {TI-INV-001}
+| Implements {UC-INV-001} {UC-INV-002}. {TC-INV-001} {TC-INV-002} {TC-INV-003} {TI-INV-001}
 | [[CRE-CART-001]]CRE-CART-001 | Cart and favorites domain
 | Two modules: lines and limits, the view with its totals and flags; favorites. Documents 02-02, 01-06.
 | {TU-CART-001} {TU-CART-002} {TU-CART-003} {TU-CART-004}
 | [[CRE-CART-002]]CRE-CART-002 | Cart service
 | Use cases, REST interface, PostgreSQL store, client of the catalog with its fallback, consumer of confirmed orders. Documents 01-05, 04-05, 05-02.
-| {UC-CART-001} {UC-CART-002} {UC-CART-003} {UC-CART-004}; {TC-CART-001} {TC-CART-002} {TC-CART-003}
+| Implements {UC-CART-001} {UC-CART-002} {UC-CART-003} {UC-CART-004}. {TC-CART-001} {TC-CART-002} {TC-CART-003}
 | [[CRE-CART-003]]CRE-CART-003 | Cart: document and file stores
 | The Firestore and file adapters; the contract suite on the three stores. Document 04-04.
 | {TI-CART-001}
@@ -227,7 +264,7 @@ In each table, "Done when" lists the use cases whose acceptance scenarios must p
 | {TU-PAY-001} {TU-PAY-002} {TU-PAY-003} {TU-PAY-004}
 | [[CRE-PAY-002]]CRE-PAY-002 | Payment service
 | Handlers of the commands of the sagas; the three steps around a call to the provider; the simulated provider as an adapter, with its tokens, its record and its control; refunds. Documents 03-06, 01-06, 05-02.
-| {UC-PAY-001} {UC-PAY-002}; {TC-PAY-001} {TC-PAY-002}
+| Implements {UC-PAY-001} {UC-PAY-002}. {TC-PAY-001} {TC-PAY-002}
 | [[CRE-ORD-001]]CRE-ORD-001 | Order aggregate
 | The order, its lines, its amounts, its statuses and their guards. Documents 02-02, 02-03, 01-06.
 | {TU-ORD-001} {TU-ORD-002} {TU-ORD-003} {TU-ORD-004} {TU-ORD-013}
@@ -239,83 +276,95 @@ In each table, "Done when" lists the use cases whose acceptance scenarios must p
 | {TU-ORD-012}
 | [[CRE-ORD-004]]CRE-ORD-004 | Checkout
 | The use case that creates the order, its saga and the first command in one transaction; REST interface; stores, unique constraints and migrations; clients of the cart and of the catalog. Documents 01-05, 03-06, 04-04, 04-05.
-| {UC-ORD-001}; {TC-ORD-001} {TC-ORD-002} {TI-ORD-020}
+| Implements {UC-ORD-001}, with {CRE-ORD-005}. {TC-ORD-001} {TC-ORD-002} {TI-ORD-020}
 | [[CRE-ORD-005]]CRE-ORD-005 | Saga messaging and deadlines
 | Handlers of the answers of the inventory and of the payment, routing by saga identifier, the deadline task with its lease, version conflicts. Documents 03-03, 03-06.
 | {TC-ORD-003} {TC-ORD-004}
 | [[CRE-ORD-006]]CRE-ORD-006 | Customer's orders and fulfillment
 | History, tracking, cancellation; shipping and delivery by an administrator. Documents 01-05, 04-05.
-| {UC-ORD-002} {UC-ORD-003} {UC-ORD-004} {UC-ORD-006}; {TC-ORD-005} {TC-ORD-006}
+| Implements {UC-ORD-002} {UC-ORD-003} {UC-ORD-004} {UC-ORD-006}. {TC-ORD-005} {TC-ORD-006}
 | [[CRE-ORD-007]]CRE-ORD-007 | Administration of orders
 | Search; orders under review and the three decisions of an administrator. Documents 01-05, 02-03.
-| {UC-ORD-005} {UC-ORD-007}; {TC-ORD-007}
+| Implements {UC-ORD-005} {UC-ORD-007}. {TC-ORD-007}
 | [[CRE-NOT-001]]CRE-NOT-001 | Notification service
 | The content of each e-mail as domain code; consumer of order events; the simulated e-mail provider as an adapter; retries and "not sent". Documents 01-06, 03-06.
-| {UC-NOT-001}; {TU-NOT-001} {TU-NOT-002} {TC-NOT-001}
+| Implements {UC-NOT-001}. {TU-NOT-001} {TU-NOT-002} {TC-NOT-001}
 |===
 
-.M2 — The saga across services
+.M2 — The services together
 [cols="4,5,10,7", options="header"]
 |===
 | ID | Increment | Builds, and what to read | Done when
+| [[CRE-PLT-013]]CRE-PLT-013 | Acceptance scenarios: catalog, inventory, cart, identity
+| The assembly in memory of the domain and the use cases of the six services; the bindings of the scenarios of these four contexts; their use cases added to the delivered list. Documents 01-08, 07-01.
+| Its part of {TC-PLT-006}: every scenario of these contexts is bound and passes
+| [[CRE-ORD-009]]CRE-ORD-009 | Acceptance scenarios: orders
+| The bindings of the scenarios of the order context, failures included: a held or repeated message, a moved clock, a service built again from its store. Documents 01-08, 03-03.
+| Its part of {TC-PLT-006}
+| [[CRE-PAY-003]]CRE-PAY-003 | Acceptance scenarios: payment and notification
+| The bindings of the scenarios of these two contexts. Document 01-08.
+| {TC-PLT-006} complete: the ninety-six scenarios are bound and pass, and every use case is on the delivered list
 | [[CRE-ORD-008]]CRE-ORD-008 | Saga scenarios across services
-| The harness of document 07-03 — the gate, freezing and killing a service, the two sets of delays, the observation subscriptions — and the nineteen scenario tests, in a composition of containers; the stage of the pipeline that runs them. Documents 07-03, 03-03, 06-05.
+| The composition of the six services from their images, with the local platform; the harness of document 07-03 — the gate, freezing and killing a service, the two sets of delays, the observation subscriptions —; the nineteen scenario tests; the stage of the pipeline that runs them. Documents 07-03, 03-03, 06-05.
 | {TI-ORD-001} {TI-ORD-002} {TI-ORD-003} {TI-ORD-004} {TI-ORD-005} {TI-ORD-006} {TI-ORD-007} {TI-ORD-008} {TI-ORD-009} {TI-ORD-010} {TI-ORD-011} {TI-ORD-012} {TI-ORD-013} {TI-ORD-014} {TI-ORD-015} {TI-ORD-016} {TI-ORD-017} {TI-ORD-018} {TI-ORD-019}
 |===
 
-.M3 — Identity, edge and storefront
+.M3 — Edge and storefront
 [cols="4,5,10,7", options="header"]
 |===
 | ID | Increment | Builds, and what to read | Done when
-| [[CRE-IAM-001]]CRE-IAM-001 | Identity provider configuration
-| The realm as code: roles, clients, registration, password policy, slowing of repeated failures, single-use refresh tokens, one host name per environment, test accounts outside production. Document 05-04.
-| {UC-IAM-001}; {TI-IAM-001} {TI-IAM-002}
 | [[CRE-IAM-002]]CRE-IAM-002 | Web gateway
-| Session, sign-in and sign-out, token renewal once per session, anti-forgery, response headers, routes to the four REST interfaces, serving the files of the storefront. Documents 05-04, 04-05.
-| {UC-IAM-002}; {TC-PLT-005}
-| [[CRE-PLT-010]]CRE-PLT-010 | Storefront shell
-| The Angular workspace; clients generated from the contracts; signed-in state; display of errors by their code; layout and accessibility baseline. Documents 04-03, 05-01, 01-07.
-| The storefront builds, lints and passes its unit tests; a customer who signs in on the local platform sees their name
+| Session, sign-in and sign-out, token renewal once per session, anti-forgery, response headers, routes to the four REST interfaces, serving the files of the storefront; its image. Documents 05-04, 04-05.
+| Implements {UC-IAM-002}. {TC-PLT-005}
+| [[CRE-PLT-014]]CRE-PLT-014 | Storefront shell
+| The Angular workspace; clients generated from the contracts; signed-in state; display of errors by their code; layout and accessibility baseline; the storefront stage of the pipeline. Documents 04-03, 05-01, 01-07.
+| {TC-PLT-008}
 | [[CRE-CAT-004]]CRE-CAT-004 | Storefront: catalog
 | Browsing, search, product page, availability. Journey {JRN-CAT-001}.
-| The screens of the journey work on the local platform, errors and empty results included
+| {TC-CAT-005}
 | [[CRE-CART-004]]CRE-CART-004 | Storefront: cart and favorites
 | Cart, counter, flagged lines, favorites. Journeys {JRN-CART-001} and {JRN-CART-002}.
-| The same
-| [[CRE-ORD-009]]CRE-ORD-009 | Storefront: checkout and orders
+| {TC-CART-004}
+| [[CRE-ORD-010]]CRE-ORD-010 | Storefront: checkout and orders
 | Checkout, waiting for the outcome by polling, history, tracking, cancellation. Journeys {JRN-ORD-001}, {JRN-ORD-002} and {JRN-ORD-003}.
-| The same; every outcome of an order is shown with the truth about what was charged
+| {TC-ORD-008}
 | [[CRE-CAT-005]]CRE-CAT-005 | Administration screens: catalog and stock
 | Products of every status, prices, publication, stock adjustments. Journeys {JRN-CAT-002} and {JRN-INV-001}.
-| The same
-| [[CRE-ORD-010]]CRE-ORD-010 | Administration screens: orders
+| {TC-CAT-006}
+| [[CRE-ORD-011]]CRE-ORD-011 | Administration screens: orders
 | Search, shipping and delivery, orders under review and their decisions. Journeys {JRN-ORD-004} and {JRN-ORD-005}.
-| The same
-| [[CRE-PLT-011]]CRE-PLT-011 | End-to-end tests
-| The tests of the critical paths in a browser, the smoke subset, the accessibility checks; the trace followed across the whole platform. Documents 07-02, 01-02.
-| {TE2E-ORD-001} {TE2E-ORD-002} {TE2E-ORD-003} {TE2E-ORD-004} {TE2E-ORD-005} {TE2E-ORD-006} {TE2E-CAT-001} {TE2E-IAM-001} {TE2E-PLT-001} {TE2E-PLT-002} {TI-PLT-007}
+| {TC-ORD-009}
+| [[CRE-PLT-015]]CRE-PLT-015 | End-to-end tests
+| The complete composition: the six services, the web gateway with the storefront and the identity provider, from their images; the tests of the critical paths in a browser, the smoke subset, the accessibility checks; the trace followed across the whole platform. Documents 07-01, 07-02, 01-02.
+| {TE2E-ORD-001} {TE2E-ORD-002} {TE2E-ORD-003} {TE2E-ORD-004} {TE2E-ORD-005} {TE2E-ORD-006} {TE2E-CAT-001} {TE2E-IAM-001} {TE2E-PLT-001} {TE2E-PLT-002} {TI-PLT-007}, against the complete composition
 |===
 
 .M4 — Platform and delivery
 [cols="4,5,10,7", options="header"]
 |===
 | ID | Increment | Builds, and what to read | Done when
-| [[CRE-PLT-012]]CRE-PLT-012 | Images and charts
-| One image per workload, unprivileged and read-only; the Helm charts with the values of the two profiles; migrations as a first step; probes, policies, identities. Document 06-03.
+| [[CRE-PLT-016]]CRE-PLT-016 | Charts
+| The Helm charts of the eight workloads and of the observability namespace, with the values of the two profiles; migrations as a first step; probes, network policies, quotas, bindings of identities; the infrastructure stage of the pipeline. Documents 06-03, 06-02, 06-05.
 | The charts render and pass the infrastructure scan, for both profiles
-| [[CRE-PLT-013]]CRE-PLT-013 | Infrastructure: owner and shared roots
-| The budget and its alerts; the registry, the storage of the states, the federation that gives the pipeline its identity. Documents 06-04, 06-06.
-| The plans compute; the security scan passes
-| [[CRE-PLT-014]]CRE-PLT-014 | Infrastructure: environments
-| The environment module — the network of document 06-02, the cluster, the database, the topics and subscriptions of document 03-05, secrets, identities — and its roots, for both profiles. Documents 06-02, 06-04, 03-05.
+| [[CRE-PLT-017]]CRE-PLT-017 | Infrastructure: what comes first
+| The `owner` root — the budget and its alerts —, applied by the owner; the steps done by hand once, as a checked procedure: project, storage of the states, trust between GitHub and the project. Documents 06-04, 06-06, 06-07.
+| The plan of the `owner` root computes in the pipeline; a script tells whether each step done by hand is in place
+| [[CRE-PLT-018]]CRE-PLT-018 | Infrastructure: the shared root
+| The modules for the foundation and the network of document 06-02, the cluster, the database instance, the entry point, the delivery identities with the attestor and the admission policy, and the guardrails: quotas, spending latch, outside probe, alert channels. Both profiles. Documents 06-02, 06-04, 06-05, 06-06.
 | The plans compute for both profiles; the scan passes; every resource carries its labels
-| [[CRE-PLT-015]]CRE-PLT-015 | Delivery pipeline
-| The pipeline of the main branch: release, images signed and published, deployment by Helm, approval, verification and automatic return; the scheduled destruction; the operations jobs; the read-only snapshot of an environment. Documents 06-05, 06-06, 06-07.
-| A release reaches the proof-of-concept environment by the pipeline alone; the destruction job, run once on purpose, leaves nothing
-| [[CRE-PLT-016]]CRE-PLT-016 | Observability as code
-| Dashboards, alert rules with their tests on written series, objectives, the outside probe. Documents 05-03, 07-03.
+| [[CRE-PLT-019]]CRE-PLT-019 | Infrastructure: environments
+| The environment module — schemas, topics, subscriptions and dead letters of document 03-05; identities and rights; databases and accounts; secrets containers — and its three roots. Documents 03-05, 06-04.
+| The plans compute for both profiles; the scan passes
+| [[CRE-PLT-020]]CRE-PLT-020 | Delivery pipeline
+| The pipeline of the main branch: images signed, attested and published; the release record; deployment by Helm, environment after environment; the tests after each deployment; approval; verification and automatic return; the read-only snapshot of an environment. Documents 06-05, 06-01.
+| A release reaches the proof-of-concept environment by the pipeline alone, and a release made to fail its verification is returned
+| [[CRE-PLT-021]]CRE-PLT-021 | Scheduled and operations jobs
+| The scheduled destruction of the proof of concept; the rebuild of `integration`; the nightly plan and inventory; the evening sleep; the operations jobs of document 06-07, each run by the pipeline under the operations identity. Documents 06-04, 06-06, 06-07.
+| The destruction job, run once on purpose, leaves nothing; each operations job is exercised once in `test`
+| [[CRE-PLT-022]]CRE-PLT-022 | Observability as code
+| Dashboards, alert rules with their tests on written series, objectives. Documents 05-03, 07-03.
 | Every alert of document 05-03 exists, passes its rule test and names its runbook
-| [[CRE-PLT-017]]CRE-PLT-017 | Tests of the deployed platform
+| [[CRE-PLT-023]]CRE-PLT-023 | Tests of the deployed platform
 | The tests on the real bus and on the identities; the dynamic scan; the isolation and leak tests; the load runs; the resilience tests. Documents 07-03, 07-04.
 | {TI-PLT-004} {TI-PLT-006} {TI-PLT-008}; the runs of document 07-04 that the profile allows
 |===
@@ -324,10 +373,10 @@ In each table, "Done when" lists the use cases whose acceptance scenarios must p
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Subject | Meaning
-| Forty-three | The number of increments that build what this specification describes, each one a pull request
+| Fifty-one | The number of increments that build what this specification describes, each one a pull request
 | What it does not count | Repairs. A defect found later is an entry of the backlog with its own short prompt: the failing test first, then the correction.
 | Splits | An increment that proves too large for one review is split; the part that keeps its meaning keeps its identifier
-| What the build guarantees | Every use case is built by an increment and every catalogued test is delivered by one: the registry of identifiers refuses anything else
+| What the build guarantees | Every use case is implemented by an increment and every catalogued test is delivered by one: the registry of identifiers refuses anything else
 |===
 
 .What can wait until after the demonstration
@@ -335,11 +384,11 @@ In each table, "Done when" lists the use cases whose acceptance scenarios must p
 |===
 | Increment | Why it can wait
 | {CRE-CAT-003}, {CRE-CART-003} | The document and file stores are required by the brief, and the demonstration runs on PostgreSQL
-| {CRE-PLT-016}, dashboards only | The proof of concept has no dashboard server; the alert rules stay
-| {CRE-PLT-017}, beyond what document 07-04 lists for the proof of concept | The longer load runs need a second replica and hours of resources
+| {CRE-PLT-022}, dashboards only | The proof of concept has no dashboard server; the alert rules stay
+| {CRE-PLT-023}, beyond what document 07-04 lists for the proof of concept | The longer load runs need a second replica and hours of resources
 |===
 
-Everything else is on the shortest path: forty-one increments before the first demonstration.
+Everything else is on the shortest path: forty-nine increments before the first demonstration.
 
 == A creation prompt in full
 
@@ -445,7 +494,8 @@ INPUT
   the branch of pull request <number> and the main branch. You may also read
   in full any file it touches.
 - The increment it claims to deliver: <creation prompt identifier>, catalogued
-  in doc/2-spec/08-engineering-workflow.
+  in doc/2-spec/08-engineering-workflow, and the file <description file>: the
+  description of the pull request, which holds the report of its author.
 - The specification under doc/2-spec. It is the reference. Where code and
   specification differ, the code is wrong; if you believe the specification is,
   say so as a finding.
@@ -512,8 +562,7 @@ CHECK
    status, event or option.
 4. Names in the code are those of the specification: aggregates, commands,
    events, statuses, error codes.
-5. Every test and every scenario carries its identifier; the list of delivered
-   use cases was updated.
+5. Every test carries its identifier.
 6. The author's report: each assumption is acceptable, or is a gap of the
    specification to be raised as such.
 ----
@@ -607,12 +656,15 @@ CHECK
    caller must not set is bound. No query, path or command is built from text.
 3. Tokens: issuer, audience and expiry are validated; a token is relayed to our
    own services only; it is never logged or returned to a browser.
-4. No secret in code, configuration, tests or history. Secrets are read from
-   where the platform mounts them.
+4. No secret in the code, the configuration or the tests of the change.
+   Secrets are read from where the platform mounts them. (The history is the
+   business of the secrets gate.)
 5. Logs, traces, error answers and e-mails carry no password, token, payment
    datum or personal data beyond what the specification allows.
 6. Web gateway: cookie attributes, anti-forgery, response headers.
-7. Each dependency added exists, is the intended one, and is pinned.
+7. Each dependency added is declared with its version in the parent build, and
+   is in the stack of document 04-01 or justified in the author's report.
+   (That it exists and is the intended one is checked by a person.)
 8. Infrastructure and pipeline: least privilege; nothing public; no key file;
    no gate weakened.
 ----
@@ -778,7 +830,15 @@ What strategy checks that what runs in an environment is what the specification 
 
 A change that passed every gate can still be deployed with the wrong values, or sit next to a resource that nobody declared.
 Two experts look at the result rather than at the change.
-They hold no cloud identity (document 08-02): a job of the pipeline, with a read-only identity, writes a snapshot of the environment, and the expert reads that file.
+They hold no cloud identity and have no shell (document 08-02): a job of the pipeline writes the files they read.
+
+.What the pipeline writes for them
+[cols="3,12", options="header"]
+|===
+| File | Content
+| The snapshot of an environment | One file, written with the read-only operations identity of that environment. For each workload: the digest of its image, the version of its chart, replicas wanted and ready, requests and limits, restarts. The results of the tests that followed the deployment. The alerts that are firing. For each subscription: the age of the oldest message, the count of its dead letters. For each service: parked rows, the age of the oldest unpublished row. The orders under review, with their age. The summary of the plan of the infrastructure, and the resources without labels. In the proof of concept: the deadline, the budget, the spending so far. A test in progress declares itself in the snapshot.
+| The folder of a milestone | The test reports of the pipeline; the list of delivered use cases; the registry of identifiers; an export of the pull requests of the milestone, with the findings of the experts and what was done about each
+|===
 
 .What is verified, where
 [cols="3,8,4", options="header"]
@@ -805,9 +865,9 @@ CHECK
    this environment.
 3. Every pod is ready; no pod restarted since the deployment.
 4. The tests that follow a deployment passed.
-5. No alert is firing. No message in a dead-letter subscription; no parked row;
-   no outbox row older than its threshold; no order under review that nobody
-   handles.
+5. No alert is firing and nothing waits for a person: no dead letter, no parked
+   row, no outbox row older than its threshold, no order under review. The only
+   exception is what the snapshot attributes to a test in progress.
 6. The plan of the infrastructure is empty; no resource lacks its labels.
 7. Proof of concept: the deadline of destruction is set and in the future; the
    budget and its alerts exist; the spending so far is within the estimate of
@@ -818,8 +878,8 @@ Report CONFORMS, or each difference with what the specification requires.
 [[VER-PLT-014]]
 === VER-PLT-014 — Release auditor
 
-Reads documents 00-03 and 07-02, the test reports of the pipeline, and the pull requests of the milestone.
-Its input is a milestone.
+Reads documents 00-03 and 07-02, and the folder that the pipeline writes for a milestone.
+Its input is that folder.
 
 [source,text]
 ----
@@ -849,11 +909,11 @@ What strategy keeps the factory itself cheap, measurable and improvable?
 [cols="4,11", options="header"]
 |===
 | Subject | Rule
-| Creation prompts | The frame is a file of the repository. The filled text of an increment is in its backlog entry (document 08-04), generated from the catalog above.
+| Creation prompts | The frame and the filled prompt of each increment are files of the repository, written from the catalog above and reviewed. The backlog entry of an increment (document 08-04) carries the same text.
 | Experts | Each expert is a subagent file of the repository: its checklist, and reading tools only. A change to an expert is reviewed like a change to a gate.
 | The difference | Given to an expert as a file, written by the workflow of the pipeline or by the author's session. An expert has no shell with which to compute it.
 | Before the pull request | The author runs the experts that concern the change on the workstation, as subagents: findings are cheapest there
-| On the pull request | A workflow of the pipeline runs the same experts, chosen by the paths the change touches, and posts their findings. It has a limit of turns and of spending (document 08-02).
+| On the pull request | A workflow of the pipeline runs the same experts, chosen by the paths the change touches, and posts their findings. It always runs as defined on the main branch, reads the proposed change without executing it, and has a limit of turns and of spending (document 08-02).
 | After a deployment | The environment verifier runs on the snapshot
 |===
 

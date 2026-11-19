@@ -1,6 +1,11 @@
 // ids:end
 == Order
 
+.Strategy question
+****
+What strategy describes every outcome of placing, following, canceling and supervising an order?
+****
+
 Orders are where the platform makes its promise; these use cases carry most of the business rules.
 
 [[UC-ORD-001]]

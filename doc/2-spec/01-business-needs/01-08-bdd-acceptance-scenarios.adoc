@@ -1,6 +1,6 @@
 = BDD Acceptance Scenarios: Examples That Define "Done"
 :doc-id: 01-08
-:revnumber: 0.5
+:revnumber: 0.6
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Gherkin acceptance scenarios, generated from the feature files, with their index and trace links.
@@ -53,7 +53,7 @@ That is what allows the same scenario to run at two levels.
 |===
 | Level | Against | When
 | Acceptance | The domain and application code of the services, with in-memory adapters in place of databases, messaging and providers | At every build, in seconds
-| End to end | The deployed platform, through the storefront; only the scenarios tagged `@e2e` | After each deployment to the integration environment
+| End to end | The complete platform, through the storefront: in containers before a deployment exists, then deployed. Only the scenarios tagged `@e2e`. | On a workstation; after each deployment to the integration environment
 |===
 
 A critical-path scenario that needs a failure to be provoked — a restart, an outage, a stale copy — or that asserts what no screen shows, runs at the acceptance level only.
