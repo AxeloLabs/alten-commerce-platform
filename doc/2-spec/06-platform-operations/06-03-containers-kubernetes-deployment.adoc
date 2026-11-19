@@ -1,6 +1,6 @@
 = Containers and Kubernetes Deployment: From an Image to a Running Service
 :doc-id: 06-03
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How an image is built and hardened, what runs in a pod, the Kubernetes objects of a service, sizing and connection budgets, probes and rollouts, and the Helm charts.
@@ -87,7 +87,7 @@ plantuml::diagrams/k8s-objects.puml[format=svg, align=center]
 [%unbreakable, cols="4,3,8", options="header"]
 |===
 | Object | Where | Purpose
-| Gateway | Namespace `edge` | The entry point: one address, the certificate, the host names
+| Gateway | Namespace `edge` | The entry point. It refers to the address and to the certificate that the infrastructure code created (document 06-04), and lists the host names
 | Routes | Each environment | Host name of the store to the web gateway; host name of the identity provider to its sign-in addresses only
 | Backend policies | Each environment | The firewall policy and the health check that the load balancer applies to the web gateway and to the identity provider
 | Default network policy | Each environment | Everything denied unless a policy of a service allows it
@@ -103,46 +103,64 @@ What strategy sizes workloads when the cluster bills exactly what they ask for?
 ****
 
 On Autopilot the request of a container is at once what it is guaranteed and what is paid.
-The values below are starting points, to be corrected by the measurements of the load tests (document 07-04); they are deliberately small.
+Two sets of values exist, one per deployment profile ({ADR-PLT-030}).
+Both are starting points, to be corrected by measurements (document 07-04).
 
-.Requests and replicas
-[cols="4,2,2,2,2,3", options="header"]
+.Requests and replicas, full profile
+[cols="5,2,2,2,2,3", options="header"]
 |===
 | Workload | Processor | Memory | test | integration | prod
-| Order, inventory, payment services | 0.5 | 1 GiB | 1 | 2 | 2 to 4
-| Catalog, cart services | 0.25 | 768 MiB | 1 | 2 | 2 to 4
+| Order, inventory, payment services | 0.5 | 1 GiB | 1 | 2 | 2 to 6
+| Catalog, cart services | 0.25 | 768 MiB | 1 | 2 | 2 to 6
 | Notification service | 0.25 | 768 MiB | 1 | 2 | 2
-| Web gateway | 0.25 | 512 MiB | 1 | 2 | 2 to 4
+| Web gateway | 0.25 | 512 MiB | 1 | 2 | 2 to 6
 | Identity provider | 0.5 | 1 GiB | 1 | 1 | 2
 | Trace collector, Grafana | 0.1 each | 256 MiB each 3+^| 1, shared by the three environments
 |===
 
-.Scaling in production
+.Requests and replicas, proof of concept
+[%unbreakable, cols="5,3,3,3", options="header"]
+|===
+| Workload | Processor | Memory | Replicas
+| Each of the six services; the web gateway | 0.25 | 512 MiB | 1
+| Identity provider | 0.25 | 768 MiB | 1
+| Trace collector | 0.05 | 128 MiB | 1
+| Grafana 2+^| Not deployed: the views of the provider are used | –
+| *Total requested* | *2.05* | *4.4 GiB* | –
+|===
+
+The proof of concept runs one replica of everything.
+The loss of a pod interrupts its function for the time of a restart: {NFR-AVAIL-002} is specified for the full profile, and not met by this one.
+
+.Scaling in production, full profile
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Subject | Rule
 | Signal | Processor use above 70 % of the request, averaged over the replicas
-| Bounds | Never fewer than two replicas ({NFR-AVAIL-002}); never more than the maximum of the table, which the connection budget below justifies
+| Bounds | Never fewer than two replicas ({NFR-AVAIL-002}); never more than six ({NFR-SCAL-001}). The connection budget below is computed for six.
 | Down | Slowly: a replica is removed only after several minutes of low load, and always through a clean shutdown
 | Message consumers | Scaled the same way. A backlog that grows while the processor is idle means a dependency is slow, not that replicas are missing: it raises an alert, not a scale-up.
 | Non-production | No autoscaler. `test` and `integration` are set to zero replicas when unused, and back when a pipeline or a person needs them (document 06-06).
 |===
 
-.Connection budget of the database instance
-[cols="4,3,3,3,3", options="header"]
+.Connection budget of the database instance, full profile
+[cols="4,2,4,3,3", options="header"]
 |===
-| Workload | Pool per replica | prod, at most | integration | test
-| Order, inventory, payment | 10 | 40 + 40 + 30 | 20 + 20 + 20 | 10 + 10 + 10
-| Catalog, cart | 5 | 20 + 20 | 10 + 10 | 5 + 5
-| Notification | 5 | 10 | 10 | 5
-| Web gateway | 5 | 20 | 10 | 5
-| Identity provider | 10 | 20 | 10 | 10
-| *Total* | | *200* | *110* | *60*
+| Workload | Pool per replica | prod: six replicas, and one being replaced | integration: two, and one | test: one, and one
+| Order, inventory, payment | 5 | 35 each: 105 | 15 each: 45 | 10 each: 30
+| Catalog, cart | 3 | 21 each: 42 | 9 each: 18 | 6 each: 12
+| Notification | 3 | 9 | 9 | 6
+| Web gateway | 3 | 21 | 9 | 6
+| Identity provider | 10 | 30 | 20 | 20
+| *Total* | | *207* | *101* | *74*
 |===
 
-The three environments share one instance: 370 connections at most, plus a few for migrations and for operators.
-The instance is set to accept 500, which leaves the margin of 20 % that document 04-04 asks for.
-The payment service is capped at three replicas in production for this reason; raising any maximum means revisiting this table first.
+A rolling update adds one pod before it removes one, so every count includes that extra pod.
+The three environments share one instance: 382 connections at most, plus a few for migrations and operations jobs.
+The instance is set to accept 500, which keeps the margin of 20 % that document 04-04 asks for.
+Raising a pool or a maximum of replicas means redoing this table first.
+
+In the proof of concept the pools are 3 for the services of a saga, 2 for the others and 5 for the identity provider: 44 connections with the extra pod of an update, on a small instance set to accept 60.
 
 == Probes and rollouts
 
@@ -166,12 +184,12 @@ The behaviors are specified in document 05-02; these are their values.
 [cols="4,11", options="header"]
 |===
 | Step | Rule
-| Before | The migration job runs; if it fails nothing else happens.
+| Before | The migration job runs: it is a step of the chart, which Helm executes before changing anything else. If it fails, nothing else happens.
 | Replacement | One pod at a time: a new pod is created, becomes ready and stays so for 10 s, then an old one is asked to stop. The number of ready replicas never goes below what it was.
 | Stopping a pod | It is first removed from the load balancer and stops pulling messages; it waits 10 s for requests already routed to it; it finishes what it has in hand; it exits. It has 60 s in all before it is killed.
 | Failure | A new pod that never becomes ready stops the rollout. The old pods keep serving; the pipeline reports the failure and returns to the previous release (document 06-05).
 | Zones | Replicas of a service are spread over zones; a rollout keeps the spread.
-| Production | Progressive: a share of the traffic first, a verification, then the rest (document 06-05).
+| Verification | Once the last pod is replaced, the critical paths are verified; a failure returns to the previous release (document 06-05).
 |===
 
 == Charts
@@ -192,13 +210,15 @@ Deployments are packaged with Helm {v-helm}.
 | `environment` | What exists once per namespace: default network policy, quota, security profile
 | `edge` | The Gateway and its certificate
 | `observability` | The trace collector, Grafana, dashboards and alert rules
+| `operations` | The operations jobs of document 06-07, each as a job that a run of the pipeline starts with its parameters
 |===
 
 .Rules
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Subject | Rule
-| Values | One file of defaults per workload, one file per environment holding only what differs (document 06-01)
+| Format | Charts, values, pipeline definitions and contracts are YAML: one format to read, to lint and to review.
+| Values | One file of defaults per workload, one file per environment holding only what differs (document 06-01), and one for the proof-of-concept profile
 | No logic | A chart has no condition on the name of an environment. An environment is a set of values.
 | Images | Referred to by digest, given by the pipeline. A chart never names a tag.
 | Checks | Every chart is rendered with the values of each environment at each build, and the result is validated against the schemas of Kubernetes {v-kubernetes} and against the security profile
