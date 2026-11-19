@@ -1,0 +1,23 @@
+@startuml
+title From a creation prompt to a verified change
+
+skinparam activity {
+  BackgroundColor<<dev>> #FFF8E1
+  BackgroundColor<<author>> #E3F2FD
+  BackgroundColor<<pipeline>> #F4F7F9
+  BackgroundColor<<expert>> #C8E6C9
+}
+
+start
+:**Developer**\nTakes the next creation prompt of the backlog; <<dev>>
+repeat
+  :**Author agent**\nReads the specification the prompt names\nWrites the named tests, then the code\nRuns the whole build\nOpens or updates the pull request, and reports; <<author>>
+  :**Pipeline**\nRuns the gates of document 06-05\nDeterministic: they block; <<pipeline>>
+  :**Expert agents**\nCompare the change with the specification\nAdvisers: they comment; <<expert>>
+  :**Developer**\nReads the change, the gates and the findings; <<dev>>
+repeat while (Gates pass, and every finding is\nfixed or dismissed with a reason?) is (no) not (yes)
+:**Developer**\nMerges; <<dev>>
+:**Pipeline**\nDelivers to the environments; <<pipeline>>
+:**Expert agents**\nThe environment verifier compares\nwhat runs with the specification; <<expert>>
+stop
+@enduml
