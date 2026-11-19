@@ -7,3 +7,21 @@ node_modules/
 *.iml
 .vscode/
 .DS_Store
+
+# Secrets and local configuration: never committed
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+service-account*.json
+*-credentials.json
+.claude/settings.local.json
+
+# Terraform: state and local cache
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
