@@ -1,6 +1,6 @@
 = Infrastructure as Code: Every Cloud Resource Described, Reviewed and Reproducible
 :doc-id: 06-04
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: What Terraform manages and what it does not, the layout of the code and of its state, the module applied once per environment, the workflow of a change, and what exists before Terraform.
@@ -30,7 +30,7 @@ The console is for looking, never for changing.
 [cols="4,4,7", options="header"]
 |===
 | Thing | Described with | Examples
-| Cloud resources | Terraform | Network, cluster, database instance, topics and subscriptions, identities and rights, secrets containers, registry, names, certificate, firewall policy, budget, delivery pipeline
+| Cloud resources | Terraform | Network, cluster, database instance, topics and subscriptions, identities and rights, secrets containers, registry, names, certificate, firewall policy, budget, admission policy of images, outside probe and alert channels
 | What runs in the cluster | Helm charts (document 06-03) | Deployments, services, routes, network policies, dashboards and alert rules
 | The schema of a database | Migrations (document 04-04) | Tables, indexes, reference data
 | The configuration of the identity provider | A realm file in its chart | Realm, client, roles, policies (document 05-04)
@@ -57,14 +57,15 @@ deploy/terraform/
 │   ├── cluster/             the Autopilot cluster and its settings
 │   ├── database/            the instance: size, availability, backups, flags
 │   ├── edge/                public address, certificate, firewall policy
-│   ├── delivery/            delivery pipeline and its targets; trust with GitHub
-│   ├── guardrails/          budget and its alerts, quotas
+│   ├── delivery/            trust with GitHub; deployment identities; attestor and its key
+│   ├── guardrails/          quotas, spending latch, outside probe, alert channels
 │   └── environment/         everything that carries the name of an environment
 │       ├── messaging/       schemas, topics, subscriptions, dead letters, rights
 │       ├── identities/      one identity per workload, its bindings
 │       ├── databases/       one database and one account per workload
 │       └── secrets/         the secrets containers and who may read them
 └── live/
+    ├── owner/               the budget: applied by the owner, not by the pipeline
     ├── shared/              what exists once
     ├── test/                the environment module, with "test"
     ├── integration/         the environment module, with "integration"
@@ -75,12 +76,24 @@ deploy/terraform/
 [cols="3,6,6", options="header"]
 |===
 | Root | Creates | Changes
-| `shared` | Network, cluster, database instance, entry point, registry, delivery pipeline, guardrails | Rarely. A change here can reach the three environments at once: it is reviewed accordingly, and applied outside business hours.
+| `owner` | The budget and its alerts | By the owner only, with the owner's own rights on the billing account: the one exception to "nothing outside the pipeline" (document 06-06)
+| `shared` | Network, cluster, database instance, entry point, registry, deployment identities, admission policy, guardrails | Rarely. A change here can reach the three environments at once: it is reviewed accordingly, and applied outside business hours.
 | `test`, `integration`, `prod` | The resources of one environment | With releases. Applied in that order; `prod` after approval.
 |===
 
-Each root has its own state, kept in a storage bucket with versions, encryption and locking.
-Four states mean that a run on `test` cannot read, let alone change, what belongs to `prod`.
+Each root has its own state, kept in one storage bucket — in a location that spans several regions — with versions, encryption and locking.
+Separate states mean that a run on `test` cannot read, let alone change, what belongs to `prod`.
+
+.What the proof-of-concept profile changes ({ADR-PLT-030})
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | In the proof of concept
+| Profile | One variable of the roots chooses the profile. Nothing else in the code differs.
+| `shared` | A small database instance without standby; no outgoing address; no firewall policy; no names zone; no access proxy
+| Environments | The environment module is applied once, under the name `prod`
+| Protections | None: every resource can be destroyed by the pipeline
+| Destruction | A scheduled job destroys every root at the deadline given at creation (document 06-06)
+|===
 
 .What the environment module creates, each time it is applied
 [cols="5,3,7", options="header"]
@@ -89,11 +102,10 @@ Four states mean that a run on `test` cannot read, let alone change, what belong
 | Message schemas, topics | 5 and 5 | From the contract files of the repository (document 03-05)
 | Subscriptions, with filter, ordering, retry and dead-letter policy | 7 | –
 | Dead-letter topics and their inspection subscriptions | 7 and 7 | –
-| Identities of workloads | 8 | Six services, the web gateway, the identity provider
-| Rights | About 40 | On individual topics, subscriptions and secrets; the three project-level rights of document 06-02
+| Identities | 10 | Six services, the web gateway, the identity provider; one for migrations; one for operations jobs
+| Rights | About 50 | On individual topics, subscriptions and secrets; the three project-level rights of document 06-02
 | Databases and their accounts | 8 and 8 | Empty: migrations fill them
-| Secrets containers | 4 | Client secret and session key of the web gateway; administration credentials of the identity provider; credential of the e-mail provider
-| Routes of the entry point | 2 | The store and its identity provider, by host name
+| Secrets containers | 3 | Client secret and session key of the web gateway; administration credentials of the identity provider. A fourth, for the e-mail provider, the day it is no longer simulated
 |===
 
 == A change, from proposal to production
@@ -114,16 +126,17 @@ plantuml::diagrams/iac-workflow.puml[format=svg, align=center]
 | Plan | Computed by the pipeline for every root the change touches, and posted on the pull request: what is created, changed, destroyed. A plan that destroys a database, a topic or a secret is flagged in red.
 | Review | A person reads the plan, not only the code. The code says what was written; the plan says what will happen.
 | Apply | By the pipeline, with the plan that was reviewed, root by root: `shared`, `test`, then `integration` once the tests of `test` pass, then `prod` after approval (document 06-05).
-| Afterwards | Every night the pipeline computes a plan of each root. It must be empty; anything else means someone changed something by hand, and raises an alert.
+| Afterwards | Every night the pipeline computes a plan of each root. It must be empty; anything else means someone changed something by hand, and raises an alert. A plan sees only what the code manages, so the same run lists every resource of the project that does not carry the label `managed-by`: what was created by hand shows there.
 |===
 
 .Protections
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Protection | On
-| Deletion refused by the resource itself | The database instance, the cluster
-| Deletion refused by Terraform | Databases, topics of production, secrets containers, the names zone, the state buckets
-| Destroying a root | Not a pipeline job. Removing the platform is a documented procedure, started by the owner of the project (document 06-06).
+| Rights | The roles that matter — owner, editor, and the three project-level rights of document 06-02 — are declared exclusively: a member added by hand is removed at the next run
+| Deletion refused by the resource itself | In the full profile: the database instance, the cluster
+| Deletion refused by Terraform | In the full profile: the databases, the topics and the secrets containers of production; the names zone. The bucket of the states is not managed by Terraform: it is protected by its versions and by rights.
+| Destroying | Two jobs of the pipeline, and no other way. _Destroy the proof of concept_ removes every root at the deadline, or earlier at the owner's request; it runs only where the proof-of-concept profile is deployed. _Rebuild integration_ destroys and recreates the `integration` root alone, after an approval. Nothing destroys the production of the full profile except the owner, by hand.
 | Versions | Terraform, the provider and the modules are pinned; the lock file is committed. An upgrade is a pull request with its own plan.
 |===
 
@@ -164,12 +177,12 @@ They are created once, by the owner of the project, following a procedure of doc
 | The project, linked to a billing account | Spending authority belongs to a person
 | The bucket of the states | Terraform cannot store its state in a bucket it has not created yet
 | The trust between GitHub and the project, and the identity of the pipeline | The pipeline cannot grant itself the right to act
-| The budget of the project and who is alerted | The first guardrail must not depend on the tool it guards (document 06-06)
-| The domain name of the store | Bought from a registrar; only its zone is managed here
+| The budget of the project and who is alerted | Declared in the `owner` root, and applied by the owner with their own rights (document 06-06)
+| The domain name of the store | Bought from a registrar; only its zone is managed here. None in the proof of concept (document 06-02).
 |===
 
-Everything else — more than two hundred resources — is created by the first run of the four roots, in order.
-An empty project becomes a working platform by running the pipeline, which is also how the procedure is tested: the integration environment can be destroyed and rebuilt from the repository.
+Everything else is created by the first run of the roots, in order.
+An empty project becomes a working platform by running the pipeline, which is also how the procedure is tested: the proof of concept is created from nothing and destroyed whole, and in the full profile the integration environment is rebuilt by its job.
 
 .Labels
 [%unbreakable, cols="4,11", options="header"]

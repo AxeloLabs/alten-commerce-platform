@@ -1,6 +1,6 @@
 = GCP and GKE Architecture: The Project, the Network and Its Addresses, the Cluster
 :doc-id: 06-02
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The Google Cloud resources of the platform, the network with its address plan, the paths of traffic, the cluster and the managed services, and how the layout can grow.
@@ -29,10 +29,12 @@ The platform uses managed services wherever one exists, so that the only thing t
 | Messages | Pub/Sub | Topics, subscriptions, schemas (document 03-05)
 | Documents | Firestore | Only where a service is configured for it: the contract tests of the catalog and the cart ({ADR-PLT-013})
 | Secrets | Secret Manager | Document 05-04
-| Images | Artifact Registry | One repository; images signed and scanned
+| Images | Artifact Registry | One repository, in a location that spans several regions; images signed and attested by the pipeline
+| Admission of images | Binary Authorization, with a key in the key management service | Only attested images run (document 06-05)
 | Outgoing traffic | Cloud NAT | One known address for calls to providers
 | Observability | Cloud Logging, Cloud Trace, Managed Service for Prometheus | Document 05-03
-| Delivery | Cloud Deploy | Promotion between environments (document 06-05)
+| Outside probe, alert channels | Cloud Monitoring | The probe and the notifications of document 05-03
+| Access to internal screens | Identity-Aware Proxy | Grafana and the administration console of the identity provider, for named people only
 |===
 
 .Fixed choices
@@ -80,6 +82,8 @@ plantuml::diagrams/network.puml[format=svg, align=center, pdfwidth=78%]
 | `203.0.113.10` | Public, reserved, regional | The address our calls to providers come from: what a provider would put on its allow list
 | `10.40.0.3` | Private | The database instance
 | `10.30.0.10` | Private | The name service of the cluster
+| `169.254.20.10` | Local to each node | The name service as a pod sees it: a cache on its node, in front of the one above
+| `169.254.169.254` | Local to each node | The metadata server, on ports 80 and 8080: where a pod obtains the credential of its identity
 | A pod | Private, from the pod range | Changes at every restart. Nothing refers to a pod by address: services are reached by name.
 |===
 
@@ -94,6 +98,10 @@ Private ranges are final.
 | `<service>.<namespace>.svc.cluster.local` | The service of that name in that environment: how the web gateway reaches a service, and a service another. A name never crosses a namespace.
 | The Google APIs | The private-access range: calls to Pub/Sub, the secret manager and telemetry never leave Google's network
 |===
+
+In the proof of concept no domain name is bought.
+The host names come from a free public service that resolves a name containing an address to that address, and the certificate is requested for those names.
+Should the provider refuse a certificate for such names, the proof of concept runs with a certificate signed by ourselves, and the browser warns its visitors: this is to be tried at the first deployment.
 
 .Why pods of three environments share one range
 ****
@@ -154,7 +162,7 @@ Google manages the nodes, their upgrades and their scaling; the team declares wo
 | Gateway API | Enabled, with the class of the global external load balancer | The entry point is declared like any other Kubernetes object
 | Secret Manager integration | Enabled | Secrets mounted as files
 | Managed Prometheus | Enabled | Metrics collected without anything to run
-| Admission of images | Only images signed by the pipeline, from our registry | Document 06-05
+| Admission of images | Binary Authorization in blocking mode: only images that the pipeline attested | Document 06-05
 |===
 
 .What Autopilot imposes, and what it changes for us
@@ -173,7 +181,7 @@ Google manages the nodes, their upgrades and their scaling; the team declares wo
 | Namespace | Content
 | `test`, `integration`, `prod` | The web gateway, the six services and the identity provider of that environment; its network policies, quotas and service accounts
 | `edge` | The Gateway: the one entry point, with a route per environment
-| `observability` | The collector of traces; Grafana
+| `observability` | The collector of traces; Grafana, reached through the identity-aware proxy by named people. No Grafana in the proof of concept.
 |===
 
 == Managed services
@@ -193,7 +201,7 @@ What strategy sets up each managed service so that it is private, recoverable an
 | Access | Through the Cloud SQL connector, with the Google identity of each service; a database account per service and per environment, with a limit on its connections (document 04-04)
 | Databases | One per service and per environment, plus those of the three identity providers and of the three web gateways
 | Backups | Daily, and recovery to a point in time over the last 7 days ({NFR-AVAIL-004}). Stored in a location that spans several regions, so that they survive the loss of the region (document 06-07)
-| Size | Small at first: two processors, eight gigabytes of memory, storage that grows by itself. Reviewed after the load tests.
+| Size | Full profile: two processors, eight gigabytes of memory, 500 connections accepted, storage that grows by itself; reviewed after the load tests. Proof of concept: a small shared instance without standby, 60 connections (documents 06-03 and 06-06).
 | Maintenance | A window outside business hours
 |===
 
@@ -203,10 +211,10 @@ What strategy sets up each managed service so that it is private, recoverable an
 | Service | Setup
 | Pub/Sub | Per environment: 5 topics with their schema, 7 subscriptions, 7 dead-letter topics with their inspection subscriptions (document 03-05). Storage in the region.
 | Secret Manager | One secret per need and per environment; versions; access per identity
-| Artifact Registry | One repository in the region; tags cannot be moved once pushed; images scanned on arrival
+| Artifact Registry | One repository, in a location that spans several regions, so that images survive the loss of the region; tags cannot be moved once pushed. Images are scanned by the pipeline, not by the registry (document 06-05).
 | Certificate Manager | One certificate for the six host names, validated through the DNS zone
-| Cloud Armor | One policy on the entry point: managed rules, rate limits, a stricter limit on sign-in and checkout
-| Cloud NAT | One reserved address; used by the payment and notification services only
+| Cloud Armor | One policy on the entry point: managed rules, rate limits, a stricter limit on sign-in and checkout. Not in the proof of concept.
+| Cloud NAT | One reserved address; used by the payment and notification services only. Not in the proof of concept: both providers are simulated inside the platform, and nothing calls out.
 | Firestore | One database in native mode, used by the contract tests of `test`; none in production as long as PostgreSQL is the store
 |===
 
@@ -235,8 +243,11 @@ Logs need no right: they are written to standard output and collected by the clu
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Identity | Rights
-| The build pipeline | Push images to the registry; create releases in Cloud Deploy. Authenticated from GitHub without a stored key (document 06-05).
-| The delivery pipeline | Deploy to the cluster; apply migrations with an account that may change schemas
+| The build pipeline | Push images to the registry; create attestations with the key of the attestor. Authenticated from GitHub without a stored key (document 06-05).
+| Deployment, one per environment | Change the workloads of its namespace. Issued only to the job of the pipeline bound to that environment.
+| Migrations, one per environment | Change the schema of the databases of its environment. Used by the migration jobs of the charts.
+| Operations jobs, one per environment | What the jobs of document 06-07 need, and no more: publish to the topics and read the dead-letter subscriptions of its environment, move a subscription in time, restart or scale a workload of its namespace, call the administration interface of the identity provider
+| Trace collector, Grafana | Write traces; read metrics
 | Terraform | Create and change the resources of this document, from the pipeline only
 | Engineers | Read logs, metrics and traces of every environment; nothing else in production
 | Emergency access | Granted for a limited time, on request, and recorded
