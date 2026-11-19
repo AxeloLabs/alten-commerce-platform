@@ -1,0 +1,28 @@
+@startuml
+title Sign-in through the web gateway: no token reaches the browser
+actor "Customer" as C
+participant "Storefront\n(browser)" as SPA
+participant "Web gateway" as GW
+participant "Identity provider" as KC
+participant "A service" as S
+
+C -> SPA : "Sign in"
+SPA -> GW : GET sign-in address
+GW --> SPA : redirect to the identity provider,\nwith a one-time challenge
+SPA -> KC : sign-in page
+C -> KC : e-mail address and password
+note over KC : the only place\na password is typed
+KC --> SPA : redirect back, with a one-time code
+SPA -> GW : the code
+GW -> KC : code, client secret, proof of the challenge
+KC --> GW : identity, access and refresh tokens
+note over GW : tokens saved with a new session,\non the server side
+GW --> SPA : session cookie:\nnot readable by scripts,\nsent over HTTPS only
+== later ==
+SPA -> GW : GET /api/v1/orders, session cookie
+note over GW : finds the session;\nrenews the access token\nif it is about to expire
+GW -> S : GET /v1/orders, access token
+note over S : validates signature, issuer,\naudience, expiry; reads the role
+S --> GW : the customer's orders
+GW --> SPA : the same
+@enduml

@@ -1,0 +1,306 @@
+= Security Architecture: Who May Do What, and How Each Layer Enforces It
+:doc-id: 05-04
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: What is protected and against whom, sign-in and sessions, authorization in services, protection of data and secrets, identities of workloads, network controls, audit and security testing.
+include::../_shared/attributes.adoc[]
+
+== What is protected, and against whom
+
+.Strategy question
+****
+What strategy spends security effort where an attack would hurt, instead of everywhere equally?
+****
+
+.What is worth protecting
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Asset | Harm if it is lost
+| Accounts and personal data of customers | Impersonation; disclosure of names, addresses and purchases
+| Integrity of orders and payments | Goods obtained without paying; money kept or returned wrongly
+| Prices and stock | A store that sells at the wrong price, or what it does not have
+| Administration functions | All of the above at once
+| Secrets and identities of services | Everything a service can reach
+| What we ship | A dependency or an image carrying someone else's code
+| Availability, and the bill | A store closed; a cloud invoice driven by an attacker
+|===
+
+.Who might attack, and from where
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Adversary | Starting point
+| Anyone on the internet | The public address: the storefront, its interfaces, the sign-in pages
+| A signed-in customer | A valid session, used to reach what belongs to others or to administrators
+| A script in the customer's browser | The page itself: an injected script, a malicious extension
+| A compromised dependency or image | Inside a pod, with the identity of that service
+| A mistake of ours | A wrong rule, a secret committed, an environment left open
+|===
+
+plantuml::diagrams/trust-boundaries.puml[format=svg, align=center]
+
+The architecture answers with layers, each of which assumes the one before it has failed.
+A request that passes the firewall still needs a session; one with a session still needs a valid token at the service; a pod that is taken over still reaches only its own database and its own topics.
+
+Owner: {role-sec} {role-arch}
+
+== Sign-in
+
+.Strategy question
+****
+What strategy lets customers sign in without any part of the platform ever handling a password?
+****
+
+Identity is delegated to Keycloak {v-keycloak} ({ADR-PLT-020}).
+
+plantuml::diagrams/signin-bff.puml[format=svg, align=center]
+
+.Configuration of the identity provider
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Choice
+| Realm | One per environment. An account of the test environment does not exist in production.
+| Clients | One: the web gateway, a confidential client with a secret. The browser application is not a client ({ADR-PLT-018}).
+| Flow | Authorization code, with a proof of the challenge. No other flow is enabled.
+| Roles | `CUSTOMER` and `ADMIN`. A registration gives `CUSTOMER` and nothing else; `ADMIN` is granted by an operator, never by a screen of the store ({FR-IAM-002}).
+| Registration | On the pages of the identity provider, with verification of the e-mail address and its password policy ({UC-IAM-001}).
+| Repeated failures | Detected by the identity provider, which slows further attempts on the account. The message never says which of the address or the password was wrong ({FR-IAM-007}).
+| Administrators | A second factor is required at sign-in.
+| Tokens | Access tokens live 5 minutes. Refresh tokens are single-use: each renewal replaces the previous one, and a reused one ends the session.
+| Session at the provider | Ends after 30 minutes without activity, and after 10 hours whatever the activity.
+| Sign-out | Ends the session at the web gateway and at the identity provider. A session ended at the provider is ended at the gateway too.
+|===
+
+The durations are configuration values; those above are the defaults of this release.
+
+== The session at the web gateway
+
+.Strategy question
+****
+What strategy keeps a session safe when the browser around it cannot be trusted?
+****
+
+.Rules of the session
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Cookie | One cookie holds the identifier of the session, and nothing else. It is unreadable by scripts, sent over HTTPS only, bound to the exact host of the store, and not sent by requests that other sites trigger.
+| Store | Sessions, with their tokens, are kept in the database of the web gateway, so that every replica finds them and a restart loses none. Tokens are encrypted before they are stored, with a key from the secret manager.
+| New identifier | The session identifier changes at sign-in: one obtained before sign-in is worthless after.
+| Lifetime | The session ends with that of the identity provider. An expired session answers {ERR-PLT-002}; the storefront sends the person to sign in again and brings them back where they were.
+| Token renewal | Done by the web gateway, shortly before the access token expires. The browser never sees it.
+| Forged requests | A cookie is sent automatically, so every request that changes something must also carry an anti-forgery token, given to the storefront in a separate cookie and returned in a header. A request without it is refused with {ERR-PLT-010}.
+| Headers | The web gateway sets, on every answer: strict transport security; a content security policy that allows scripts from the store only; no framing by other sites; no guessing of content types; a restrained referrer.
+| What it forwards | The access token, and the trace context. Never the session cookie, never a header claiming an identity.
+|===
+
+Keeping tokens out of the browser does not make a hostile script harmless: while the page is open, it can still act with the session.
+It removes what matters most: nothing can be copied and used elsewhere, or after the session ends.
+The content security policy and the escaping done by the front-end framework are what stop the script from running at all.
+
+== Authorization in services
+
+.Strategy question
+****
+What strategy guarantees that every request is checked by the service that owns the data, whoever forwarded it?
+****
+
+Every service is a resource server ({NFR-SEC-001}).
+It trusts a token it has verified, and nothing else: not the web gateway, not a neighbor, not the network.
+
+.What a service checks on every request
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Check | Rule
+| Signature | With the public keys of the identity provider of its environment, fetched from it and kept.
+| Issuer and audience | The realm of its environment, and the audience of the platform's interfaces.
+| Validity | Not expired, with at most 30 seconds of clock difference tolerated.
+| Role | Read from the token. `/v1/admin` requires `ADMIN`; the customer's own resources require `CUSTOMER`. The two roles do not include each other.
+| Owner | The subject of the token. A customer reaches only what carries their identifier; anything else is "not found" ({FR-IAM-004}).
+| Default | Denied. An address with no rule answers {ERR-PLT-003}, whatever the token ({NFR-SEC-002}).
+|===
+
+.Where the rules are written
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Place | Content
+| Authorization matrix | Document 01-05: every use case, every actor, allowed or denied. The source of truth.
+| Contract | Each endpoint of each OpenAPI document states the role it requires (document 04-05).
+| Shared starter | The defaults: validation of tokens, mapping of roles, deny by default.
+| Service | Its own rules, by address prefix and at the entry of each use case.
+| Tests | One test per cell of the matrix, allowed and denied alike ({NFR-SEC-002}).
+|===
+
+Messages are authorized differently, since they carry no person's token: a service can publish to, and read from, only the topics and subscriptions its identity was granted (document 03-05).
+A consumer trusts a message because only the rightful publisher could have put it on that topic.
+
+== Protection of data
+
+.Strategy question
+****
+What strategy keeps data unreadable outside the service that owns it?
+****
+
+.In transit
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Exchange | Protection
+| Browser to the platform | HTTPS only, with managed certificates; plain HTTP is redirected ({NFR-SEC-003})
+| A service to its database | Encrypted and authenticated by the database connector, on a private address
+| A service to Pub/Sub, to the secret manager, to a provider | HTTPS
+| Between pods | The private network of the cluster, restricted by network policies. Not encrypted in this release: the requirement covers external exchanges, and every call still carries a token that the receiver verifies. Encryption between pods is an evolution listed in document 06-02.
+|===
+
+.At rest
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Store | Protection
+| Databases, messages, secrets, logs, backups | Encrypted by the managed services, with keys managed by Google. Keys managed by us are an evolution, not a need of this release.
+| Tokens in sessions | Encrypted by the web gateway before they are stored
+| Card data | None exists in the platform ({FR-PAY-003})
+|===
+
+Personal data is listed place by place in document 04-04, and the rules for the payment token in document 03-06.
+The rule that covers both: data is collected only where a function needs it, kept only as long as that function needs it, and never written to a log ({NFR-SEC-007}).
+
+== Secrets
+
+.Strategy question
+****
+What strategy makes a secret impossible to find in a repository, an image or a log?
+****
+
+The best secret is the one that does not exist.
+Services reach the database, the bus and the secret manager with their own identity, which needs no password ({NFR-SEC-004}).
+
+.The secrets that remain
+[cols="5,4,6", options="header"]
+|===
+| Secret | Used by | Note
+| Client secret of the web gateway at the identity provider | Web gateway | Rotated on a schedule and after any suspicion
+| Key that encrypts the tokens in sessions | Web gateway | Rotation keeps the previous key until existing sessions end
+| Administration credentials of the identity provider | Operators, deployment | Never used by a service
+| Credential of the e-mail provider | Notification service | –
+| Credential of the payment provider | Payment service | None in this release: the provider is simulated
+|===
+
+.Rules
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Storage | Secret Manager, and nowhere else: not in the repository, not in an image, not in a configuration file, not in a deployment descriptor.
+| Delivery | Mounted as files in the pod that needs them, through the platform's integration with the secret manager. A service reads its own secrets only.
+| Rotation | A new version is added, pods are restarted progressively, the old version is disabled. No secret is changed in place.
+| Detection | Every commit is scanned for secrets; a finding blocks the merge (document 06-05). A secret that was committed is considered leaked and rotated, even if the commit is removed.
+| Logs | Configuration is never logged whole. Values from the secret manager are masked.
+|===
+
+== Identities and networks
+
+.Strategy question
+****
+What strategy limits what an attacker gains by taking over one pod?
+****
+
+.Identity of a workload
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| One identity per service and per environment | Each deployment runs under its own Kubernetes service account, bound to its own Google identity. No key file exists.
+| Rights | Granted on individual resources, never on the project: its database, its topics and subscriptions, its secrets, the right to write logs, metrics and traces. Nothing else.
+| Database | A database account per service, mapped to that identity, with rights on its own database and no right to change the schema (document 04-04).
+| People | Nobody has standing rights on production data. Deployment is done by the pipeline; an emergency access is granted for a limited time, and recorded.
+|===
+
+.Network
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Exposed | The load balancer, and nothing else. Nodes and pods have private addresses.
+| Firewall at the edge | Managed rules against common web attacks; limits on the rate of requests by address; a stricter limit on the sign-in and checkout addresses ({NFR-SEC-008}).
+| Inside a namespace | Denied by default. Allowed: the web gateway to the four services with a REST interface; the cart, the order and the inventory services to the catalog; the order service to the cart; every service to the identity provider.
+| Between namespaces | Denied. The test environment cannot reach the pods of production.
+| Outgoing | To the managed services of Google Cloud, to the database, and to the two providers. A pod cannot open a connection to an arbitrary address.
+| Management port | Health and metrics are reachable by the cluster's own components only.
+|===
+
+A pod that is taken over therefore holds one service's rights: it can corrupt that service's data and publish that service's messages.
+It cannot read another database, publish as another service, reach another environment, or call out to the internet.
+
+== Common attacks and their answers
+
+.Strategy question
+****
+What strategy checks the design against the attacks that actually happen, one by one?
+****
+
+[cols="4,11", options="header"]
+|===
+| Attack | Answer
+| Reaching what belongs to someone else | Deny by default; the owner comes from the token; a test for every cell of the authorization matrix
+| Injection into a query | Queries have parameters, never concatenated text; input is validated against the contract at the edge
+| A script injected into a page | The front-end framework escapes what it displays; the content security policy forbids scripts from elsewhere; product descriptions are plain text
+| A forged request from another site | The session cookie is not sent across sites; the anti-forgery token is required
+| A stolen token | Tokens never reach the browser; access tokens live 5 minutes; refresh tokens are single-use
+| Guessing passwords | Slowed by the identity provider; a second factor for administrators; one message for every failure
+| Making the server call an address chosen by the attacker | No interface takes an address as input; outgoing connections are restricted
+| A hostile message or body | Strict decoding against the schema; bounded sizes; no object is built from a type named by the input
+| A vulnerable dependency or image | Scanned at every build; critical and high findings block the release ({NFR-SEC-005})
+| An image that is not ours | Images are signed by the pipeline; the cluster admits only signed images from our registry
+| Exhausting the store, or the budget | Rate limits at the edge; bounded resources in every service (document 05-02); spending alerts and limits on scaling (document 06-06)
+| A misconfigured or forgotten endpoint | No endpoint exists outside the contracts; management endpoints are not routed; the development console is not in any deployed image
+|===
+
+== Audit
+
+.Strategy question
+****
+What strategy can say, months later, who changed a price and when?
+****
+
+.What is recorded ({NFR-SEC-006})
+[cols="4,6,5", options="header"]
+|===
+| Action | Recorded | Where
+| A change to a product or a price | Who, when, the old and the new value | The catalog database: price history, versions
+| A stock adjustment | Who, when, the quantity, the reason | The inventory database: stock movements ({FR-INV-008})
+| A change of order status, a decision on an order under review | Who, when, the comment | The order database: status history
+| A refused administration request | Who, what, when | The audit log
+| A sign-in, a failed sign-in, a change of role | Who, when, from where | The events of the identity provider, exported to the audit log
+| An emergency access to production | Who, when, why, for how long | The audit log of the cloud platform
+|===
+
+The business history lives with the data it describes and is never updated or deleted.
+The audit log is kept one year, in a store that the services cannot write over (document 05-03).
+
+== Supply chain and tests
+
+.Strategy question
+****
+What strategy proves, at every build and before every release, that the controls above are still there?
+****
+
+.Controls in the pipeline (detail in document 06-05)
+[cols="4,4,7", options="header"]
+|===
+| Control | Tool | Blocks
+| Secrets in the code | gitleaks {v-gitleaks} | Any finding
+| Code quality and security rules | SonarQube {v-sonarqube} | New issues above the agreed threshold
+| Dependencies and images | Syft {v-syft} for the inventory of components, Grype {v-grype} for known vulnerabilities | Critical and high findings ({NFR-SEC-005})
+| Infrastructure code | Checkov {v-checkov} | A resource exposed, unencrypted or over-privileged
+| Provenance | cosign {v-cosign} | An image that is not signed by the pipeline cannot be deployed
+| Images | A minimal runtime image, {v-container-base}; a user without privileges; a read-only file system | –
+|===
+
+.Security tests (detail in document 07-04)
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Test | Proves
+| Authorization suite | Every cell of the matrix, on every service
+| Dynamic scan with ZAP {v-zap} | No finding of high severity on the test environment ({NFR-SEC-008})
+| Session tests | Cookie attributes, anti-forgery, expiry, sign-out, a refresh token used twice
+| Leak tests | No personal data, token or secret in logs after the end-to-end tests ({NFR-SEC-007}); nothing internal in an unexpected error
+| Isolation tests | A pod cannot reach another namespace, another database, or the internet
+|===
+
+Owner: {role-sec} {role-devops}

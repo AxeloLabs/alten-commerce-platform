@@ -1,0 +1,37 @@
+@startuml
+title Trust boundaries: what each one lets through
+
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+package "Internet: nothing is trusted" #FFCDD2 {
+  actor "Anyone" as U
+  component "Browser\nstorefront" as B
+}
+package "Edge: filtered" #FFF8E1 {
+  component "Load balancer\nfirewall, rate limits, TLS" as LB
+}
+package "Cluster, namespace of one environment: identified" #E3F2FD {
+  component "Web gateway\nsession, anti-forgery" as GW
+  component "Identity provider" as KC
+  component "Services\nvalidate every token" as S
+}
+package "Data and managed services: one identity per service" #C8E6C9 {
+  database "Databases" as DB
+  queue "Pub/Sub" as PS
+  component "Secrets" as SEC
+}
+package "Providers: outside" #ECEFF1 {
+  component "Payment and e-mail\nproviders" as P
+}
+
+U --> B
+B --> LB : HTTPS only
+LB --> GW : allowed addresses only
+LB --> KC : sign-in pages only
+GW --> S : access token of the person
+S --> DB : own database only
+S --> PS : own topics and subscriptions only
+S --> SEC : own secrets only
+S --> P : HTTPS, outgoing only
+@enduml
