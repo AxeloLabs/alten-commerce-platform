@@ -1,27 +1,19 @@
 @startuml
-title Security tests, layer by layer
+title Security tests, from the code to the deployed platform
 
 skinparam componentStyle rectangle
-left to right direction
-
-rectangle "Code and dependencies\nin the pipeline" as L1 #FFF8E1 {
-  component "Secrets scan\ncode analysis\ndependency and image scan\ninfrastructure scan" as T1
-}
-rectangle "One service\nin containers" as L2 #E3F2FD {
-  component "Authorization suite\ntoken tests\nerror answers leak nothing" as T2
-}
-rectangle "The web gateway\nin containers" as L3 #E3F2FD {
-  component "Session and cookie tests\nanti-forgery\nresponse headers" as T3
-}
-rectangle "The deployed platform\nin test" as L4 #C8E6C9 {
-  component "Dynamic scan\nisolation of pods and identities\nabuse and input tests" as T4
-}
-rectangle "After the end-to-end tests\nin integration" as L5 #C8E6C9 {
-  component "Leak test on logs\nand on e-mails" as T5
+skinparam rectangle {
+  RoundCorner 8
 }
 
-L1 --> L2
-L2 --> L3
-L3 --> L4
-L4 --> L5
+rectangle "**Code and dependencies**, in the pipeline\nSecrets scan · code analysis · dependency and image scan · infrastructure scan" as L1 #FFF8E1
+rectangle "**One service**, in containers\nAuthorization suite · token tests · error answers leak nothing" as L2 #E3F2FD
+rectangle "**The web gateway and the identity provider**, in containers\nSession and cookie tests · anti-forgery · response headers · realm tests" as L3 #E3F2FD
+rectangle "**The deployed platform**, in test\nDynamic scan · isolation of pods and identities · abuse and input tests" as L4 #C8E6C9
+rectangle "**After the end-to-end tests**, in integration\nLeak test on logs, traces and e-mails" as L5 #C8E6C9
+
+L1 -down-> L2
+L2 -down-> L3
+L3 -down-> L4
+L4 -down-> L5
 @enduml

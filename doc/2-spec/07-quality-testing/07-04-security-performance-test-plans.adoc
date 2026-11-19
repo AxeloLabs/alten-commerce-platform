@@ -16,7 +16,7 @@ What strategy tests security as a property of every release, instead of an audit
 Document 05-04 states what is protected and how.
 Each control it describes has a test here that fails if the control disappears: a rule forgotten, a header removed, a policy loosened.
 
-plantuml::diagrams/security-tests-layers.puml[format=svg, align=center]
+plantuml::diagrams/security-tests-layers.puml[format=svg, align=center, pdfwidth=72%]
 
 .Controls and their tests
 [cols="5,6,4", options="header"]
@@ -43,7 +43,7 @@ What strategy guarantees that no cell of the authorization matrix is ever left u
 ****
 
 .The authorization suite ({TC-PLT-003})
-[cols="4,11", options="header"]
+[%unbreakable, cols="4,11", options="header"]
 |===
 | Subject | Rule
 | Source | The authorization matrix of document 01-05, kept as a data file next to the contracts: one line per use case, actor and endpoint, with the expected result. The suite is generated from that file; a cell cannot exist without its test.
