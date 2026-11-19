@@ -9,16 +9,16 @@ if (critical or high finding?) then (yes)
   stop
 else (no)
 endif
-:Sign the images, push to the registry;
-:Create the release;
-:Deploy to test\nmigrations, then workloads;
+:Sign the images, attest them for admission,\npush to the registry;
+:Record the release;
+:Deploy to test\nmigrations first, then workloads;
 :Tests of test\nreal services, authorization suite,\ndynamic security scan;
 if (passed?) then (yes)
 else (no)
   :Stopped: the release goes no further;
   stop
 endif
-:Promote to integration;
+:Deploy the same release to integration;
 :Tests of integration\nend-to-end, saga scenarios;
 if (passed?) then (yes)
 else (no)
@@ -26,11 +26,9 @@ else (no)
   stop
 endif
 :Approval by a person;
-:Deploy to prod, to a share of the traffic;
-:Verification;
-if (healthy?) then (yes)
-  :Deploy to all;
-  :Verification of the critical paths;
+:Deploy to prod\nmigrations first, then one pod at a time;
+if (every new pod ready,\nverification passed?) then (yes)
+  :Done: the release is recorded\nas running in prod;
   stop
 else (no)
   :Automatic return\nto the previous release;

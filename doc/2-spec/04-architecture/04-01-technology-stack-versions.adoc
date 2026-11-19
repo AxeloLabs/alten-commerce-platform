@@ -343,8 +343,7 @@ What strategy makes an environment something we can recreate, review and destroy
 | Tool | Version | What it does for us | Why this one
 | Terraform | {v-terraform} | Declares every Google Cloud resource: network, cluster, database, topics and subscriptions, identities, budgets. | Imposed. Changes are reviewed as code; an environment is reproducible and can be destroyed to stop its cost.
 | Google provider | {v-terraform-google-full} | The Terraform provider for Google Cloud. | Current major line.
-| GitHub Actions | Hosted | Continuous integration: build, tests, quality and security gates, image publication. | The repository is on GitHub. Authenticates to Google Cloud without a key (action {v-google-auth-action}).
-| Cloud Deploy | Managed service | Continuous delivery: promotion from test to integration to production, with approval and verification. | Native to GKE. A Jenkins server would be one more system to operate and secure.
+| GitHub Actions | Hosted | Continuous integration and delivery: build, tests, quality and security gates, image publication, then deployment to each environment with Helm, with an approval before production ({ADR-PLT-031}). | The repository is on GitHub. Authenticates to Google Cloud without a key (action {v-google-auth-action}).
 | Renovate | Current | Proposes dependency updates as pull requests. | Keeps the stack current without manual tracking.
 |===
 
@@ -409,7 +408,8 @@ It is written here with its reason, and the most structural ones are detailed as
 | Zipkin | Replaced | Spring Boot is retiring its exporter. OpenTelemetry protocol to Cloud Trace, and to otel-lgtm locally.
 | Loki, loki4j appender | Not needed | GKE collects standard output into Cloud Logging. Loki is present only inside the local otel-lgtm container.
 | Liquibase | Replaced | License changed to a source-available one in 5.0. Flyway covers the need with plain SQL.
-| Jenkins | Rejected | A server to host, patch and secure. GitHub Actions and Cloud Deploy are managed.
+| Jenkins | Rejected | A server to host, patch and secure. GitHub Actions is managed.
+| Cloud Deploy | Rejected | Driven by a Skaffold configuration, and its progressive delivery needs a route per workload ({ADR-PLT-031}).
 | Two-phase commit | Rejected | No transaction manager spans PostgreSQL, Pub/Sub and several services, and a coordinator would couple their availability. Saga and outbox instead; explained in document 04-06.
 | gRPC | Deferred | A second contract technology for very few synchronous calls. Spring gRPC is generally available: the door stays open.
 | Apache Flink | Rejected | A stream-processing engine; the platform has no stream analytics.

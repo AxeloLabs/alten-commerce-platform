@@ -59,10 +59,11 @@ It is marked as replaced, and a new record says what replaced it and why: the hi
 | {ADR-PLT-024} | Java {v-java} and the Spring Boot {v-spring-boot} line | {st-proposed}
 | {ADR-PLT-025} | HTTP service clients and Resilience4j for synchronous calls | {st-proposed}
 | {ADR-PLT-026} | One Google Cloud project, one Autopilot cluster, three namespaces | {st-approved}
-| {ADR-PLT-027} | GitHub Actions to integrate, Cloud Deploy to deliver | {st-proposed}
+| {ADR-PLT-027} | GitHub Actions to integrate, Cloud Deploy to deliver. Replaced by {ADR-PLT-031} | {st-rejected}
 | {ADR-PLT-028} | OpenTelemetry towards the observability services of Google Cloud | {st-proposed}
 | {ADR-PLT-029} | Documentation as code | {st-approved}
 | {ADR-PLT-030} | A deployment profile for the proof of concept, destroyed on schedule | {st-approved}
+| {ADR-PLT-031} | GitHub Actions builds and delivers; Helm applies | {st-proposed}
 |===
 
 Owner: {role-arch} {role-sol}
@@ -455,7 +456,7 @@ They are listed here so that the register is complete.
 
 [cols="3,11"]
 |===
-| Status | {st-proposed} · 2026-11-19
+| Status | {st-rejected} · 2026-11-19 · replaced the same day by {ADR-PLT-031}, when the pipeline was specified
 | Context | The brief mentions Jenkins. The repository is hosted on GitHub and the platform on Google Cloud.
 | Decision | GitHub Actions builds, tests, scans and publishes images. Cloud Deploy promotes a release from test to integration to production, with an approval before production (document 06-05). GitHub authenticates to Google Cloud without any stored key.
 | Alternatives | Jenkins: a server to host, secure and upgrade for a single repository. Deploying from the build pipeline: no record of what runs where, and no approval step.
@@ -500,4 +501,17 @@ They are listed here so that the register is complete.
 | Alternatives | Three environments awake during the demonstration: about two and a half times the cost of the pods. Everything on a workstation: free, but GKE Autopilot, imposed by the brief, would never be shown. Stopping by hand: the same result, unless someone forgets.
 | Consequences | The proof of concept costs of the order of ten euros for 48 hours, and nothing once destroyed. It tolerates no loss of a pod and has no rate limit at its entry: the availability and resilience requirements are specified for the full profile and tested there, not demonstrated by the proof of concept. The two profiles differ by values only (documents 06-01, 06-03 and 06-06): going from one to the other changes no code and no contract.
 | Owner | {role-cloud} {role-platform}
+|===
+
+[[ADR-PLT-031]]
+=== ADR-PLT-031 — GitHub Actions builds and delivers; Helm applies
+
+[cols="3,11"]
+|===
+| Status | {st-proposed} · 2026-11-19 · replaces {ADR-PLT-027}
+| Context | {ADR-PLT-027} gave delivery to Cloud Deploy. Specifying the pipeline showed two obstacles. Cloud Deploy takes its instructions from a Skaffold configuration, a tool that document 04-01 rejects because it is announced for archival. And its progressive strategy on GKE shifts traffic between two versions through a route, which only two of our eight workloads have: the six services are reached by name or by messages. The platform is also first deployed as a proof of concept ({ADR-PLT-030}), where one more product is one more thing to watch.
+| Decision | GitHub Actions carries a release through the environments. A job bound to an environment applies the Helm charts; migrations run as a step of the chart, before anything else changes; Helm waits for the new pods to be ready and returns to the previous revision by itself if they are not. Production is a protected environment of GitHub: its job waits for the approval of a person, and only then receives the deployment identity of production.
+| Alternatives | Cloud Deploy: a record of releases and approvals without building anything, at the price of the Skaffold configuration and of a strategy that does not fit message consumers. An agent in the cluster that pulls the charts from the repository: the cluster then gives no right to the pipeline, which is safer; it is one more component to run, to reconsider with the company layout of document 06-01.
+| Consequences | One tool and one set of definitions; nothing more to host. For the length of a job, the pipeline holds the right to change a namespace: that right is tied to the environment, to the main branch and, for production, to the approval. There is no delivery to a share of the traffic: a faulty version is contained by replacing one pod at a time, by readiness, by the verification that follows, and by the automatic return. What runs where is read in the deployment history of GitHub and in the revision history of Helm.
+| Owner | {role-devops}
 |===
