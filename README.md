@@ -1,54 +1,47 @@
 # alten-commerce-platform
 
-Plateforme de **commerce et d'e-paiement** en microservices — projet de **spécification** : aucun code à ce stade, uniquement l'architecture, les décisions et leurs justifications.
+An e-commerce order-management platform, specified before it is built: six Spring Boot
+services, an Angular storefront behind a web gateway, Google Pub/Sub and PostgreSQL, on GKE
+Autopilot. Hexagonal architecture, an orchestrated order saga, a transactional outbox.
 
-## Sommaire
+**Status: the specification is complete; the code has not started.**
 
-- [Objectif](#objectif)
-- [Périmètre](#périmètre)
-- [Parti pris](#parti-pris)
-- [Phases](#phases)
-- [Organisation prévue du dépôt](#organisation-prévue-du-dépôt)
-- [Statut](#statut)
+## Contents
 
-## Objectif
+- [Read the specification](#read-the-specification)
+- [Rebuild the PDFs](#rebuild-the-pdfs)
+- [How the repository is organized](#how-the-repository-is-organized)
 
-Produire un dossier de spécification complet et défendable pour une plateforme de commerce avec paiement en ligne, en montrant la démarche d'un architecte senior : chaque choix est consigné avec ses alternatives écartées et son coût.
+## Read the specification
 
-## Périmètre
+The deliverable is 47 numbered PDF documents, from the business need to the prompts that
+build the software. They are attached to the latest
+[release](https://github.com/AxeloLabs/alten-commerce-platform/releases) as one archive.
+Start with `00-overview/00-02-architecture-big-picture.pdf`.
 
-- **Commerce** : catalogue, panier, commande, stock, notification (découpage en services à arbitrer en phase d'architecture).
-- **E-paiement** : cycle de vie du paiement, idempotence, cohérence entre services, réconciliation, conformité (SCA/PSD2, PCI-DSS, RGPD).
-- **Transverse** : sécurité, observabilité, déploiement et exploitation, un cas d'usage d'intelligence artificielle.
+The sources are in [`doc/2-spec/`](doc/2-spec/), written in AsciiDoc and PlantUML. GitHub
+shows their text, but not their diagrams: read the PDFs.
 
-## Parti pris
-
-- **Spécification d'abord** : pas de code avant que les décisions structurantes soient posées.
-- **Architecture hexagonale** (ports et adapters) au sein de chaque service.
-- **Microservices**, avec back-end **Java / Spring Boot** et front-end **Angular**.
-- Tout autre choix technique (messagerie, bases de données, cloud, IA) est tranché par un **ADR** (Architecture Decision Record) et non posé par défaut.
-
-## Phases
-
-| Phase | Contenu | Livrables |
-|---|---|---|
-| 0 — Cadrage | Acteurs, cas d'usage, exigences non fonctionnelles chiffrées, contraintes réglementaires | Vision, glossaire, exigences |
-| 1 — Architecture | Découpage en contextes, services, cohérence distribuée, choix synchrone / asynchrone | Carte des contextes, ADR |
-| 2 — Spécifications détaillées | Contrats d'API, modèle de données, états du paiement, sécurité, structure du front | Contrats, modèles, scénarios |
-| 3 — Plateforme et exploitation | Déploiement, CI/CD, observabilité, objectifs de fiabilité (SLO), runbooks, cas d'usage IA | Dossier d'exploitation |
-| 4 — Revue | Revue adversariale de cohérence et de défendabilité | Rapport de revue, corrections |
-
-## Organisation prévue du dépôt
+## Rebuild the PDFs
 
 ```
-docs/
-  00-cadrage/
-  01-architecture/      # dont adr/
-  02-specifications/
-  03-exploitation/
-  04-revue/
+doc/2-spec/build.sh            # builds the 47 PDFs into doc/9-generated/pdf
+doc/2-spec/build.sh --check    # identifiers and traceability only
 ```
 
-## Statut
+Prerequisites: Podman, Python 3, and for the BPMN diagrams Node with pnpm and Chrome or
+Chromium. Everything else runs in a pinned container image. `mise install` installs the
+project toolchain.
 
-Cadrage en cours — aucun choix technique n'est encore figé.
+## How the repository is organized
+
+| Path | Content |
+|---|---|
+| `doc/2-spec/` | The specification: sources, shared theme, build and identifier checks |
+| `doc/3-reviews/` | Independent reviews of each part, kept as written |
+| `CLAUDE.md` | Instructions for the AI coding agents that will build the code |
+| `mise.toml` | The pinned toolchain |
+
+The specification was written with an AI assistant, and each part was reviewed by an
+independent agent that did not see the author's reasoning. The code will follow it one
+creation prompt at a time (document `08-03`).
