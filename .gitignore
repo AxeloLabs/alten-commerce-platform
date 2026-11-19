@@ -25,3 +25,6 @@ service-account*.json
 *.tfstate
 *.tfstate.*
 crash.log
+
+# Local notes: not published
+doc-ignored
