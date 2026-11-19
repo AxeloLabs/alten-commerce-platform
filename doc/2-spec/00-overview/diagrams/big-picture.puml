@@ -1,0 +1,32 @@
+@startuml
+title The platform on one page
+
+skinparam componentStyle rectangle
+skinparam rectangle {
+  RoundCorner 8
+}
+
+rectangle "**Visitor, customer, administrator**\nin a browser" as U #FFFFFF
+
+rectangle "**Load balancer**\nThe only public entry, HTTPS" as LB #FFFFFF
+
+rectangle "**Edge**\nWeb gateway: serves the storefront; session, sign-in, routing\nIdentity provider: accounts, roles, tokens" as EDGE #FFF8E1
+
+rectangle "**Services reached through the gateway**\nCatalog: products, prices  ·  Cart: cart, favorites\nOrder: orders and their sagas  ·  Inventory: stock, reservations" as SYNC #E3F2FD
+
+rectangle "**Message bus**\nCommands and events between services" as BUS #FFFFFF
+
+rectangle "**Services reached by messages only**\nPayment: charges, refunds  ·  Notification: e-mails" as ASYNC #C8E6C9
+
+rectangle "**Databases**\nOne per service, on one PostgreSQL instance" as DB #F4F7F9
+
+rectangle "**Signals**\nLogs, metrics, traces\nand alerts, from\nevery piece" as OBS #F4F7F9
+
+U -down-> LB
+LB -down-> EDGE
+EDGE -down-> SYNC : requests, with the person's token
+SYNC -down-> BUS : commands and events
+BUS -down-> ASYNC
+ASYNC -down-> DB : each service, its own database
+SYNC -right-> OBS
+@enduml

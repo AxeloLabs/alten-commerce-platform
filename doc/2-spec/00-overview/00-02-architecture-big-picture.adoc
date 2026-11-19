@@ -1,0 +1,331 @@
+= Architecture Big Picture: The Whole Platform in Ten Pages
+:doc-id: 00-02
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The platform on one page, then one short answer to each question a reader asks first: how an order is placed, how data stays consistent, how errors and failures are handled, how the platform is observed, deployed, secured, paid for, built and proven, with the document that holds the detail.
+include::../_shared/attributes.adoc[]
+
+== The platform on one page
+
+.Strategy question
+****
+What strategy lets someone understand the whole platform before reading any of its forty-six other documents?
+****
+
+plantuml::diagrams/big-picture.puml[format=svg, align=center, pdfwidth=72%]
+
+Everything below the load balancer runs in one Kubernetes cluster, in one region of Google Cloud; the message bus and the databases are services managed by the cloud provider.
+
+.The platform in ten sentences
+. An online store: visitors browse a catalog, customers fill a cart and buy, administrators manage products, stock and orders.
+. Six services, each owning one part of the business and its own database: catalog, inventory, cart, order, payment, notification.
+. Identity is not built: an identity provider holds accounts and roles, and every service checks the token it issues.
+. The browser talks to one door, the web gateway, which keeps the session and forwards requests; no service is reachable from outside.
+. Services talk to each other by messages on a bus, except where a fresh answer is needed at once: a price at checkout, the content of a cart.
+. Placing an order is a *saga*: a sequence of steps across services, led by the order service, where each step that fails is undone by a compensating step.
+. A service saves its data and the messages it must send in one database transaction, so that neither can exist without the other.
+. Everything runs in containers on Kubernetes, in Google Cloud, described entirely by code and deployed by one pipeline.
+. Every request and every order can be followed across services by one identifier, in logs, metrics and traces.
+. The first deployment is a proof of concept that lasts two days, costs less than ten euros and destroys itself.
+
+Each section below answers one question in a page and names the document where the detail is.
+
+Owner: {role-sol} {role-arch}
+
+== How an order is placed
+
+.Strategy question
+****
+What strategy lets four services complete one purchase without a transaction that spans them?
+****
+
+plantuml::diagrams/big-picture-order.puml[format=svg, align=center, pdfwidth=78%]
+
+.The order of the steps is the design
+[%unbreakable, cols="1,4,10", options="header"]
+|===
+| # | Step | Why there
+| 1 | Reserve the stock | First, because a reservation is easy to undo. The brief's scenario of a paid order with no stock is avoided by construction: nobody is charged for what is not there.
+| 2 | Charge the payment | The pivot. Before it, the saga can simply give up. After it, money is involved: the saga either finishes, refunds, or calls a person.
+| 3 | Confirm the reservation | Can be repeated until it succeeds
+| 4 | Confirm the order, e-mail the customer | Can be repeated until it succeeds
+|===
+
+.Three delays keep an order from waiting for ever
+[%unbreakable, cols="4,3,8", options="header"]
+|===
+| Delay | Value | At its end
+| Order deadline | 2 minutes | An order that is not paid is rejected, and whatever was started is undone. A payment found captured at that instant is carried through instead.
+| Review delay | 5 minutes | An order that is paid and still not settled is shown "under review", and a person is alerted
+| Reservation lifetime | 15 minutes | Stock held for an order that never completed goes back on sale
+|===
+
+The customer is answered at once with an order number; the page then asks for the outcome until the order is settled.
+
+Detail: documents 01-02 and 01-03 for the business view; 02-03 for every state; 03-03 for the nineteen scenarios, failures included.
+
+== How data stays consistent
+
+.Strategy question
+****
+What strategy keeps money, stock and orders in agreement when every service has its own database?
+****
+
+There is no transaction across services, on purpose: it would tie the availability of each service to that of all the others ({ADR-PLT-011}).
+Consistency is obtained by four mechanisms, each simple.
+
+.Four mechanisms
+[cols="3,7,5", options="header"]
+|===
+| Mechanism | What it does | Guarantees
+| Outbox | A service writes its change and the messages announcing it in one local transaction; a relay publishes them afterwards | A message is never lost, and never sent for a change that did not happen
+| Inbox and status | A service remembers which messages it handled, and answers a repeated request from the status of what it concerns | The bus may deliver twice; the effect happens once. Nobody is charged twice.
+| Saga with compensations | The order service remembers where each order stands and what was done; each step has its undo | An order ends, one way or another: confirmed, rejected with everything undone, or handed to a person
+| A grid of every event in every state | The outcome of each possible answer is written down for each state of the saga, late and duplicate answers included | No sequence of failures leads to an undefined situation
+|===
+
+.Five promises, tested as such
+****
+An order is confirmed only with a captured payment and a confirmed reservation. +
+An order is rejected only when it holds no payment. +
+A customer is charged at most once per order, and refunded at most once. +
+Available stock is never negative. +
+No order stays pending: after two minutes it is settled, and after five more a person knows.
+****
+
+Detail: document 03-03 for the saga; 03-06 for outbox, inbox and idempotence; 02-03 for the grids; 04-06 for the patterns, with what two-phase commit is and why it is not used.
+
+== How errors are handled
+
+.Strategy question
+****
+What strategy makes an error mean the same thing in every service, every log and every screen?
+****
+
+.One way to fail
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| One format | Every error answer has the same shape and carries a code of one catalog of twenty-nine codes. The storefront shows a message per code.
+| Two kinds | A business refusal — out of stock, payment declined — is a normal result, with its own code. A technical failure is something else, and never looks like a refusal.
+| The honest third case | When the platform does not know whether an action took effect, it says so, with a code of its own, instead of claiming that nothing changed
+| Nothing internal leaks | An unexpected error returns a generic code and a reference that support can look up; never a stack trace
+| Messages too | A message that cannot be handled is retried, then set aside in a dead-letter topic, with an alert; it never blocks the other orders
+| A person, as the last step | What the platform cannot settle alone is shown under review to an administrator, who has three decisions and a runbook
+|===
+
+Detail: document 05-01, with the catalog of codes and the path of an error from the database to the screen.
+
+== What happens when something fails
+
+.Strategy question
+****
+What strategy answers "what if this server dies?" for every piece of the platform?
+****
+
+.Failure by failure
+[cols="4,6,5", options="header"]
+|===
+| Failure | What the platform does | What a customer sees
+| A pod dies | Kubernetes starts another; the second replica serves meanwhile; messages the pod held are delivered again | Nothing, or one request to repeat
+| A service is slow or overloaded | The caller gives up at its time limit; after repeated failures a circuit breaker stops calling for a while; a limit on concurrent calls keeps one slow neighbor from exhausting everything | A clear "try again", or a degraded answer: the cart shows the last known prices
+| A service is down | Messages wait on the bus; orders in progress wait, then end at their deadlines | Orders are rejected uncharged, or shown under review; browsing continues if the catalog is up
+| The payment provider does not answer | The payment is canceled, or found captured and carried through; if nobody can tell, the order goes under review | Never a charge without an order
+| The message bus is unavailable | Services keep saving; messages wait in the outboxes and leave in order afterwards | Orders settle late, at their deadlines
+| The database fails over | About a minute of clean refusals, then everything resumes | A minute of "try again"
+| A zone is lost | Replicas in the other zones serve; the database fails over | The same minute
+| The region is lost | Nothing automatic. The platform is rebuilt from code and from the backups, by a runbook. | An outage of hours, and the loss of the most recent data
+|===
+
+.Single points of failure, known and accepted
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Point | Decision
+| One region, one cluster | Accepted by the product owner. A second region would double the cost for a store of this size.
+| One database instance for all services and all environments | Accepted. Each service has its own database and account on it; in the full profile the instance has a standby in another zone.
+| The proof of concept | One replica of everything, no standby: it demonstrates the design, not the availability. The availability requirements are specified for the full profile.
+|===
+
+.What Kubernetes does, and what it does not
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Kubernetes does | Restart a container that stops answering; keep the wanted number of replicas, spread over zones; send traffic only to pods that say they are ready; replace pods one at a time during an update, and stop if the new ones are not ready; add replicas when the processors are busy
+| Kubernetes does not | Know that an order is stuck, that a message was lost, or that a customer was charged twice. That is the work of the saga, of the outbox, and of the alerts on business measures.
+|===
+
+Detail: document 05-02 for time limits, retries, circuit breakers and bulkheads, call by call; 06-03 for probes and rollouts; 06-07 for the runbooks.
+
+== How we know what is going on
+
+.Strategy question
+****
+What strategy lets one person follow one order through six services at three in the morning?
+****
+
+.Three signals, tied by two identifiers
+[cols="3,6,6", options="header"]
+|===
+| Signal | Answers | How
+| Logs | What happened, exactly? | Structured lines on standard output, collected by the platform. Every line carries the trace identifier and, for an order, the saga identifier.
+| Metrics | How much, how fast, how often? | Counters and durations per service, and business measures: orders by outcome, orders under review, age of the oldest unpublished message
+| Traces | Where did the time go, and through which services? | One trace per request, continued across the bus: the message carries the trace of the request that caused it
+|===
+
+The *trace identifier* follows a request; the *saga identifier* follows an order through all its requests and messages, from the checkout to the e-mail.
+Searching the logs for a saga identifier gives the whole story of an order, across services, in order.
+
+.From a number to an action
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Step | Meaning
+| Objectives | A few numbers agreed with the business: 99.5 % of catalog reads answered; 99 % of valid checkouts accepted; 95 % of orders settled in less than 5 seconds
+| Alerts | Fire when an objective is being missed fast, or when something specific needs a person: an order under review, a dead letter, a refund that failed
+| Runbooks | Each alert names the procedure to follow
+|===
+
+Detail: document 05-03; the runbooks are in 06-07.
+
+== How it is deployed
+
+.Strategy question
+****
+What strategy takes a change from a commit to production without a manual step that could be forgotten?
+****
+
+.One path
+[%unbreakable, cols="1,4,10", options="header"]
+|===
+| # | Step | What it guarantees
+| 1 | Pull request | Every gate passes before anyone reviews: tests, architecture rules, contracts, security scans. A person then reviews.
+| 2 | Build, once | One image per service, signed. The same image goes everywhere.
+| 3 | `test`, then `integration` | Deployed automatically, tested after each deployment
+| 4 | Approval | A person approves production, with the evidence of the previous steps
+| 5 | `prod` | One pod at a time; verified; returned to the previous version automatically if the verification fails
+|===
+
+Three environments live in one cluster, as three namespaces; the cloud resources and the Kubernetes objects are code, reviewed like the rest.
+Nobody changes production by hand: engineers can read it, and only the pipeline can write.
+
+Detail: documents 06-01 to 06-05; the network, with its addresses, is in 06-02.
+
+== How it is secured
+
+.Strategy question
+****
+What strategy protects customers' accounts and orders without building an identity system?
+****
+
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Answer
+| Sign-in | On the pages of the identity provider. No service of ours ever sees a password.
+| The browser | Holds a session cookie that scripts cannot read. Tokens stay on the server side, in the web gateway.
+| Every request | Carries the person's token to the service, which checks it and decides: denied unless explicitly allowed, and "not found" for what belongs to someone else
+| Roles | Customer and administrator. An authorization matrix says, use case by use case, who may do what; a test is generated for each of its cells.
+| Secrets | In a secret manager, never in code or configuration
+| The network | One public entry; services are private and may only call what they are listed to call
+| The software supply chain | Dependencies and images are scanned; only images built and signed by the pipeline can run
+|===
+
+Detail: document 05-04; the security gates of the pipeline are in 06-05.
+
+== What it costs, and how it stops
+
+.Strategy question
+****
+What strategy makes sure a demonstration of two days is billed for two days?
+****
+
+.Two profiles of the same design
+[cols="4,5,6", options="header"]
+|===
+| | Proof of concept | Full profile
+| Environments awake | One | Three
+| Replicas | One of each | Two to six, autoscaled
+| Database | One small instance, no standby | With a standby in another zone
+| Cost | About 0.18 USD per hour: about 8.50 USD for 48 hours | From about 500 USD per month with production awake
+| If forgotten | About 130 USD in a month | –
+|===
+
+A budget only warns, and its figures arrive hours late.
+The proof of concept therefore carries its own end: a deadline given when it is created, after which the pipeline destroys everything.
+The two profiles differ by values only; going from one to the other changes no code.
+
+Detail: document 06-06, with the unit prices and the list of commands that nobody runs.
+
+== How it is built, and proven
+
+.Strategy question
+****
+What strategy keeps the business rules testable in a millisecond, and everything else replaceable?
+****
+
+.Inside a service
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Ring | Content
+| Domain | The business rules, in plain Java, depending on nothing. Covered at 100 % by unit tests that run in milliseconds.
+| Application | The use cases: one per thing an actor wants. They say what is needed from outside through ports.
+| Adapters | REST, messaging, persistence, calls to others. Each can be replaced: the catalog and the cart run on PostgreSQL, on a document database or on files, behind the same ports.
+|===
+
+Twenty-six architecture rules, checked at every build, keep the rings apart.
+
+.The proof
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Level | Proves
+| Unit | Every business rule and every cell of the saga grids
+| Acceptance | The ninety-six scenarios agreed with the business, written before the code
+| Component | Each service keeps its contracts, with its real adapters
+| Integration | The pieces work with the real technology; the nineteen saga scenarios, failures provoked
+| End to end | The six critical paths, in a browser, on a deployed environment
+|===
+
+Every use case, rule, scenario and test has an identifier, and the build of this specification refuses a rule without a test, or a test that nothing builds.
+
+The platform is built by AI agents, in forty-three increments, each checked by gates, by independent expert agents and by a person; the agents work in a harness that leaves them no right on the cloud.
+
+Detail: documents 04-03 and 04-04 for the code; folder 07 for the tests; 08-02 and 08-03 for the agents.
+
+== Where to read more
+
+.Strategy question
+****
+What strategy takes a reader from a question to the right page?
+****
+
+.By question
+[cols="7,8", options="header"]
+|===
+| Question | Document
+| What does the store do, for whom? | 01-01 Vision, Scope and Actors; 01-02 Business Journeys and Critical Paths
+| What exactly must it do? | 01-05 Use Cases; 01-06 Functional Requirements and Business Rules; 01-08 Acceptance Scenarios
+| How fast, how available, how secure? | 01-07 Non-Functional Requirements
+| Why these services? | 02-01 Bounded Contexts and Context Map
+| What are the commands, events and states? | 03-02 Command and Event Catalog; 02-03 State Machines
+| What happens to an order when something fails? | 03-03 Order Saga Specification
+| Which technologies, at which versions, and why? | 04-01 Technology Stack and Versions
+| What was decided, against what? | 04-07 Architecture Decision Records
+| How is the code organized? | 04-03 Code Architecture and ArchUnit Rules
+| How do I run it on my workstation? | 08-01 Developer Workstation
+| What do I do when an alert fires? | 06-07 Runbooks
+| How do I find where an identifier is defined and tested? | 00-03 Traceability Matrix
+|===
+
+.The decisions that shape everything else
+[%unbreakable, cols="3,12", options="header"]
+|===
+| Record | Decision
+| {ADR-PLT-001} | Six services cut along the business; identity is bought, not built
+| {ADR-PLT-002} | Hexagonal architecture in every service
+| {ADR-PLT-006} | An orchestrated saga; stock is reserved before the payment
+| {ADR-PLT-007} | Transactional outbox
+| {ADR-PLT-011} | No distributed transaction
+| {ADR-PLT-018} | A web gateway between the browser and the services
+| {ADR-PLT-026} | One project, one cluster, three namespaces
+| {ADR-PLT-030} | A proof-of-concept profile, destroyed on schedule
+|===
+
+Owner: {role-sol} {role-arch}

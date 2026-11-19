@@ -1,6 +1,6 @@
 = Observability Strategy: Following One Order, Watching Every Service
 :doc-id: 05-03
-:revnumber: 0.2
+:revnumber: 0.3
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The questions observability must answer, the identifiers that tie signals together, logs, metrics and traces, the service level objectives, the alerts and the dashboards.
@@ -175,13 +175,13 @@ What is left is the _error budget_: the room for failures and for risk.
 |===
 | Function | A request is good when | Objective | Requirement
 | Catalog, product and cart reads | It is answered without a server error | 99.5 % | {NFR-AVAIL-001}
-| Order history and order detail | It is answered in less than 300 ms | 95 % | {NFR-PERF-001}
-| Publication of a saved message | It is published in less than 5 s | 99 % | {NFR-REL-005}
 | Same | It is answered in less than 300 ms; 200 ms for the cart | 95 % | {NFR-PERF-001} {NFR-PERF-004}
+| Order history and order detail | It is answered in less than 300 ms | 95 % | {NFR-PERF-001}
 | Checkout | A valid checkout is accepted | 99.0 % | {NFR-AVAIL-005}
 | Checkout | It is acknowledged in less than 500 ms | 95 % | {NFR-PERF-002}
 | Order outcome | The order is settled in less than 5 s; 15 s | 95 %; 99 % | {NFR-PERF-003}
 | Displayed availability | A stock change reaches the catalog in less than 5 s | 95 % | {NFR-PERF-005}
+| Publication of a saved message | It is published in less than 5 s | 99 % | {NFR-REL-005}
 |===
 
 Availability is measured where a customer would see the failure: on the request metrics of the load balancer, which still count when no pod of ours answers, and by a probe that calls the storefront and a catalog read from outside every minute.

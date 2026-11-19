@@ -1,0 +1,30 @@
+@startuml
+title An order, from the click to the e-mail
+
+actor Customer as C
+participant "Storefront and\nweb gateway" as W
+participant "Order\nservice" as O
+participant "Inventory\nservice" as I
+participant "Payment\nservice" as P
+participant "Notification\nservice" as N
+
+C -> W : pays the cart
+W -> O : checkout
+O --> W : order number, "pending"
+note right of W : answered at once;\nthe page then asks\nfor the outcome
+
+O ->> I : 1. reserve the stock
+I -->> O : reserved
+note right of I : no stock:\nrejected, never charged
+
+O ->> P : 2. charge
+P -->> O : captured
+note right of P : refused:\nstock released, rejected
+
+O ->> I : 3. confirm the reservation
+I -->> O : confirmed
+
+O ->> N : 4. order confirmed
+N -> C : e-mail
+W --> C : "confirmed"
+@enduml
