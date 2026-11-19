@@ -1,0 +1,39 @@
+@startuml
+title Pipeline of the main branch: from a merge to production
+start
+:Merge to the main branch;
+:Build the images of what changed\nonce, identified by digest;
+:Inventory of components, vulnerability scan;
+if (critical or high finding?) then (yes)
+  :Blocked;
+  stop
+else (no)
+endif
+:Sign the images, push to the registry;
+:Create the release;
+:Deploy to test\nmigrations, then workloads;
+:Tests of test\nreal services, authorization suite,\ndynamic security scan;
+if (passed?) then (yes)
+else (no)
+  :Stopped: the release goes no further;
+  stop
+endif
+:Promote to integration;
+:Tests of integration\nend-to-end, saga scenarios;
+if (passed?) then (yes)
+else (no)
+  :Stopped;
+  stop
+endif
+:Approval by a person;
+:Deploy to prod, to a share of the traffic;
+:Verification;
+if (healthy?) then (yes)
+  :Deploy to all;
+  :Verification of the critical paths;
+  stop
+else (no)
+  :Automatic return\nto the previous release;
+  stop
+endif
+@enduml

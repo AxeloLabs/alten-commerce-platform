@@ -1,0 +1,31 @@
+@startuml
+title Pipeline of a pull request: every gate must pass before a merge
+start
+:Pull request opened or updated;
+:Secrets scan;
+if (a secret found?) then (yes)
+  :Blocked: the secret is rotated;
+  stop
+else (no)
+endif
+fork
+  :Contracts\nstyle and compatibility;
+fork again
+  :Services\nformat, compile, unit tests,\narchitecture rules,\ndomain coverage and mutation;
+fork again
+  :Storefront\nlint, unit tests, build;
+fork again
+  :Infrastructure and charts\nvalidation, security scan,\nplan posted on the request;
+end fork
+:Component tests\nwith containers;
+:Static analysis\nof the new code;
+:Dependencies\ninventory and vulnerabilities;
+if (all gates passed?) then (yes)
+  :Review by a person;
+  :Merge to the main branch;
+  stop
+else (no)
+  :Blocked: the author fixes;
+  stop
+endif
+@enduml

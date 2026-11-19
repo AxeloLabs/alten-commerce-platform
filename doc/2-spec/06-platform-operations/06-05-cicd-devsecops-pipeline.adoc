@@ -1,0 +1,180 @@
+= CI/CD and DevSecOps Pipeline: From a Commit to Production, Gate by Gate
+:doc-id: 06-05
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: How a change is integrated and delivered, the gates it must pass and what each one blocks, how the pipeline authenticates, how production is reached and left, and how delivery is measured.
+include::../_shared/attributes.adoc[]
+
+== Principles
+
+.Strategy question
+****
+What strategy lets a change reach production the same day, without anyone having to trust that it is safe?
+****
+
+Two tools share the work ({ADR-PLT-027}).
+GitHub Actions _integrates_: it builds, tests, scans and publishes images.
+Cloud Deploy _delivers_: it takes a release through the environments and keeps the record of what runs where.
+
+.Six rules
+[cols="4,11", options="header"]
+|===
+| Rule | Meaning
+| Built once | An image is built by one run and promoted unchanged. What reaches production is, bit for bit, what was tested (document 06-01).
+| Gates, not opinions | Every check has a threshold and blocks. Nothing is "to be looked at later".
+| Security is in the line | Secrets, dependencies, images, infrastructure and the running application are checked by the same pipeline as the tests, not by a separate audit.
+| Fast first | Checks run from the quickest to the slowest: an author learns of a formatting error in a minute, not after the load test.
+| Only what changed | A change to one service builds and deploys that service. The contracts and the shared starter rebuild what depends on them.
+| One human gate | A person reviews each pull request, and a person approves each production deployment. Everything else is automatic.
+|===
+
+.Branches and versions
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Main branch | Always deployable. Protected: no direct push, no merge without the gates and a review.
+| Work | Short-lived branches, one pull request per change, merged within days.
+| Release | Each merge that changes a deployable part creates a release, named by its date and a sequence number, and tied to the commit.
+| Pipeline definitions | In the repository, reviewed like code; their owners are named, and a change to them needs their approval.
+|===
+
+Owner: {role-devops} {role-sec}
+
+== The pipeline of a pull request
+
+.Strategy question
+****
+What strategy tells an author everything that is wrong with a change before anyone else spends time on it?
+****
+
+plantuml::diagrams/pipeline-pr.puml[format=svg, align=center, pdfwidth=80%]
+
+.Stages and their gates
+[cols="3,6,4,5", options="header"]
+|===
+| Stage | What runs | Tools | Blocks when
+| Secrets | Scan of the commits | gitleaks {v-gitleaks} | Anything that looks like a secret ({NFR-SEC-004})
+| Contracts | Style; compatibility with the main branch | Spectral {v-spectral}, oasdiff {v-oasdiff}, buf {v-buf}, AsyncAPI CLI {v-asyncapi-cli} | A rule of documents 03-04 or 04-05 is broken; a change breaks a consumer ({NFR-MAINT-003})
+| Build | Formatting, compilation with static checks, unit tests | Maven {v-maven}, Spotless {v-spotless}, Error Prone {v-error-prone}, NullAway {v-nullaway}, JUnit {v-junit} | A file is not formatted; a warning; a failing test ({NFR-MAINT-005})
+| Architecture | The rules of document 04-03 | ArchUnit {v-archunit}, Checkstyle {v-checkstyle} | One violation ({NFR-MAINT-002})
+| Domain | Coverage, then mutation testing, of the domain packages | JaCoCo {v-jacoco}, PIT {v-pitest} | Coverage below 100 % of lines and branches; mutation score below its threshold ({NFR-MAINT-001})
+| Components | Each service with its real adapters, in containers | Testcontainers {v-testcontainers}, Microcks {v-microcks} | A failing test; a service that does not conform to its contract
+| Storefront | Lint, unit tests, build | Angular {v-angular} tooling | An error
+| Code analysis | Defects, duplications and security rules on the code that changed | SonarQube {v-sonarqube} | The quality gate on new code fails
+| Dependencies | Inventory of components, known vulnerabilities | Syft {v-syft}, Grype {v-grype} | A critical or high vulnerability with a fix available ({NFR-SEC-005})
+| Infrastructure | Validation and security scan of Terraform and of the rendered charts; plan posted | Terraform {v-terraform}, Checkov {v-checkov}, Helm {v-helm} | A resource exposed, unencrypted or over-privileged; a chart that does not render
+| Documentation | Build of this specification, when it changes | The documentation toolchain | A broken identifier or reference
+|===
+
+A pull request is answered within a quarter of an hour.
+Stages that do not depend on each other run in parallel, and a stage runs only if something it concerns has changed.
+
+.Rules for exceptions
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| A vulnerability with no fix available | Recorded with a reason and an expiry date, in a file of the repository that is itself reviewed. It blocks again when the date passes.
+| A false positive of an analysis | Marked where it occurs, with a reason. Never by lowering a threshold.
+| Skipping a gate | Not possible from a pull request. The protection of the main branch belongs to the owners of the repository.
+|===
+
+== The pipeline of the main branch
+
+.Strategy question
+****
+What strategy moves a merged change to production with evidence at each step and a way back at the last?
+****
+
+plantuml::diagrams/pipeline-release.puml[format=svg, align=center, pdfwidth=72%]
+
+.Steps
+[cols="3,7,5", options="header"]
+|===
+| Step | What happens | Stops when
+| Images | Built for the parts that changed; inventoried; scanned; signed with the identity of the pipeline; pushed | A critical or high vulnerability in an image; a signature that cannot be made
+| Release | Created in Cloud Deploy: the images by digest, the charts, the values of each environment | –
+| `test` | Infrastructure of the environment applied if it changed; migrations; workloads. Then the tests that need real services, the authorization suite, the dynamic scan with ZAP {v-zap} | A failing test; a finding of high severity ({NFR-SEC-008})
+| `integration` | The same release. End-to-end tests of the critical paths with Playwright {v-playwright}; saga scenarios with failures provoked | A failing test
+| Approval | A person looks at the evidence gathered and approves | Not approved
+| `prod`, first share | The release serves a quarter of the traffic; errors, durations and the order flow are compared with the version in place | A verification fails: automatic return to the previous release
+| `prod`, all | The release serves everyone; the critical paths are verified once more | The same
+|===
+
+Load tests and the failover drill run on `integration` every night and before a release that touches performance or the platform, not on every merge: they take longer than a merge should wait (document 07-04).
+
+.Return and urgency
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Rollback | Deploying the previous release again, by the same pipeline. Always possible: migrations never break the previous version (document 04-04).
+| Urgent fix | The same path. The gates are what make a fast fix safe; none is skipped.
+| A failed release | Never repaired in place. The fix is a new commit and a new release.
+|===
+
+== Security gates
+
+.Strategy question
+****
+What strategy shows on one page every security check a change must pass?
+****
+
+The brief asks which security gates the pipeline has.
+They are spread over the two pipelines above; this table gathers them.
+
+.Security gates, in the order a change meets them
+[cols="1,4,3,3,5", options="header"]
+|===
+| # | Gate | Where | Tool | Blocks
+| 1 | No secret in the code | Pull request | gitleaks | Any finding
+| 2 | No unsafe pattern in the code | Pull request | SonarQube | New security issues
+| 3 | No known vulnerability in dependencies | Pull request | Syft, Grype | Critical and high
+| 4 | No unsafe infrastructure | Pull request | Checkov | Public, unencrypted or over-privileged resources
+| 5 | Deployments ask for no privilege | Pull request | Chart validation against the restricted profile | A pod that asks for more
+| 6 | No known vulnerability in images | Main branch | Grype | Critical and high
+| 7 | Images come from us | Main branch, then the cluster | cosign {v-cosign}; the admission policy of the cluster | An image that the pipeline did not sign is not admitted
+| 8 | Authorization holds | `test` | The authorization suite | Any cell of the matrix that fails ({NFR-SEC-002})
+| 9 | The running application resists common attacks | `test` | ZAP | A finding of high severity
+| 10 | Nothing sensitive in logs | `integration` | The leak test after the end-to-end tests | Any personal data, token or secret ({NFR-SEC-007})
+| 11 | A person agrees | Before `prod` | Approval in Cloud Deploy | No approval
+|===
+
+== How the pipeline authenticates
+
+.Strategy question
+****
+What strategy gives a pipeline the power to deploy without leaving a key that could be stolen?
+****
+
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| To Google Cloud | GitHub proves which repository and which branch a run belongs to; Google Cloud exchanges that proof for a credential that lives minutes. No key is stored anywhere.
+| Who may do what | A run of a pull request can read, build and compute a plan. Only a run of the main branch can push images, create a release and apply infrastructure.
+| Production | Reached by Cloud Deploy, after approval, never directly by a run of GitHub Actions.
+| Third-party steps | Pinned to an exact commit, and few. Each run declares the minimum rights it needs.
+| Code from outside | A pull request from a fork runs without any credential.
+| The pipeline's own secrets | The token of the code analysis, and nothing else. Stored in the secret store of the repository's platform, readable by runs of the main branch only.
+|===
+
+== Measuring delivery
+
+.Strategy question
+****
+What strategy tells whether the pipeline is helping or merely passing?
+****
+
+[%unbreakable, cols="5,5,5", options="header"]
+|===
+| Measure | Target | Read on
+| Time from a merge to production | Within a working day | The release records
+| Deployments to production | Several per week | The release records
+| Share of releases that are rolled back | Below 15 % | The release records
+| Time to restore after a failed release | Below 30 minutes | Alerts and release records
+| Answer to a pull request | Below 15 minutes | Pipeline durations
+| A gate that fails for no good reason | Rare, and fixed first | Count of re-runs
+|===
+
+A gate that is often re-run until it passes is a broken gate: it is repaired or removed, never ignored.
+
+Owner: {role-devops} {role-sec}
