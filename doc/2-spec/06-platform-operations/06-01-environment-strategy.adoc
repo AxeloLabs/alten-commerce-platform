@@ -99,7 +99,7 @@ An environment is the same software and the same descriptions, with different va
 .Values that differ
 [cols="4,3,3,3", options="header"]
 |===
-| Value | `test` | `integration` | `prod`
+| Value | test | integration | prod
 | Replicas of each service | 1 | 2 | 2 or more, autoscaled
 | Running when unused | No | No | Always
 | Host name | A name of its own | A name of its own | The name of the store
@@ -162,7 +162,7 @@ What strategy lets engineers investigate freely without letting anyone change pr
 
 [cols="4,4,4,4", options="header"]
 |===
-| Action | `test` | `integration` | `prod`
+| Action | test | integration | prod
 | Deploy | The pipeline | The pipeline | The pipeline, after approval
 | Read logs, metrics, traces | Engineers | Engineers | Engineers
 | Read data | Engineers | Engineers | Nobody by default; an emergency access, limited in time and recorded (document 05-04)

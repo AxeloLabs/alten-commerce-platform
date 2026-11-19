@@ -1,0 +1,208 @@
+= Containers and Kubernetes Deployment: From an Image to a Running Service
+:doc-id: 06-03
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: How an image is built and hardened, what runs in a pod, the Kubernetes objects of a service, sizing and connection budgets, probes and rollouts, and the Helm charts.
+include::../_shared/attributes.adoc[]
+
+== The image
+
+.Strategy question
+****
+What strategy produces an image that is small, the same everywhere, and holds nothing an attacker can use?
+****
+
+Each deployable part has one image, built once by the pipeline and promoted unchanged from `test` to `prod` (document 06-01).
+
+.Rules of an image
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Base | {v-container-base}: a runtime, no compiler, no build tool. Pinned by its digest, renewed by the pipeline when a new one is published.
+| Build | In stages. The first stage compiles and tests; only the application layers reach the final image. The layers of a Spring Boot application are copied from the least to the most often changed — dependencies, then the application — so that a code change rebuilds a few megabytes.
+| Storefront | Built by a Node {v-node} stage; only the compiled files reach the image of the web gateway, which serves them ({ADR-PLT-018}).
+| User | A numeric user without privileges. Nothing in the image is writable by it.
+| Content | The application and its runtime. No shell script of ours, no secret, no configuration naming an environment, no development tool. The development console is a dependency of the development profile and is absent from the image (document 05-03).
+| Name | The repository, the service and the commit that produced it. A tag is never moved; deployments refer to the digest.
+| Labels | Source repository, commit, build time, version: the standard labels, so that a running container can be traced to its source.
+| Evidence | An inventory of components and a signature are attached to the image by the pipeline (document 06-05).
+| Start-up | The memory of the virtual machine is derived from the limit of the container. An archive of loaded classes is prepared at build time to shorten the start, which matters when an environment is scaled from nothing.
+|===
+
+Docker is the format, not a daemon we depend on: images follow the open container format, are built in the pipeline and run by the container runtime of the cluster.
+On a workstation any compatible tool builds and runs them (document 08-01).
+
+Owner: {role-devops} {role-platform}
+
+== What runs in a pod
+
+.Strategy question
+****
+What strategy keeps a pod simple enough that everything about it can be read in one table?
+****
+
+A pod holds one container.
+Nothing runs beside the application: the database connector, the telemetry and the token handling are libraries inside it, not side containers.
+
+.Anatomy of a pod of a service
+[cols="4,11", options="header"]
+|===
+| Aspect | Value
+| Ports | One for the business interface; one for management — health, metrics, build information — that no route exposes
+| Configuration | Environment variables and one mounted file, from the chart. Read once, at start.
+| Secrets | Mounted as files from Secret Manager, for the services that have any (document 05-04)
+| Identity | A Kubernetes service account of its own, bound to its Google identity
+| File system | Read-only. One temporary volume in memory for what a library must write.
+| Privileges | Runs as a non-root user; no privilege escalation; every Linux capability dropped; the default system-call filter. The namespace enforces the restricted security profile: a pod that asks for more is refused.
+| State | None. Anything that must survive a restart is in the database ({NFR-SCAL-001}).
+|===
+
+== The objects of a service
+
+.Strategy question
+****
+What strategy describes a service to the cluster completely, so that nothing is ever added by hand?
+****
+
+plantuml::diagrams/k8s-objects.puml[format=svg, align=center]
+
+.Objects, per service and per environment
+[cols="4,11", options="header"]
+|===
+| Object | Purpose
+| Deployment | The image, the number of replicas, resources, probes, security context, spread over zones
+| Service | A stable name inside the namespace; routes only to pods that are ready
+| Service account | The identity of the workload
+| Configuration | The values that are not secret
+| Secrets volume | The link to the secrets the service may read
+| Autoscaler | In production: more replicas under load, between a minimum and a maximum
+| Disruption budget | Maintenance may take one replica at a time, never the last
+| Network policy | Who may call the service and whom it may call (document 05-04)
+| Metrics collection | Tells the managed Prometheus service to scrape the management port
+| Migration job | Applies the schema migrations of the release before its pods start (document 04-04)
+|===
+
+.Objects that exist once
+[%unbreakable, cols="4,3,8", options="header"]
+|===
+| Object | Where | Purpose
+| Gateway | Namespace `edge` | The entry point: one address, the certificate, the host names
+| Routes | Each environment | Host name of the store to the web gateway; host name of the identity provider to its sign-in addresses only
+| Backend policies | Each environment | The firewall policy and the health check that the load balancer applies to the web gateway and to the identity provider
+| Default network policy | Each environment | Everything denied unless a policy of a service allows it
+| Quota | Each environment | A ceiling on the processor and memory the namespace may request
+| Security profile | Each environment | The restricted profile, enforced on every pod
+|===
+
+== Sizing
+
+.Strategy question
+****
+What strategy sizes workloads when the cluster bills exactly what they ask for?
+****
+
+On Autopilot the request of a container is at once what it is guaranteed and what is paid.
+The values below are starting points, to be corrected by the measurements of the load tests (document 07-04); they are deliberately small.
+
+.Requests and replicas
+[cols="4,2,2,2,2,3", options="header"]
+|===
+| Workload | Processor | Memory | test | integration | prod
+| Order, inventory, payment services | 0.5 | 1 GiB | 1 | 2 | 2 to 4
+| Catalog, cart services | 0.25 | 768 MiB | 1 | 2 | 2 to 4
+| Notification service | 0.25 | 768 MiB | 1 | 2 | 2
+| Web gateway | 0.25 | 512 MiB | 1 | 2 | 2 to 4
+| Identity provider | 0.5 | 1 GiB | 1 | 1 | 2
+| Trace collector, Grafana | 0.1 each | 256 MiB each 3+^| 1, shared by the three environments
+|===
+
+.Scaling in production
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Signal | Processor use above 70 % of the request, averaged over the replicas
+| Bounds | Never fewer than two replicas ({NFR-AVAIL-002}); never more than the maximum of the table, which the connection budget below justifies
+| Down | Slowly: a replica is removed only after several minutes of low load, and always through a clean shutdown
+| Message consumers | Scaled the same way. A backlog that grows while the processor is idle means a dependency is slow, not that replicas are missing: it raises an alert, not a scale-up.
+| Non-production | No autoscaler. `test` and `integration` are set to zero replicas when unused, and back when a pipeline or a person needs them (document 06-06).
+|===
+
+.Connection budget of the database instance
+[cols="4,3,3,3,3", options="header"]
+|===
+| Workload | Pool per replica | prod, at most | integration | test
+| Order, inventory, payment | 10 | 40 + 40 + 30 | 20 + 20 + 20 | 10 + 10 + 10
+| Catalog, cart | 5 | 20 + 20 | 10 + 10 | 5 + 5
+| Notification | 5 | 10 | 10 | 5
+| Web gateway | 5 | 20 | 10 | 5
+| Identity provider | 10 | 20 | 10 | 10
+| *Total* | | *200* | *110* | *60*
+|===
+
+The three environments share one instance: 370 connections at most, plus a few for migrations and for operators.
+The instance is set to accept 500, which leaves the margin of 20 % that document 04-04 asks for.
+The payment service is capped at three replicas in production for this reason; raising any maximum means revisiting this table first.
+
+== Probes and rollouts
+
+.Strategy question
+****
+What strategy replaces every pod of a service while customers keep ordering?
+****
+
+The behaviors are specified in document 05-02; these are their values.
+
+.Probes
+[%unbreakable, cols="3,5,7", options="header"]
+|===
+| Probe | Asks | Setting
+| Startup | Has the application finished starting? | Every 5 s, for 2 minutes at most. The two others wait for it.
+| Readiness | Can this pod work? | Every 5 s; unready after 2 failures, ready again after 1 success
+| Liveness | Is the process stuck? | Every 10 s; restarted after 3 failures. Looks at the process only, never at a dependency.
+|===
+
+.Rollout of a new version
+[cols="4,11", options="header"]
+|===
+| Step | Rule
+| Before | The migration job runs; if it fails nothing else happens.
+| Replacement | One pod at a time: a new pod is created, becomes ready and stays so for 10 s, then an old one is asked to stop. The number of ready replicas never goes below what it was.
+| Stopping a pod | It is first removed from the load balancer and stops pulling messages; it waits 10 s for requests already routed to it; it finishes what it has in hand; it exits. It has 60 s in all before it is killed.
+| Failure | A new pod that never becomes ready stops the rollout. The old pods keep serving; the pipeline reports the failure and returns to the previous release (document 06-05).
+| Zones | Replicas of a service are spread over zones; a rollout keeps the spread.
+| Production | Progressive: a share of the traffic first, a verification, then the rest (document 06-05).
+|===
+
+== Charts
+
+.Strategy question
+****
+What strategy describes seven workloads and three environments without copying a file twenty-one times?
+****
+
+Deployments are packaged with Helm {v-helm}.
+
+.Charts
+[cols="4,11", options="header"]
+|===
+| Chart | Content
+| `service` | The objects of the table "Objects, per service and per environment". Used for the six services and the web gateway: what differs — name, image, ports, pool, neighbors allowed, autoscaling — is a value.
+| `identity-provider` | The identity provider, its realm configuration and its routes
+| `environment` | What exists once per namespace: default network policy, quota, security profile
+| `edge` | The Gateway and its certificate
+| `observability` | The trace collector, Grafana, dashboards and alert rules
+|===
+
+.Rules
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Values | One file of defaults per workload, one file per environment holding only what differs (document 06-01)
+| No logic | A chart has no condition on the name of an environment. An environment is a set of values.
+| Images | Referred to by digest, given by the pipeline. A chart never names a tag.
+| Checks | Every chart is rendered with the values of each environment at each build, and the result is validated against the schemas of Kubernetes {v-kubernetes} and against the security profile
+| Who installs | The delivery pipeline. Nobody installs or upgrades a chart by hand (document 06-06).
+|===
+
+Owner: {role-platform} {role-devops}

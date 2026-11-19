@@ -1,0 +1,31 @@
+@startuml
+title Kubernetes objects of one service, in one namespace
+
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+package "namespace of an environment" #F4F7F9 {
+  component "Deployment\nreplicas, image, probes,\nresources, security context" as D #E3F2FD
+  component "Pods\none container each" as P #E3F2FD
+  component "Service\nstable name inside the cluster" as SVC
+  component "Service account\nbound to a Google identity" as SA #FFF8E1
+  component "Configuration\nvalues that are not secret" as CM
+  component "Secrets volume\nfrom Secret Manager" as SEC #FFF8E1
+  component "Autoscaler\nreplicas from load" as HPA
+  component "Disruption budget\nat least one replica stays" as PDB
+  component "Network policy\nwho may call, whom it may call" as NP #FFCDD2
+  component "Metrics collection\nscrapes the management port" as PM
+  component "Migration job\nruns before a new version" as JOB #C8E6C9
+}
+
+D --> P : creates
+SVC --> P : routes to ready pods
+P ..> SA : runs as
+P ..> CM : reads at start
+P ..> SEC : mounts
+HPA --> D : scales
+PDB ..> P : protects
+NP ..> P : filters
+PM ..> P : scrapes
+JOB ..> D : must succeed first
+@enduml
