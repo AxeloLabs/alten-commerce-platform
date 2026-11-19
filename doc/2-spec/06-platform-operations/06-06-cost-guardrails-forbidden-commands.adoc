@@ -1,0 +1,223 @@
+= Cost Guardrails and Forbidden Commands: What Limits the Bill, and What Nobody May Run
+:doc-id: 06-06
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: What the platform costs and why, the budget and its alerts, the limits that prevent a runaway bill, what to do when the budget is reached, and the commands that people and agents must never run.
+include::../_shared/attributes.adoc[]
+
+== Two kinds of accident
+
+.Strategy question
+****
+What strategy protects a cloud project from the two accidents that cannot be undone: a bill and a deletion?
+****
+
+A cloud platform can hurt its owner in two ways that code review does not catch: by spending without limit, and by destroying something that cannot be rebuilt.
+Both are prevented the same way, in three layers.
+
+.Three layers of guardrail
+[%unbreakable, cols="3,6,6", options="header"]
+|===
+| Layer | For the bill | For destruction
+| Prevent | Ceilings on what can be requested; environments that sleep; nothing sized "just in case" | People and agents lack the right; the resource itself refuses deletion
+| Detect | A budget with alerts on what is spent and on what is forecast | A nightly check that nothing was changed by hand (document 06-04); the audit log
+| Correct | A written procedure that stops spending, level by level | Backups, recovery to a point in time, infrastructure rebuilt from code (document 05-02)
+|===
+
+One fact shapes this document: *a budget does not stop anything*.
+It sends alerts; services keep running and keep being billed.
+Stopping is a decision and an action, described below.
+
+Owner: {role-cloud} {role-platform}
+
+== What the platform costs
+
+.Strategy question
+****
+What strategy makes the bill predictable before the first resource is created?
+****
+
+.What is paid, and when
+[cols="4,4,7", options="header"]
+|===
+| Item | Paid | Depends on
+| Pods of the cluster | By the second, for what they request | Replicas × requests × time running. Zero when an environment is scaled to nothing.
+| Database instance | All the time | Its size, doubled by high availability; storage; backups. The largest fixed line.
+| Entry point | All the time, plus traffic | One address and its rules; the firewall policy
+| Outgoing address | All the time, plus traffic | One gateway
+| Cluster | A fee per cluster | One cluster
+| Messages | By volume | A few messages per order: negligible at our scale
+| Logs, metrics, traces | By volume, beyond a free allowance | Sampling and retention (document 05-03)
+| Images, secrets, names, certificates | Little | The number of images kept
+|===
+
+.Three situations, as orders of magnitude
+[cols="5,5,5", options="header"]
+|===
+| Situation | What runs | Order of magnitude per month
+| Everything asleep | The database instance, the entry point, the outgoing address | Around a hundred euros
+| Production awake, the rest asleep | Plus fourteen pods of production and the identity provider | A few hundred euros
+| Everything awake all month | Plus the pods of `test` and `integration` | Half as much again
+|===
+
+These figures are estimates made from public list prices when this was written.
+They are to be recomputed with the provider's calculator before the first deployment, and replaced by the real figures after the first month.
+The budget below is set from them.
+
+.Where the money goes when production is awake
+[%unbreakable, cols="5,3,7", options="header"]
+|===
+| Item | Share | Lever
+| Pods of production | About two fifths | Requests and number of replicas (document 06-03)
+| Database instance | About one third | Its size; high availability
+| Entry point and outgoing address | About one tenth | Fixed
+| Observability and the rest | The remainder | Sampling, retention
+|===
+
+Before the store opens to real customers, production does not need to run at night.
+Treating it like the two other environments — awake for demonstrations and tests, asleep otherwise — divides the bill by about three; the price is that the availability objectives of document 05-03 are not measured during that period.
+This is a choice for the owner of the project.
+
+== The budget and its alerts
+
+.Strategy question
+****
+What strategy makes sure the owner learns of an overspend from an e-mail, not from an invoice?
+****
+
+.The budget ({NFR-COST-001})
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Scope | The project, all services included
+| Amount | Set by the owner from the estimate above. A parameter of the infrastructure code, not a constant.
+| Alerts on what is spent | At 50 %, 90 % and 100 % of the amount
+| Alert on the forecast | When the spending forecast for the month exceeds the amount, whatever was spent so far
+| Who is told | The owner, by e-mail, at every threshold; the team at 90 % and above
+| Automation | The alerts are also published as messages, so that the first corrective level below runs by itself
+| Unusual spending | The provider's detection of anomalies is on: a line that suddenly departs from its habit raises an alert before any threshold
+|===
+
+The budget is declared in the infrastructure code, in the `guardrails` module.
+It is one of the few resources applied by the owner and not by the pipeline: it concerns the billing account, whose rights are not delegated (document 06-04).
+
+== Limits that prevent
+
+.Strategy question
+****
+What strategy makes a runaway bill impossible rather than merely noticed?
+****
+
+[cols="4,6,5", options="header"]
+|===
+| Limit | Value | Stops
+| Maximum replicas per service | The maxima of document 06-03 | Scaling without end under an attack or a defect
+| Quota of each namespace | A little above the sum of its maxima | A wrong chart asking for a hundred replicas
+| Quota of the project in the region | Lowered to what the three environments can use | Resources created outside the namespaces, by mistake or by an intruder
+| Sleeping environments | `test` and `integration` are scaled to nothing every evening, and only a pipeline or a person wakes them ({NFR-COST-002}) | Paying nights and week-ends for nothing
+| Database | A fixed size; storage that grows by itself, up to a ceiling | A table that fills the disk
+| Logs and traces | Retention of 30 days; reads sampled; no debug level in any environment | A volume that grows with traffic
+| Images | Only the last releases are kept | Storage that only grows
+| Requests from outside | Rate limits at the entry point (document 05-04) | An attacker paying with our money
+| Kinds of resource | No accelerator, no large machine class, no resource outside the region | The expensive mistakes
+|===
+
+== When the budget is reached
+
+.Strategy question
+****
+What strategy stops the spending at the right level: enough to stop the bleeding, no more?
+****
+
+plantuml::diagrams/kill-switch.puml[format=svg, align=center, pdfwidth=85%]
+
+.Four levels
+[cols="1,5,4,5", options="header"]
+|===
+| # | Action | Who | Effect
+| 1 | Scale `test` and `integration` to nothing | Automatic at 90 %; anyone on the team before | Nothing is lost. Tests wait.
+| 2 | Scale production to nothing | The owner | The store is closed; data, messages and configuration are intact; it reopens in minutes
+| 3 | Stop the database instance | The owner | Nothing can start; only its storage is billed; it restarts in minutes with its data
+| 4 | Detach billing from the project | The owner, as a last resort | Everything stops at once. Resources may be deleted by the provider if billing stays off: to use only when the alternative is worse.
+|===
+
+Levels 1 to 3 are commands of the runbook (document 06-07) and are rehearsed.
+Level 4 is not automated, on purpose: the provider documents a way to trigger it from a budget alert, and it would let a miscalculated forecast destroy a store.
+
+== Commands nobody runs
+
+.Strategy question
+****
+What strategy keeps a tired person, or an eager agent, from typing the one command that cannot be taken back?
+****
+
+The commands below are forbidden to engineers and to AI agents alike.
+Forbidding is not enough: for each family the table says what makes the command fail even if someone tries.
+
+.Destroying
+[cols="6,5,5", options="header"]
+|===
+| Never | Why | What stops it
+| Deleting the project, or detaching its billing | Ends everything | Only the owner has the right
+| Deleting the database instance, a database, a backup | The data of the store | Deletion protection; no right for engineers
+| Deleting the cluster or a namespace | Every workload of one or three environments | Deletion protection; the pipeline alone has rights on the cluster
+| Deleting a topic or a subscription, or moving a subscription back or forward in time outside the runbook | Messages lost or replayed blindly | Protected in the infrastructure code; no right for engineers
+| Deleting a secret or destroying its versions | A service that can no longer start | No right for engineers
+| Deleting images that a release refers to | A rollback becomes impossible | The retention rule keeps them; no right for engineers
+| `terraform destroy`; removing or editing the state by hand | The description and the reality part ways | Engineers cannot write the state; destroy is not a pipeline job
+| Dropping or emptying a table, deleting rows without a condition, in production | Data | Nobody has a session on the production database; the service accounts cannot change the schema
+|===
+
+.Opening
+[cols="6,5,5", options="header"]
+|===
+| Never | Why | What stops it
+| Creating a key file for a service identity | A credential that lives for ever and can be copied | Identities are federated; the creation of keys is disabled where the project allows it
+| Granting a broad role — owner, editor — to anyone or anything | Least privilege ends there | Rights are in the infrastructure code; a grant made by hand shows in the nightly check
+| Giving the database a public address, or opening a firewall rule to every address | The data on the internet | The security scan of the infrastructure code refuses it
+| Making a bucket, a topic or an image public | The same | The same
+| Disabling the admission policy of images, or a network policy | The door is open to the next mistake | Both are in code; the nightly check sees it
+|===
+
+.Bypassing
+[cols="6,5,5", options="header"]
+|===
+| Never | Why | What stops it
+| Changing a workload by hand in `integration` or `prod`: applying, editing, scaling, deleting, installing or rolling back a chart | Nobody reviewed it, nobody can reproduce it | Engineers can read the cluster, not write to it
+| Opening a shell in a pod of production | Diagnosis relies on signals (document 05-03); a shell sees secrets and personal data | Not granted
+| Applying infrastructure from a workstation, or to a part only | It skips the review and the order of environments | Engineers have no right on resources or on the state
+| Forcing a push to the main branch, rewriting its history, skipping the checks of a commit | The main branch is what gets deployed | Branch protection
+| Putting a secret in a file, a variable of the pipeline, a commit message, a ticket | It will be found | The secrets scan; a leaked secret is rotated (document 05-04)
+| Running a script downloaded from the internet in the pipeline or with production rights | Someone else's code with our identity | Steps of the pipeline are pinned and few (document 06-05)
+| Copying production data to another environment or to a workstation | Personal data leaves its place | No right to read production data
+|===
+
+.The commands themselves, by tool
+[cols="2,13", options="header"]
+|===
+| Tool | Forbidden
+| `gcloud` | `gcloud projects delete` · `gcloud billing projects unlink` · `gcloud sql instances delete` · `gcloud sql databases delete` · `gcloud sql backups delete` · `gcloud container clusters delete` · `gcloud pubsub topics delete` · `gcloud pubsub subscriptions delete` · `gcloud pubsub subscriptions seek` · `gcloud secrets delete` · `gcloud secrets versions destroy` · `gcloud iam service-accounts keys create` · `gcloud projects add-iam-policy-binding` · `gcloud artifacts docker images delete` · `gcloud services disable` · `gcloud storage rm` on the bucket of the states
+| `kubectl` | `kubectl delete namespace` everywhere. In `integration` and `prod`: `kubectl apply`, `edit`, `patch`, `scale`, `delete`, `rollout undo`, `exec`, `cp`, `port-forward`. Everywhere: `kubectl create secret`
+| `helm` | `helm install` · `helm upgrade` · `helm rollback` · `helm uninstall`
+| `terraform` | `terraform destroy` · `terraform apply` outside the pipeline · `terraform apply -target` · `terraform state rm`, `mv`, `push` · `terraform force-unlock` · `terraform import` outside a reviewed change
+| `git` | `git push --force` to the main branch · `git commit --no-verify` · any rewriting of the history of the main branch
+| SQL, in production | `DROP` · `TRUNCATE` · `DELETE` or `UPDATE` without a condition · any change of schema outside a migration
+|===
+
+The runbook of document 06-07 uses some of these commands — stopping the database instance, moving a subscription in time — inside written procedures, run by the person named there.
+Outside those procedures they are forbidden.
+
+.What is always allowed
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Action | For
+| Listing and describing resources; reading logs, metrics and traces | Everyone on the team, in every environment
+| Computing a plan of the infrastructure | The pipeline, and engineers with read-only rights
+| Rendering a chart; running the whole platform on a workstation | Everyone
+| Everything, in `test` | Engineers, for an investigation: `test` is rebuilt from the repository
+|===
+
+For AI agents the same lists are enforced a second time, by the rules of the harness that decide which commands an agent may run without asking, with asking, or never (document 08-02).
+
+Owner: {role-cloud} {role-sec}

@@ -1,0 +1,27 @@
+@startuml
+title What happens as the month's spending rises
+start
+:Spending of the month, actual and forecast;
+if (50 % of the budget reached?) then (yes)
+  :E-mail to the owner;
+else (no)
+endif
+if (90 % reached, or the forecast\nexceeds the budget?) then (yes)
+  :E-mail to the owner and to the team;
+  :Automatic: test and integration\nare scaled to nothing;
+else (no)
+endif
+if (100 % reached?) then (yes)
+  :Alert by every channel;
+  :The owner decides;
+  fork
+    :Level 2\nproduction scaled to nothing:\nthe store is closed,\nnothing is lost;
+  fork again
+    :Level 3\nthe database instance is stopped:\ndata kept, only storage is billed;
+  fork again
+    :Level 4\nbilling is detached from the project:\neverything stops,\nresources may be lost;
+  end fork
+else (no)
+endif
+stop
+@enduml
