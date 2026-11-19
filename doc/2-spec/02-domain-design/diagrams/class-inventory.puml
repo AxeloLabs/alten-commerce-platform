@@ -4,11 +4,11 @@ hide empty members
 
 class StockItem <<aggregate root>> {
   sku : Sku
-  onHand : Quantity
-  reserved : Quantity
+  onHand : StockLevel
+  reserved : StockLevel
   version : long
   --
-  available() : Quantity
+  available() : StockLevel
   hold(quantity)
   confirm(quantity)
   release(quantity)
@@ -18,6 +18,7 @@ class StockItem <<aggregate root>> {
 class Reservation <<aggregate root>> {
   reservationId : ReservationId
   orderId : OrderId
+  sagaId : SagaId
   status : ReservationStatus
   expiresAt : Instant
   version : long
@@ -25,6 +26,7 @@ class Reservation <<aggregate root>> {
   confirm()
   release()
   expire(now)
+  giveBack()
 }
 class ReservationLine <<value object>> {
   sku : Sku
@@ -32,9 +34,11 @@ class ReservationLine <<value object>> {
 }
 enum ReservationStatus {
   HELD
+  REJECTED
   CONFIRMED
   RELEASED
   EXPIRED
+  RETURNED
 }
 class StockMovement <<entity>> {
   movementId
@@ -49,16 +53,16 @@ class StockMovement <<entity>> {
 enum MovementCause {
   ADJUSTMENT
   ORDER_CONFIRMED
-  ORDER_CANCELED
+  STOCK_RETURNED
 }
 class ReservationPolicy <<domain service>> {
-  reserveAllOrNothing(orderId, lines, stock) : Reservation or Rejection
+  reserveAllOrNothing(orderId, lines, stock, expiresAt, now) : Reservation
 }
 
 Reservation "1" *-- "1..50" ReservationLine
 Reservation --> ReservationStatus
 StockMovement --> MovementCause
 ReservationPolicy ..> StockItem : holds on every line,\nor on none
-ReservationPolicy ..> Reservation : creates
+ReservationPolicy ..> Reservation : creates, HELD or REJECTED
 StockItem ..> StockMovement : records
 @enduml

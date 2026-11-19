@@ -1,0 +1,34 @@
+@startuml
+title SC-ORD-016 — The payment service itself is down
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+participant "Notification" as N
+
+O ->> I : ReserveStock
+I ->> O : StockReserved
+note over O : CHARGING_PAYMENT
+O ->> P : ChargePayment (not after: order deadline)
+note over P #ECEFF1 : down: the message waits\nin its subscription
+... order deadline ...
+O -> O : order deadline reached
+note over O : CANCELING_PAYMENT
+O ->> P : CancelPayment
+note over P #ECEFF1 : waits behind the charge
+... review deadline ...
+O -> O : review deadline reached
+note over O #FFF8E1 : SUSPENDED, remembers CANCELING_PAYMENT\norder UNDER_REVIEW
+O ->> N : OrderPutUnderReview
+== the payment service is back ==
+note over P : ChargePayment read after its instant:\npayment recorded CANCELED
+note over PSP : never called
+P ->> O : PaymentCanceled
+note over O : handled as in CANCELING_PAYMENT
+O ->> I : ReleaseReservation
+note over O #FFCDD2 : COMPENSATED\norder REJECTED, TIMED_OUT
+O ->> N : OrderRejected (nothing charged)
+note over P : CancelPayment: already CANCELED
+P ->> O : PaymentCanceled
+note right of O : saga ended:\nrecorded, no effect
+@enduml

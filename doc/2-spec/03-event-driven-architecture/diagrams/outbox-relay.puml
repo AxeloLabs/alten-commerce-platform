@@ -18,7 +18,7 @@ U --> S : done
 S ->> PS : acknowledge
 
 loop every few hundred milliseconds
-  R -> DB : claim unpublished rows, oldest first
+  R -> DB : claim eligible rows, oldest first:\nunpublished, and no older unpublished\nrow with the same ordering key
   R ->> PS : publish, with ordering key and envelope
   PS -->> R : accepted
   R -> DB : mark as published

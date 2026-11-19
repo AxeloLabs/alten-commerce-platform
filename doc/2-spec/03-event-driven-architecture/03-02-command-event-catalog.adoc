@@ -1,6 +1,6 @@
 = Command and Event Catalog: Everything That Is Asked and Everything That Is Announced
 :doc-id: 03-02
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The complete list of commands and events of the platform, with their sender, receiver, transport, key and content.
@@ -56,9 +56,9 @@ Their interfaces are specified in document 04-05.
 | [[CMD-ORD-002]]CMD-ORD-002 | `CancelOrder` | Customer | Order | {UC-ORD-004}. The order becomes `CANCELING`; starts the cancel-order saga.
 | [[CMD-ORD-003]]CMD-ORD-003 | `ShipOrder` | Administrator | Order | {UC-ORD-006}. Publishes {EVT-ORD-005}.
 | [[CMD-ORD-004]]CMD-ORD-004 | `DeliverOrder` | Administrator | Order | {UC-ORD-006}. Publishes {EVT-ORD-006}.
-| [[CMD-ORD-005]]CMD-ORD-005 | `RetryOrderUnderReview` | Administrator | Order | {UC-ORD-007}. The suspended step is requested again.
-| [[CMD-ORD-006]]CMD-ORD-006 | `ConfirmOrderUnderReview` | Administrator | Order | {UC-ORD-007}. Refused unless the payment is captured.
-| [[CMD-ORD-007]]CMD-ORD-007 | `RejectOrderUnderReview` | Administrator | Order | {UC-ORD-007}. The payment is refunded or canceled first.
+| [[CMD-ORD-005]]CMD-ORD-005 | `RetryOrderUnderReview` | Administrator | Order | {UC-ORD-007}. The request of the remembered step is sent again.
+| [[CMD-ORD-006]]CMD-ORD-006 | `ConfirmOrderUnderReview` | Administrator | Order | {UC-ORD-007}. Refused unless the payment is known as captured; refused for an order that was being canceled.
+| [[CMD-ORD-007]]CMD-ORD-007 | `RejectOrderUnderReview` | Administrator | Order | {UC-ORD-007}. The payment is refunded or canceled first, then the stock is released or returned; refused for an order that was being canceled.
 |===
 
 `PlaceOrder` carries the checkout identifier, the shipping address, the payment token and the lines and prices the customer reviewed.
@@ -73,22 +73,33 @@ What strategy lets the order service ask another service to act, and be sure the
 
 These commands are messages.
 They are sent only by the sagas of the order service, each to one service, on that service's command topic.
-A command that is delivered twice has its effect once: the receiver recognizes the order it concerns and answers what it answered the first time.
+A command has its effect once, however many times it is delivered or sent.
+The receiver finds the payment or the reservation of the order and answers from its _current status_: if the status shows that the request is already served, the answer is published again and nothing else happens; if it shows that it is not — never tried, interrupted, or failed the last time — the request is performed.
+The complete tables of answers, status by status, are in document 02-03.
 
 [cols="3,4,3,5,5", options="header"]
 |===
 | ID | Command | To | Content | Answered by
-| [[CMD-INV-002]]CMD-INV-002 | `ReserveStock` | Inventory | Order identifier, lines (SKU, quantity), expiry time | {EVT-INV-001} or {EVT-INV-002}
+| [[CMD-INV-002]]CMD-INV-002 | `ReserveStock` | Inventory | Order identifier, lines (SKU, quantity), instant at which the reservation expires | {EVT-INV-001} or {EVT-INV-002}
 | [[CMD-INV-003]]CMD-INV-003 | `ConfirmReservation` | Inventory | Order identifier | {EVT-INV-003} or {EVT-INV-004}
-| [[CMD-INV-004]]CMD-INV-004 | `ReleaseReservation` | Inventory | Order identifier, reason | {EVT-INV-005}
-| [[CMD-INV-005]]CMD-INV-005 | `ReturnStock` | Inventory | Order identifier, lines | {EVT-INV-006}
-| [[CMD-PAY-001]]CMD-PAY-001 | `ChargePayment` | Payment | Order identifier, amount, currency, payment token | {EVT-PAY-001}, {EVT-PAY-002} or {EVT-PAY-003}
-| [[CMD-PAY-002]]CMD-PAY-002 | `CancelPayment` | Payment | Order identifier | {EVT-PAY-004} or {EVT-PAY-001}
+| [[CMD-INV-004]]CMD-INV-004 | `ReleaseReservation` | Inventory | Order identifier, reason | {EVT-INV-005}; {EVT-INV-003} when the stock was already taken
+| [[CMD-INV-005]]CMD-INV-005 | `ReturnStock` | Inventory | Order identifier | {EVT-INV-006}
+| [[CMD-PAY-001]]CMD-PAY-001 | `ChargePayment` | Payment | Order identifier, amount, currency, payment token, instant after which the charge must not be made | {EVT-PAY-001}, {EVT-PAY-002} or {EVT-PAY-003}; {EVT-PAY-004} when it arrives too late
+| [[CMD-PAY-002]]CMD-PAY-002 | `CancelPayment` | Payment | Order identifier | {EVT-PAY-004}; {EVT-PAY-001} or {EVT-PAY-002} when the charge had an outcome after all; {EVT-PAY-003} when nothing can be established
 | [[CMD-PAY-003]]CMD-PAY-003 | `RefundPayment` | Payment | Order identifier | {EVT-PAY-005} or {EVT-PAY-006}
 |===
 
 The key of every command is the order identifier.
-The payment token travels in `ChargePayment` only; it is used once by the payment service and never stored or logged ({FR-PAY-003}).
+
+Two commands carry an instant after which they must not be executed.
+A request that waited too long in a subscription, because its receiver was down, reserves nothing and charges nothing when it is finally read: an order is never charged days after the customer gave up.
+
+`ReturnStock` carries no lines: the inventory returns what the reservation of the order took, once.
+
+The payment token travels in `ChargePayment` only.
+It is not card data ({FR-PAY-003}): it is a single-use reference that the provider accepts once, for a few minutes.
+It is handled as a secret all the same: never logged, never in an event, kept by the order service only until the charge is requested, never written by the payment service.
+Document 03-06 gives the rule for each place the token passes through.
 
 == Events of the inventory
 
@@ -103,13 +114,16 @@ Published by the inventory service on its event topic.
 |===
 | ID | Event | Content | Key | Consumed by
 | [[EVT-INV-001]]EVT-INV-001 | `StockReserved` | Order identifier, reservation identifier, expiry time | Order | Order saga
-| [[EVT-INV-002]]EVT-INV-002 | `StockReservationRejected` | Order identifier, the lines that could not be reserved | Order | Order saga
+| [[EVT-INV-002]]EVT-INV-002 | `StockReservationRejected` | Order identifier, the lines that could not be reserved, or the mention that the request arrived too late | Order | Order saga
 | [[EVT-INV-003]]EVT-INV-003 | `ReservationConfirmed` | Order identifier | Order | Order saga
 | [[EVT-INV-004]]EVT-INV-004 | `ReservationConfirmationFailed` | Order identifier, the lines no longer available | Order | Order saga
 | [[EVT-INV-005]]EVT-INV-005 | `ReservationReleased` | Order identifier | Order | Order saga, for the record
-| [[EVT-INV-006]]EVT-INV-006 | `StockReturned` | Order identifier | Order | Cancel saga
+| [[EVT-INV-006]]EVT-INV-006 | `StockReturned` | Order identifier | Order | Order sagas
 | [[EVT-INV-007]]EVT-INV-007 | `StockAvailabilityChanged` | SKU, available quantity, sequence number | SKU | Catalog
 |===
+
+An answer carries the saga identifier of the command it answers (document 03-04).
+The order service hands it to that saga, the placement or the cancellation of the order; no event is ever interpreted by a saga that did not ask.
 
 `StockAvailabilityChanged` carries a sequence number that grows with each change of a SKU.
 A consumer that receives an older number than the one it already applied ignores the event ({FR-INV-007}, {FR-CAT-008}).
@@ -128,13 +142,16 @@ Published by the payment service on its event topic.
 | ID | Event | Content | Key | Consumed by
 | [[EVT-PAY-001]]EVT-PAY-001 | `PaymentCaptured` | Order identifier, payment identifier, amount | Order | Order saga
 | [[EVT-PAY-002]]EVT-PAY-002 | `PaymentRefused` | Order identifier, general reason | Order | Order saga
-| [[EVT-PAY-003]]EVT-PAY-003 | `PaymentOutcomeUnknown` | Order identifier | Order | Order saga
+| [[EVT-PAY-003]]EVT-PAY-003 | `PaymentOutcomeUnknown` | Order identifier, what could not be established: the charge, the cancellation or the refund | Order | Order sagas
 | [[EVT-PAY-004]]EVT-PAY-004 | `PaymentCanceled` | Order identifier | Order | Order saga
 | [[EVT-PAY-005]]EVT-PAY-005 | `PaymentRefunded` | Order identifier, amount | Order | Order sagas
 | [[EVT-PAY-006]]EVT-PAY-006 | `PaymentRefundFailed` | Order identifier, general reason | Order | Order sagas
 |===
 
-`PaymentCaptured` answers `ChargePayment`, and also answers `CancelPayment` when the payment turned out to be captured ({FR-PAY-005}).
+A payment event states where the payment stands, and is the answer to whichever request was just handled.
+`PaymentCaptured` answers a charge, and also the cancellation of a payment that turned out to be captured ({FR-PAY-005}).
+`PaymentCanceled` answers a cancellation, and also a charge that arrived after the instant it carried.
+Document 02-03 gives the answer to every request in every status.
 No payment event carries the token, the provider's reference or any card data.
 
 == Events of the order
@@ -149,16 +166,20 @@ Published by the order service on its event topic, for whoever listens.
 [cols="3,4,6,3,4", options="header"]
 |===
 | ID | Event | Content | Key | Consumed by
-| [[EVT-ORD-001]]EVT-ORD-001 | `OrderConfirmed` | Order identifier and number, customer identifier and e-mail, lines, total | Order | Cart, notification
-| [[EVT-ORD-002]]EVT-ORD-002 | `OrderRejected` | Order identifier and number, customer e-mail, reason, whether a payment was refunded | Order | Notification
-| [[EVT-ORD-003]]EVT-ORD-003 | `OrderPutUnderReview` | Order identifier and number, customer e-mail | Order | Notification
-| [[EVT-ORD-004]]EVT-ORD-004 | `OrderCanceled` | Order identifier and number, customer e-mail, amount refunded | Order | Notification
-| [[EVT-ORD-005]]EVT-ORD-005 | `OrderShipped` | Order identifier and number, customer e-mail | Order | Notification
-| [[EVT-ORD-006]]EVT-ORD-006 | `OrderDelivered` | Order identifier and number, customer e-mail | Order | Notification
+| [[EVT-ORD-001]]EVT-ORD-001 | `OrderConfirmed` | The order summary | Order | Cart, notification
+| [[EVT-ORD-002]]EVT-ORD-002 | `OrderRejected` | The order summary, the reason, whether a payment was refunded | Order | Notification
+| [[EVT-ORD-003]]EVT-ORD-003 | `OrderPutUnderReview` | The order summary | Order | Notification
+| [[EVT-ORD-004]]EVT-ORD-004 | `OrderCanceled` | The order summary, the amount refunded | Order | Notification
+| [[EVT-ORD-005]]EVT-ORD-005 | `OrderShipped` | The order summary | Order | Notification
+| [[EVT-ORD-006]]EVT-ORD-006 | `OrderDelivered` | The order summary | Order | Notification
 |===
 
-Order events are self-sufficient: they carry what a listener needs, so that no listener has to call the order service back.
-The customer's e-mail address is the only personal data they contain; it is not logged ({NFR-SEC-007}).
+Every order event carries the same _order summary_: the order identifier and number, the customer identifier and e-mail address, the lines (SKU, product name, quantity, unit price), the total and the new status.
+Order events are thus self-sufficient: every e-mail required by {FR-NOT-004} can be written from the event alone, and no listener has to call the order service back.
+
+The customer's e-mail address is the only personal data they contain.
+It is read from the order, where it was copied when the order was placed, so that it is available whoever triggers the event — an administrator who ships the order, for instance.
+It is not logged ({NFR-SEC-007}).
 
 == Summary
 

@@ -1,6 +1,6 @@
 = Pub/Sub Topology: Topics, Subscriptions and Dead Letters
 :doc-id: 03-05
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Every topic and subscription of the platform, their settings, their access rights and how they are created.
@@ -49,7 +49,7 @@ plantuml::diagrams/pubsub-topology.puml[format=svg, align=center]
 |===
 | Setting | Value | Reason
 | Schema | The Protobuf schema of the topic, binary encoding | A message that does not match is refused at publication, before it can reach a consumer
-| Message retention | 7 days | A consumer that was repaired can be replayed from a point in time
+| Message retention | 7 days on the three event topics; none on the two command topics | A consumer of events that was repaired can be replayed from a point in time. A command is addressed to one service and answered once: replaying it is never wanted, and the charge request, which carries the payment token, must not outlive its handling
 | Storage region | The region of the cluster | Data stays in one region
 |===
 
@@ -77,6 +77,8 @@ What strategy gives each consumer exactly the messages it handles, in order, wit
 
 A subscription that does not receive everything has a *filter* on the attribute `ce-type`.
 Filtering happens in Pub/Sub: the messages a consumer does not want are never delivered to it and cost it nothing.
+A filter that excludes one type lets through any type added later.
+That is expected: a consumer that receives a type it does not know acknowledges it and counts it (document 03-06).
 
 .Settings of every subscription
 [cols="4,4,8", options="header"]
@@ -110,7 +112,7 @@ Each subscription has its own dead-letter topic, named after it with the suffix 
 | What arrives there | A message that its consumer failed to handle 10 times. In a healthy system: nothing.
 | Alert | Any message in a dead-letter subscription raises an alert within 5 minutes ({NFR-OBS-004}).
 | Inspection | The message keeps its envelope: its type, its saga identifier and its trace context say which order it concerns and where it failed.
-| Replay | Once the cause is fixed, the message is published again to its original topic by a documented procedure (document 06-07). Consumers being idempotent, replaying is safe.
+| Replay | Once the cause is fixed, the message is published again to its original topic by a documented procedure (document 06-07). Consumers being idempotent, replaying is safe at any time: beyond the retention of the inbox, a participant still answers from the status of its payment or reservation, and a request replayed after the instant it carries is not executed.
 | Retention | 7 days. A dead letter not handled within a week is a process failure, and the alert is still firing.
 |===
 

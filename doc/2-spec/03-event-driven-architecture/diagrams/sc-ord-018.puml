@@ -1,0 +1,21 @@
+@startuml
+title SC-ORD-018 — Paid, and the stock is confirmed late but in time
+actor Customer as C
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Notification" as N
+
+P ->> O : PaymentCaptured
+note over O : CONFIRMING_STOCK
+O ->> I : ConfirmReservation
+note over I #ECEFF1 : restarting: the message waits,\nPub/Sub delivers it again
+C -> O : order status?
+O --> C : PENDING
+... less than the review delay ...
+I ->> O : ReservationConfirmed
+note over O #C8E6C9 : COMPLETED\norder CONFIRMED
+O ->> N : OrderConfirmed
+C -> O : order status?
+O --> C : CONFIRMED
+@enduml

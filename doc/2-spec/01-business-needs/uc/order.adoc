@@ -31,7 +31,7 @@ Orders are where the platform makes its promise; these use cases carry most of t
 | Business rules | {FR-ORD-001} {FR-ORD-002} {FR-ORD-003} {FR-ORD-004} {FR-ORD-005} {FR-ORD-006} {FR-ORD-007} {FR-ORD-008} {FR-ORD-009} {FR-ORD-010} {FR-ORD-011} {FR-ORD-014} {FR-ORD-015} {FR-ORD-016} {FR-ORD-017} {FR-INV-003} {FR-INV-004} {FR-INV-005} {FR-CART-007} {FR-CART-010} {FR-PAY-005}
 | Quality attributes | {NFR-PERF-002} {NFR-PERF-003} {NFR-AVAIL-005} {NFR-REL-001} {NFR-REL-002} {NFR-REL-003} {NFR-OBS-001}
 | Stories | {US-ORD-001} {US-ORD-002} {US-ORD-003} {US-ORD-004} {US-ORD-005}
-| Acceptance | {BDD-ORD-001} {BDD-ORD-002} {BDD-ORD-003} {BDD-ORD-004} {BDD-ORD-005} {BDD-ORD-006} {BDD-ORD-007} {BDD-ORD-008} {BDD-ORD-009} {BDD-ORD-010} {BDD-ORD-011} {BDD-ORD-012} {BDD-ORD-023} {BDD-ORD-024} {BDD-ORD-025} {BDD-ORD-026} {BDD-ORD-027} {BDD-ORD-028} {BDD-ORD-029} {BDD-INV-005}
+| Acceptance | {BDD-ORD-001} {BDD-ORD-002} {BDD-ORD-003} {BDD-ORD-004} {BDD-ORD-005} {BDD-ORD-006} {BDD-ORD-007} {BDD-ORD-008} {BDD-ORD-009} {BDD-ORD-010} {BDD-ORD-011} {BDD-ORD-012} {BDD-ORD-023} {BDD-ORD-024} {BDD-ORD-025} {BDD-ORD-026} {BDD-ORD-027} {BDD-ORD-028} {BDD-ORD-029} {BDD-ORD-034} {BDD-ORD-035} {BDD-ORD-038} {BDD-INV-005}
 |===
 
 .Main success scenario
@@ -62,8 +62,9 @@ Orders are where the platform makes its promise; these use cases carry most of t
 7b. The payment is refused:: The reservation is released. The order becomes `REJECTED` with the reason `PAYMENT_REFUSED`. The cart is kept.
 7c. No payment answer before the order deadline:: The system cancels the payment at the provider. Canceled: the reservation is released and the order becomes `REJECTED` with the reason `TIMED_OUT`. Already captured: the flow continues at step 8.
 7d. Neither the payment nor its cancellation can be obtained before the review delay:: The order becomes `UNDER_REVIEW` ({UC-ORD-007}).
+7e. The payment service itself is unavailable past the order deadline:: Nothing is charged, whenever the service comes back. The order becomes `REJECTED` with the reason `TIMED_OUT` as soon as the service confirms that nothing was charged; if that takes longer than the review delay, the order is shown `UNDER_REVIEW` in the meantime.
 8b. The reservation has expired and the stock cannot be reserved again:: The payment is refunded ({UC-PAY-002}); once it is, the order becomes `REJECTED` with the reason `OUT_OF_STOCK`. With the default delays this can only happen after an outage longer than the reservation lifetime, that is when an administrator retries the confirmation of an order under review.
-8c. The reservation is still not confirmed when the review delay expires:: The order becomes `UNDER_REVIEW`, paid, its stock still held ({UC-ORD-007}).
+8c. The reservation is still not confirmed when the review delay expires:: The order becomes `UNDER_REVIEW`, paid, its stock still held ({UC-ORD-007}). It is confirmed as soon as the inventory answers, or by an administrator.
 *a. At any step, a refund keeps failing:: The order becomes `UNDER_REVIEW` and an administrator is alerted. The payment is never recorded as refunded.
 *b. At any step, the order service stops and restarts:: The order resumes from the last step it recorded.
 
@@ -150,7 +151,7 @@ When an order is put under review the customer is told that the store is checkin
 | Business rules | {FR-ORD-012} {FR-ORD-010} {FR-ORD-014} {FR-PAY-006} {FR-IAM-004}
 | Quality attributes | {NFR-REL-001} {NFR-REL-002}
 | Stories | {US-ORD-008} {US-PAY-003}
-| Acceptance | {BDD-ORD-015} {BDD-ORD-016} {BDD-ORD-030}
+| Acceptance | {BDD-ORD-015} {BDD-ORD-016} {BDD-ORD-030} {BDD-ORD-036}
 |===
 
 .Main success scenario
@@ -166,6 +167,7 @@ When an order is put under review the customer is told that the store is checkin
 
 .Exception flows
 2a. The order is not `CONFIRMED` — it is pending, has shipped, or is already closed:: The cancellation is refused and the reason is given.
+4a. The cancellation is not finished when the review delay expires, because the inventory or the payment does not answer:: The order becomes `UNDER_REVIEW` ({UC-ORD-007}). It becomes `CANCELED` as soon as the missing answers arrive, or after an administrator's retry. The stock is returned once, however many times the return is asked.
 5a. The refund keeps failing:: The order becomes `UNDER_REVIEW` ({UC-ORD-007}). The stock already returned stays returned.
 
 [[UC-ORD-005]]
@@ -245,7 +247,7 @@ When an order is put under review the customer is told that the store is checkin
 | Business rules | {FR-ORD-014} {FR-ORD-016} {FR-ORD-018} {FR-ORD-010} {FR-PAY-006} {FR-IAM-005}
 | Quality attributes | {NFR-SEC-006} {NFR-OBS-004} {NFR-REL-003}
 | Stories | {US-ORD-012}
-| Acceptance | {BDD-ORD-012} {BDD-ORD-020} {BDD-ORD-021} {BDD-ORD-027} {BDD-ORD-032} {BDD-ORD-033}
+| Acceptance | {BDD-ORD-012} {BDD-ORD-020} {BDD-ORD-021} {BDD-ORD-027} {BDD-ORD-032} {BDD-ORD-033} {BDD-ORD-034} {BDD-ORD-036} {BDD-ORD-037}
 |===
 
 .How an order comes under review
@@ -256,6 +258,7 @@ When an order is put under review the customer is told that the store is checkin
 | The payment outcome cannot be established before the review delay | Unknown | Reserved
 | The payment is captured but the stock is not confirmed before the review delay | Captured | Reserved
 | The refund of a cancellation keeps failing | Captured | Returned
+| A cancellation is not finished within the review delay | Captured | Confirmed, or already returned
 |===
 
 .Main success scenario
@@ -265,10 +268,12 @@ When an order is put under review the customer is told that the store is checkin
 . The system retries it; it succeeds, and the order continues to its outcome as it would have by itself.
 
 .Alternative flows
-3a. The administrator decides to reject the order:: The system refunds the payment if it is captured, or cancels it if its outcome is unknown, and releases the stock. Once the order holds no payment, it becomes `REJECTED` with the reason `ADMIN_DECISION`.
+3a. The administrator decides to reject the order:: The system refunds the payment if it is captured, or cancels it if its outcome is unknown. Once the order holds no payment, the stock is released — or returned, if it was confirmed in the meantime — and the order becomes `REJECTED` with the reason `ADMIN_DECISION`.
+*a. The answer that was missing arrives before the administrator decides:: The system applies it as it would have at first, and the order leaves `UNDER_REVIEW` for the outcome it would have had. A decision taken afterwards is refused: the order is no longer under review.
 3b. The administrator decides to confirm the order:: Allowed only when the payment is captured. The system confirms the reservation and sets the order to `CONFIRMED`.
 
 .Exception flows
 3c. The administrator asks to confirm an order whose payment is not captured:: The decision is refused.
 3d. No comment is given:: The decision is refused.
+3e. The administrator asks to confirm or to reject an order that was being canceled:: The decision is refused. The customer's cancellation can only be completed: a retry is the only request accepted.
 4a. The retry, the refund or the confirmation fails again:: The order stays `UNDER_REVIEW`; the new failure is added to its history.

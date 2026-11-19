@@ -1,6 +1,6 @@
 = Order Saga Specification: Steps, Compensations and Every Way It Can Go Wrong
 :doc-id: 03-03
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The orchestrated sagas of the order service, the saga identifier, the deadlines, and one sequence diagram per scenario, failures included.
@@ -54,10 +54,13 @@ Reserving first means that the two frequent business refusals — no stock, paym
 Charging first would turn every stock shortage into a refund: slower, visible on the customer's bank statement, and able to fail.
 
 After the pivot the saga never gives up for a business reason.
-One technical exception remains: if the reservation expired during an outage longer than its lifetime and the stock was sold meanwhile, step 4 cannot succeed and the payment is refunded ({SC-ORD-012}).
-With the default delays this can only follow a decision of an administrator, because an order is handed to a person long before a reservation can expire.
+Two exceptions remain, and neither is a decision of the saga alone.
 
-The states and transitions of the saga are specified in document 02-03.
+* The reservation expired during an outage longer than its lifetime and the stock was sold meanwhile: step 4 cannot succeed and the payment is refunded ({SC-ORD-012}). With the default delays this happens only to an order that is already under review, because an order is handed to a person long before a reservation can expire.
+* An administrator decides to reject a paid order under review. The saga then undoes the pivot first, by a refund, and the stock afterwards: a release, or a return if the confirmation went through in the meantime ({SC-ORD-017}).
+
+The states of the saga, what it remembers, and its answer to every event in every state are specified in document 02-03.
+The scenarios below refer to its transitions by their number, P01 to P22 for a placement and C01 to C06 for a cancellation.
 
 == Saga identifier
 
@@ -70,14 +73,15 @@ Each saga has a *saga identifier*, a universally unique identifier created with 
 An order has one for its placement and, if it is canceled, another for its cancellation; both are tied to the order identifier.
 
 .Where the saga identifier travels
-[%unbreakable, cols="4,11", options="header"]
+[cols="4,11", options="header"]
 |===
 | Place | Form
 | Messages | The `sagaid` extension of the message envelope, on every command and every event of the saga (document 03-04)
-| Database | A column of the saga, and of the payment and the reservation it caused
+| Answers | An event that answers a command carries the saga identifier of that command. The order service hands the event to that saga and to no other: the refund asked by a cancellation is never read by the placement saga of the same order.
+| Database | A column of the saga; of the reservation, for the saga that asked for it; of the payment, for the placement saga
 | Logs | The field `saga_id` of every log line written while handling a message of the saga
 | Traces | The attribute `saga.id` of every span; a saga is usually several traces, one per message exchange, and this attribute links them
-| Payment provider | The reference of the charge is derived from it, so that the provider itself refuses to charge twice
+| Payment provider | The reference of a payment is derived from the identifier of the placement saga. The charge, its cancellation and its refund use that same reference, whichever saga asks, so that the provider itself refuses to charge or refund twice.
 | Administration | Shown with an order under review, so that support and engineering talk about the same thing
 |===
 
@@ -93,21 +97,37 @@ What strategy guarantees an outcome when the answer that would give it never com
 ****
 
 Pub/Sub delivers messages as soon as it can and has no delayed delivery, so waiting is the saga's own business.
-Each saga row holds two instants, set when the saga starts.
+Each saga row holds two instants.
 
 [%unbreakable, cols="3,3,9", options="header"]
 |===
 | Deadline | Default | When it is reached
-| Order deadline | 2 minutes | A saga still waiting for the stock rejects the order. A saga still waiting for the payment cancels it first ({FR-ORD-015}).
-| Review deadline | 5 minutes | A saga still working stops, and the order goes under review ({FR-ORD-016}).
+| Order deadline | 2 minutes after the order is placed | A saga still waiting for the stock rejects the order. A saga still waiting for the payment cancels it first ({FR-ORD-015}). Set once.
+| Review deadline | 5 minutes after the order is placed, or after the saga last left suspension | A saga still working stops asking, and the order goes under review ({FR-ORD-016}). Set again each time an administrator's request or a late answer puts the saga back to work.
 |===
 
 A scheduled task in the order service looks, every few seconds, for sagas whose deadline has passed, and hands each one the event "deadline reached" exactly as if a message had arrived.
 A deadline is therefore an event like any other for the saga: same code path, same tests.
+When both deadlines of a saga are due — the order service was stopped — the order deadline is handled first.
 Several replicas of the order service may run the task at once; each claims the sagas it handles so that no saga is handled twice, and a deadline handled twice would be harmless anyway, since the saga would no longer be in a state that reacts to it.
 
 The delays are ordered on purpose: 2 minutes, then 5, then the 15 minutes of a reservation.
 An order is decided, or in the hands of a person, long before the stock held for it can be freed.
+
+.Requests carry their own limit
+[%unbreakable, cols="4,4,7", options="header"]
+|===
+| Request | Instant it carries | If it is read later
+| `ReserveStock` | The instant at which the reservation expires: 15 minutes after the order is placed | Nothing is reserved; the request is answered as rejected
+| `ChargePayment` | The order deadline | Nothing is charged; the payment is recorded as canceled and answered so
+|===
+
+A deadline of the saga protects the customer from waiting.
+The instant carried by a request protects them from the opposite: a request that sat for hours in the subscription of a service that was down must not take stock or money when that service comes back, for an order its customer has long given up ({SC-ORD-016}).
+
+A suspended saga has no deadline, but it keeps listening.
+The request it was waiting on is still in the subscription of the silent service and is executed when that service returns; the saga handles its answer as it would have at first.
+An order under review may therefore settle by itself ({SC-ORD-011}).
 
 == Watching the sagas
 
@@ -124,13 +144,16 @@ What strategy tells us, in production, that sagas are healthy without reading a 
 | Sagas ended, by kind, outcome and reason | How many orders are confirmed, rejected and why? A rising share of `TIMED_OUT` means a participant is failing.
 | Saga duration, by outcome | How long does a customer wait? This is the measure behind {NFR-PERF-003}.
 | Sagas in progress, by state | Where do orders wait? A growing count in one state points at one service.
-| Sagas suspended | How many orders wait for a person? Any value above zero raises an alert ({NFR-OBS-004}).
-| Compensations sent and completed | Do releases and refunds actually finish?
+| Sagas suspended, by remembered step | How many orders wait for a person, and for what? Any value above zero raises an alert ({NFR-OBS-004}).
+| Suspended sagas settled by a late answer | How often does a review end by itself? A high share means the review delay is short for the outages we really have.
+| Events recorded with no effect, by state and type | Is something answering what nobody asked? Duplicates are normal; an event that should never occur in its state deserves a look.
+| Captures on rejected orders | Has transition P22 ever fired? Any value above zero raises a critical alert.
+| Compensations sent and completed | Do releases, returns and refunds actually finish?
 | Messages waiting to be published, and the age of the oldest | Is a service saving work it does not announce ({NFR-REL-005})?
 | Messages set aside after repeated failures | Is a consumer unable to handle something? Any value above zero raises an alert.
 |===
 
-Every transition of a saga writes one structured log line with the saga identifier, the order identifier, the state left, the state entered and the event that caused it.
+Every transition of a saga writes one structured log line with the saga identifier, the order identifier, the state left, the state entered, the number of the transition and the event that caused it.
 The history of a saga can be read from these lines alone.
 Dashboards, alerts and service level objectives are specified in document 05-03.
 
@@ -146,24 +169,28 @@ It states what triggers it, where it ends, and — the point of the exercise —
 Each one becomes at least one integration test in document 07-03.
 
 .Scenarios and the situations of the brief
-[cols="3,7,6", options="header"]
+[cols="3,7,7", options="header"]
 |===
 | Scenario | Situation | Requested as
 | {SC-ORD-001} | Order confirmed | "Everything works"
-| {SC-ORD-002} | Payment refused | "Payment refused"
+| {SC-ORD-002} | Payment refused | "Payment refused". The brief expected the stock never to be reserved; here it is reserved, then released: the price of reserving before charging
 | {SC-ORD-003} | Stock not available | "Stock unavailable", with the stock checked first
 | {SC-ORD-004} | The inventory does not answer | "A service no longer answers"
-| {SC-ORD-005} | The payment does not answer, not captured | "A service no longer answers"
-| {SC-ORD-006} | The payment does not answer, but captured | "A service no longer answers"
+| {SC-ORD-005} | The payment provider does not answer, not captured | "A service no longer answers"
+| {SC-ORD-006} | The payment provider does not answer, but captured | "A service no longer answers"
 | {SC-ORD-007} | The order service restarts after the debit | "The orchestrator stops after the debit, then restarts"
 | {SC-ORD-008} | The same message is delivered twice | "Duplicate messages"
 | {SC-ORD-009} | A service stops after saving, before publishing | "Stop after the database transaction, before the publication"
 | {SC-ORD-010} | Two things happen to one order at once | "Several events arrive at the same time"
-| {SC-ORD-011} | Paid, stock not confirmed in time | –
+| {SC-ORD-011} | Paid, stock not confirmed before the review delay | –
 | {SC-ORD-012} | Paid, then the stock is gone | "Payment succeeds but the stock is unavailable: refund"
 | {SC-ORD-013} | A refund keeps failing | "A compensation fails"
 | {SC-ORD-014} | Order canceled by the customer | –
 | {SC-ORD-015} | Nobody can tell whether the payment was captured | –
+| {SC-ORD-016} | The payment service itself is down | "A service no longer answers"
+| {SC-ORD-017} | An administrator rejects a paid order | –
+| {SC-ORD-018} | Paid, stock confirmed late but in time | –
+| {SC-ORD-019} | A cancellation meets a silent inventory | –
 |===
 
 [[SC-ORD-001]]
@@ -172,8 +199,9 @@ Each one becomes at least one integration test in document 07-03.
 [cols="3,11"]
 |===
 | Trigger | A customer places an order; every service answers.
-| Ends | Saga `COMPLETED`, order `CONFIRMED`.
+| Ends | Saga `COMPLETED`, order `CONFIRMED`. The cart gives up the ordered quantities; the customer receives one e-mail.
 | Guarantee | Each transition of the saga is saved in the same transaction as the command it sends: a command is never sent for a state that was not saved, nor a state saved without its command.
+| Transitions | P01, P02, P05, P12
 | Acceptance | {BDD-ORD-001}
 |===
 
@@ -187,6 +215,7 @@ plantuml::diagrams/sc-ord-001.puml[format=svg, align=center]
 | Trigger | The payment provider declines the payment.
 | Ends | Saga `COMPENSATED`, order `REJECTED` with `PAYMENT_REFUSED`.
 | Guarantee | The compensation of step 2 is sent with the rejection. The saga does not wait for the release to finish: if the release is lost or the inventory is down, the reservation expires by itself.
+| Transitions | P01, P02, P06
 | Acceptance | {BDD-ORD-002}
 |===
 
@@ -200,6 +229,7 @@ plantuml::diagrams/sc-ord-002.puml[format=svg, align=center]
 | Trigger | One line cannot be reserved in full, typically because another customer bought the last units a moment before.
 | Ends | Saga `COMPENSATED`, order `REJECTED` with `OUT_OF_STOCK`.
 | Guarantee | The reservation is all-or-nothing in one transaction of the inventory, with the stock rows locked: two orders can never both obtain the last unit. The payment service is never called, so there is nothing to refund.
+| Transitions | P01, P03
 | Acceptance | {BDD-ORD-003} {BDD-ORD-004}
 |===
 
@@ -212,33 +242,36 @@ plantuml::diagrams/sc-ord-003.puml[format=svg, align=center]
 |===
 | Trigger | The inventory service is down or too slow when the stock is requested.
 | Ends | Saga `COMPENSATED`, order `REJECTED` with `TIMED_OUT`. No payment was requested.
-| Guarantee | The request waits in the subscription of the inventory instead of failing. The order deadline decides. Requests about one order are delivered in the order they were sent, so the inventory reserves and then releases; and whatever the order, releasing is harmless when repeated.
+| Guarantee | The request waits in the subscription of the inventory instead of failing. The order deadline decides. Requests about one order are delivered in the order they were sent, so the inventory reserves and then releases; and whatever the order, releasing is harmless when repeated. Had the inventory been down for longer than the lifetime of a reservation, it would reserve nothing at all.
+| Transitions | P01, P04, then P20
 | Acceptance | {BDD-ORD-028}
 |===
 
 plantuml::diagrams/sc-ord-004.puml[format=svg, align=center]
 
 [[SC-ORD-005]]
-=== SC-ORD-005 — The payment does not answer and was not captured
+=== SC-ORD-005 — The payment provider does not answer and nothing was captured
 
 [cols="3,11"]
 |===
 | Trigger | The payment provider does not answer the charge.
 | Ends | Saga `COMPENSATED`, order `REJECTED` with `TIMED_OUT`. Nothing was charged and nothing can be charged later.
 | Guarantee | The order is not rejected while the payment could still be captured. The payment is first *canceled* at the provider, with the same reference as the charge; only the provider's "canceled" allows the rejection.
+| Transitions | P01, P02, P07, P08
 | Acceptance | {BDD-ORD-009} {BDD-PAY-009}
 |===
 
 plantuml::diagrams/sc-ord-005.puml[format=svg, align=center]
 
 [[SC-ORD-006]]
-=== SC-ORD-006 — The payment does not answer but was captured
+=== SC-ORD-006 — The payment provider does not answer but the payment was captured
 
 [cols="3,11"]
 |===
 | Trigger | The provider captured the payment but its answer was lost.
 | Ends | Saga `COMPLETED`, order `CONFIRMED`.
 | Guarantee | The cancellation cannot succeed on a captured payment: the provider answers "already captured", and the saga carries the order through instead of rejecting it. The customer who paid gets the order.
+| Transitions | P01, P02, P07, P10, P12
 | Acceptance | {BDD-ORD-010} {BDD-PAY-010}
 |===
 
@@ -252,6 +285,7 @@ plantuml::diagrams/sc-ord-006.puml[format=svg, align=center]
 | Trigger | The order service stops between the capture of the payment and the handling of its answer.
 | Ends | Saga `COMPLETED`, order `CONFIRMED`, charged once.
 | Guarantee | The saga state is in the database, not in memory. A message is acknowledged only after the transaction that handles it has committed, so a message that was not handled is delivered again. Had the service stopped before sending `ChargePayment`, the command would be sent on restart; had it sent it twice, the payment service would charge once ({SC-ORD-008}).
+| Transitions | P05 after the restart, then P12
 | Acceptance | {BDD-ORD-011}
 |===
 
@@ -262,9 +296,10 @@ plantuml::diagrams/sc-ord-007.puml[format=svg, align=center]
 
 [cols="3,11"]
 |===
-| Trigger | Pub/Sub delivers a message more than once, which it is allowed to do, or a sender publishes it twice after a restart.
+| Trigger | Pub/Sub delivers a message more than once, which it is allowed to do, or a sender sends the same request again.
 | Ends | Exactly as if it had been delivered once.
-| Guarantee | Three layers. Each consumer records the identifier of every message it handles, in the same transaction as the handling: a second delivery finds it and does nothing. A command about an order that was already served is answered from the recorded outcome. And a saga ignores an event that its current state does not expect.
+| Guarantee | Three layers. Each consumer records the identifier of every message it handles, in the same transaction as the handling: a second delivery finds it and does nothing. A request about a payment or a reservation is answered from its current status: what is already done is not done again. And a saga records without acting an event that its current state does not expect.
+| Transitions | The cells marked "–" of the grids of document 02-03
 | Acceptance | {BDD-PAY-002} {BDD-PAY-006} {BDD-NOT-002} {BDD-ORD-007}
 |===
 
@@ -288,23 +323,24 @@ plantuml::diagrams/sc-ord-009.puml[format=svg, align=center]
 
 [cols="3,11"]
 |===
-| Trigger | A late answer and a deadline, or two answers, are handled at the same time by two replicas of the order service.
+| Trigger | A late answer and a deadline, an answer and an administrator's request, or two answers, are handled at the same time by two replicas of the order service.
 | Ends | One of them is applied; the other is evaluated again on the new state.
-| Guarantee | Every saga carries a version. Both handlers read version _n_; the first to save writes version _n+1_; the second fails to save, changes nothing and does not acknowledge its message, which is delivered again and handled against the fresh state. Messages about one order are also delivered in order to one subscriber at a time, which makes the collision rare; the version makes it harmless.
+| Guarantee | Every saga carries a version. Both handlers read version _n_; the first to save writes version _n+1_; the second fails to save, changes nothing and is run again against the fresh state. Messages about one order are also delivered in order to one subscriber at a time, which makes the collision rare; the version makes it harmless.
 | Acceptance | {BDD-ORD-022}
 |===
 
 plantuml::diagrams/sc-ord-010.puml[format=svg, align=center]
 
 [[SC-ORD-011]]
-=== SC-ORD-011 — Paid, but the stock is not confirmed in time
+=== SC-ORD-011 — Paid, but the stock is not confirmed before the review delay
 
 [cols="3,11"]
 |===
-| Trigger | The payment is captured and the inventory stops answering.
-| Ends | Saga `SUSPENDED`, order `UNDER_REVIEW`; then whatever the administrator decides.
-| Guarantee | After the pivot the saga does not reject by itself. At the review deadline it stops and asks for a person, instead of leaving the customer with a charge and an order that is still pending. The stock is still held: the review deadline comes long before the reservation expires.
-| Acceptance | {BDD-ORD-023} {BDD-ORD-032}
+| Trigger | The payment is captured and the inventory stops answering for longer than the review delay.
+| Ends | Saga `SUSPENDED`, order `UNDER_REVIEW`; then saga `COMPLETED`, order `CONFIRMED`, as soon as the inventory is back.
+| Guarantee | After the pivot the saga does not reject by itself. At the review deadline it stops asking and calls for a person, instead of leaving the customer with a charge and an order that is still pending. It does not stop listening: the confirmation it asked for is still waiting in the subscription of the inventory, is executed when the inventory returns, and its answer completes the order. An administrator who confirms or retries in the meantime only sends the same request a second time; the inventory confirms once.
+| Transitions | P05, P16, then P12 from `SUSPENDED`. With an administrator: P17 or P18, then P12
+| Acceptance | {BDD-ORD-023} {BDD-ORD-032} {BDD-ORD-034}
 |===
 
 plantuml::diagrams/sc-ord-011.puml[format=svg, align=center]
@@ -314,9 +350,10 @@ plantuml::diagrams/sc-ord-011.puml[format=svg, align=center]
 
 [cols="3,11"]
 |===
-| Trigger | An administrator retries the confirmation of an order under review, after an outage longer than the reservation lifetime; the units were sold meanwhile.
+| Trigger | The confirmation of an order under review is executed after an outage longer than the reservation lifetime — because the inventory is back, or because an administrator retries; the units were sold meanwhile.
 | Ends | Saga `COMPENSATED`, order `REJECTED` with `OUT_OF_STOCK`, payment refunded.
-| Guarantee | The order is rejected only after `PaymentRefunded`: a rejected order never holds a payment ({FR-ORD-008}). This is the only path where a paid order is rejected, and it is the brief's third scenario put back in the one place where it can still occur.
+| Guarantee | The order is rejected only after `PaymentRefunded`: a rejected order never holds a payment ({FR-ORD-008}). This is the only automatic path where a paid order is rejected, and it is the brief's third scenario put back in the one place where it can still occur.
+| Transitions | P17, P13, P14
 | Acceptance | {BDD-ORD-029}
 |===
 
@@ -329,7 +366,8 @@ plantuml::diagrams/sc-ord-012.puml[format=svg, align=center]
 |===
 | Trigger | The payment provider refuses or fails every refund attempt.
 | Ends | Saga `SUSPENDED`, order `UNDER_REVIEW`, payment still `CAPTURED`; later `COMPENSATED` when a retry succeeds.
-| Guarantee | A compensation that fails is never recorded as done. The payment keeps the status that says where the money is, the order says that a person must act, and an alert is raised. Retrying is safe: a refund that already succeeded answers "refunded".
+| Guarantee | A compensation that fails is never recorded as done. The payment keeps the status that says where the money is, the order says that a person must act, and an alert is raised. Retrying is useful and safe: the payment service answers from the status of the payment, so a refund that failed is attempted again and a refund that succeeded is not.
+| Transitions | P15, P17, P14
 | Acceptance | {BDD-ORD-012} {BDD-ORD-020}
 |===
 
@@ -342,7 +380,8 @@ plantuml::diagrams/sc-ord-013.puml[format=svg, align=center]
 |===
 | Trigger | A customer cancels a confirmed order that has not shipped.
 | Ends | Cancel saga `COMPLETED`, order `CANCELED`, stock returned, payment refunded.
-| Guarantee | The order becomes `CANCELING` in the same transaction that starts the saga, so it can no longer ship. It becomes `CANCELED` only on `PaymentRefunded`. A refund that keeps failing follows {SC-ORD-013}.
+| Guarantee | The order becomes `CANCELING` in the same transaction that starts the saga, so it can no longer ship. It becomes `CANCELED` only on `PaymentRefunded`. A refund that keeps failing follows {SC-ORD-013}; an inventory that stays silent follows {SC-ORD-019}.
+| Transitions | C01, C02, C03
 | Acceptance | {BDD-ORD-015} {BDD-ORD-030}
 |===
 
@@ -355,8 +394,65 @@ plantuml::diagrams/sc-ord-014.puml[format=svg, align=center]
 |===
 | Trigger | The payment provider answers nothing: neither the charge nor its cancellation.
 | Ends | Saga `SUSPENDED`, order `UNDER_REVIEW`; then, here, `REJECTED` with `ADMIN_DECISION` once the cancellation gets through.
-| Guarantee | The saga never guesses. Without a "captured" or a "canceled" from the provider it neither confirms nor rejects; at the review deadline a person takes over, and even that person's rejection goes through the cancellation of the payment first.
+| Guarantee | The saga never guesses. Without a "captured" or a "canceled" from the provider it neither confirms nor rejects; at the review deadline a person takes over, and even that person's rejection goes through the cancellation of the payment first. Nothing is released before the payment is settled. Had the provider answered "already captured" to that cancellation, the saga would have refunded the payment before rejecting: the administrator's decision stands, and the order is never confirmed against it.
+| Transitions | P07, P11, P16, P19, P08. With a capture discovered: P19, P10, P14
 | Acceptance | {BDD-ORD-027} {BDD-ORD-033}
 |===
 
 plantuml::diagrams/sc-ord-015.puml[format=svg, align=center]
+
+[[SC-ORD-016]]
+=== SC-ORD-016 — The payment service itself is down
+
+[cols="3,11"]
+|===
+| Trigger | The payment service is down when the charge is requested, and stays down past the order deadline.
+| Ends | Saga `COMPENSATED`, order `REJECTED` with `TIMED_OUT`, nothing charged — whenever the service comes back. If the outage outlasts the review delay, the order is shown `UNDER_REVIEW` in the meantime.
+| Guarantee | `ChargePayment` carries the order deadline. Read after that instant, it charges nothing: the payment is recorded as canceled and answered so. The cancellation queued behind it finds a canceled payment and says the same. The saga, even suspended, handles that answer and rejects the order. A customer is never charged hours later for an order they gave up.
+| Transitions | P02, P07, P16, then P08 from `SUSPENDED`
+| Acceptance | {BDD-ORD-035}
+|===
+
+plantuml::diagrams/sc-ord-016.puml[format=svg, align=center]
+
+[[SC-ORD-017]]
+=== SC-ORD-017 — An administrator rejects a paid order
+
+[cols="3,11"]
+|===
+| Trigger | An order is under review, paid, its stock not yet confirmed because the inventory is silent. An administrator decides to reject it.
+| Ends | Saga `COMPENSATED`, order `REJECTED` with `ADMIN_DECISION`, payment refunded once, and the units back on sale — even though the inventory confirmed the reservation after the rejection.
+| Guarantee | The rejection is recorded as decided, and carried out only when the refund is done. The confirmation asked earlier is still waiting in the subscription of the inventory and is executed first when the inventory returns: the units leave the stock for an order that is rejected. The saga, although ended, does not drop that fact: it asks for the return of the stock. The inventory returns the units of a reservation once, so a repeated request changes nothing. When the inventory is up and the stock simply held, the release frees it and nothing else happens.
+| Transitions | P19, P14, then P21 from `COMPENSATED`
+| Acceptance | {BDD-ORD-021} {BDD-ORD-037}
+|===
+
+plantuml::diagrams/sc-ord-017.puml[format=svg, align=center]
+
+[[SC-ORD-018]]
+=== SC-ORD-018 — Paid, and the stock is confirmed late but in time
+
+[cols="3,11"]
+|===
+| Trigger | The payment is captured and the inventory is slow or restarting: its answer comes late, but before the review delay.
+| Ends | Saga `COMPLETED`, order `CONFIRMED`. The order stayed `PENDING` longer than usual and was never under review.
+| Guarantee | Past the pivot the saga only waits, and the order deadline no longer applies to it. The saga holds no retry logic: the confirmation stays in the subscription of the inventory and is delivered again by Pub/Sub, with growing delays, until the inventory handles it. If the answer comes after the review delay, the scenario is {SC-ORD-011}.
+| Transitions | P05, P12
+| Acceptance | {BDD-ORD-038}
+|===
+
+plantuml::diagrams/sc-ord-018.puml[format=svg, align=center]
+
+[[SC-ORD-019]]
+=== SC-ORD-019 — A cancellation meets a silent inventory
+
+[cols="3,11"]
+|===
+| Trigger | A customer cancels a confirmed order while the inventory is down for longer than the review delay; an administrator retries.
+| Ends | Cancel saga `COMPLETED`, order `CANCELED`, payment refunded, and the units counted once.
+| Guarantee | The retry sends a second `ReturnStock` while the first is still waiting. The inventory returns the units when it reads the first, records the reservation as returned, and answers the second from that record without touching the stock. Stock on hand is never inflated by a retry ({NFR-REL-002}).
+| Transitions | C01, C05, C06, C02, C03
+| Acceptance | {BDD-ORD-036}
+|===
+
+plantuml::diagrams/sc-ord-019.puml[format=svg, align=center]

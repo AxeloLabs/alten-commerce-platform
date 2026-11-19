@@ -14,12 +14,15 @@ P ->> O : PaymentOutcomeUnknown
 note over O : CANCELING_PAYMENT
 O ->> P : CancelPayment
 P -> PSP : cancel (retries)
+P ->> O : PaymentOutcomeUnknown
+note over O : failure recorded;\nnothing sent
 ... review deadline ...
 O -> O : review deadline reached
-note over O #FFF8E1 : SUSPENDED\norder UNDER_REVIEW\npayment UNKNOWN, stock reserved
+note over O #FFF8E1 : SUSPENDED, remembers CANCELING_PAYMENT\norder UNDER_REVIEW\npayment unknown, stock held
 O ->> N : OrderPutUnderReview
 == the provider is reachable again ==
 A -> O : RejectOrderUnderReview, with a comment
+note over O : CANCELING_PAYMENT\nrejection decided: ADMIN_DECISION
 O ->> P : CancelPayment
 P -> PSP : cancel
 PSP --> P : canceled

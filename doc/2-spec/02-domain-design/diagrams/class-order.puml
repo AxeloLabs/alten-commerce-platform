@@ -6,6 +6,7 @@ class Order <<aggregate root>> {
   orderId : OrderId
   orderNumber : OrderNumber
   customerId : CustomerId
+  customerEmail : EmailAddress
   checkoutId : CheckoutId
   status : OrderStatus
   rejectionReason : RejectionReason [0..1]
@@ -13,7 +14,7 @@ class Order <<aggregate root>> {
   shippingAddress : ShippingAddress
   version : long
   --
-  place(cartLines, prices, address)
+  place(customer, cartLines, prices, address)
   confirm()
   reject(reason)
   putUnderReview(cause)
@@ -55,31 +56,62 @@ class PlaceOrderSaga <<aggregate root>> {
   sagaId : SagaId
   orderId : OrderId
   state : PlaceOrderState
-  orderDeadline : Instant
-  reviewDeadline : Instant
+  rememberedStep : PlaceOrderState [0..1]
+  knownPayment : KnownPayment
+  knownStock : KnownStock
+  decidedRejection : RejectionReason [0..1]
+  paymentToken : PaymentToken [0..1]
+  orderDeadline : Instant [0..1]
+  reviewDeadline : Instant [0..1]
   lastFailure : String [0..1]
   version : long
   --
-  start() : Command
+  start() : Decision
   on(event) : Decision
   onOrderDeadline() : Decision
   onReviewDeadline() : Decision
-  resume(administratorChoice) : Decision
+  retry(administrator, comment) : Decision
+  confirm(administrator, comment) : Decision
+  reject(administrator, comment) : Decision
 }
 class CancelOrderSaga <<aggregate root>> {
   sagaId : SagaId
   orderId : OrderId
   state : CancelOrderState
+  rememberedStep : CancelOrderState [0..1]
+  knownPayment : KnownPayment
+  knownStock : KnownStock
+  reviewDeadline : Instant [0..1]
+  lastFailure : String [0..1]
   version : long
   --
-  start() : Command
+  start() : Decision
   on(event) : Decision
-  resume(administratorChoice) : Decision
+  onReviewDeadline() : Decision
+  retry(administrator, comment) : Decision
+}
+enum KnownPayment {
+  NOT_REQUESTED
+  REQUESTED
+  CAPTURED
+  REFUSED
+  CANCELED
+  REFUNDED
+}
+enum KnownStock {
+  REQUESTED
+  HELD
+  REJECTED
+  CONFIRMED
+  LOST
+  RELEASED
+  RETURNED
 }
 class Decision <<value object>> {
   orderTransition [0..1]
   commands : List<Command>
   events : List<Event>
+  alert [0..1]
 }
 
 Order "1" *-- "1..50" OrderLine
@@ -90,4 +122,8 @@ PlaceOrderSaga "1" ..> "1" Order : decides for
 CancelOrderSaga "0..1" ..> "1" Order : decides for
 PlaceOrderSaga ..> Decision : returns
 CancelOrderSaga ..> Decision : returns
+PlaceOrderSaga --> KnownPayment
+PlaceOrderSaga --> KnownStock
+CancelOrderSaga --> KnownPayment
+CancelOrderSaga --> KnownStock
 @enduml

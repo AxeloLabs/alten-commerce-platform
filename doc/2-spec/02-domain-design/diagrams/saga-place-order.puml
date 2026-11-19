@@ -12,25 +12,27 @@ state SUSPENDED #FFF8E1
 state COMPLETED #C8E6C9
 state COMPENSATED #FFCDD2
 
-[*] --> RESERVING_STOCK : order created
-RESERVING_STOCK --> CHARGING_PAYMENT : StockReserved
-CHARGING_PAYMENT --> CONFIRMING_STOCK : PaymentCaptured
-CONFIRMING_STOCK --> COMPLETED : ReservationConfirmed
+[*] --> RESERVING_STOCK : P01\norder created
+RESERVING_STOCK --> CHARGING_PAYMENT : P02\nStockReserved
+CHARGING_PAYMENT --> CONFIRMING_STOCK : P05\nPaymentCaptured
+CONFIRMING_STOCK --> COMPLETED : P12\nReservationConfirmed
 
-RESERVING_STOCK -right-> COMPENSATED : rejected,\nor order deadline
-CHARGING_PAYMENT -right-> COMPENSATED : PaymentRefused
-CHARGING_PAYMENT -left-> CANCELING_PAYMENT : outcome unknown,\nor order deadline
-CANCELING_PAYMENT --> CONFIRMING_STOCK : PaymentCaptured
-CANCELING_PAYMENT --> COMPENSATED : PaymentCanceled
-CONFIRMING_STOCK -left-> REFUNDING_PAYMENT : confirmation\nfailed
-REFUNDING_PAYMENT --> COMPENSATED : PaymentRefunded
-REFUNDING_PAYMENT --> SUSPENDED : PaymentRefundFailed
+RESERVING_STOCK --> COMPENSATED : P03 rejected\nP04 order deadline
+CHARGING_PAYMENT --> COMPENSATED : P06 refused\nP08 canceled
+CHARGING_PAYMENT --> CANCELING_PAYMENT : P07\noutcome unknown,\nor order deadline
+CANCELING_PAYMENT --> CONFIRMING_STOCK : P10\nPaymentCaptured
+CANCELING_PAYMENT --> COMPENSATED : P08 canceled\nP09 refused
+CONFIRMING_STOCK --> REFUNDING_PAYMENT : P13\nconfirmation failed
+REFUNDING_PAYMENT --> COMPENSATED : P14\nPaymentRefunded
+REFUNDING_PAYMENT --> SUSPENDED : P15\nPaymentRefundFailed
 
 COMPLETED --> [*]
 COMPENSATED --> [*]
 
-note bottom of SUSPENDED
-  Any state still working when the
-  review deadline expires also goes here.
+note right of SUSPENDED
+  P16: a saga still canceling,
+  confirming or refunding
+  at the review deadline
+  also goes here.
 end note
 @enduml

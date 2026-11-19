@@ -53,6 +53,12 @@ package "cart" {
     * quantity : int
     * price_when_added : numeric(12,2)
   }
+  entity cart_applied_order {
+    * customer_id : text <<PK, FK>>
+    * order_id : uuid <<PK>>
+    --
+    * applied_at : timestamptz
+  }
   entity favorite {
     * customer_id : text <<PK>>
     * sku : text <<PK>>
@@ -60,6 +66,7 @@ package "cart" {
     * marked_at : timestamptz
   }
   cart ||--o{ cart_line
+  cart ||--o{ cart_applied_order
 }
 
 package "notification" {

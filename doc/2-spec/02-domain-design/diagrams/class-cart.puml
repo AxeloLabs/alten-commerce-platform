@@ -4,12 +4,13 @@ hide empty members
 
 class Cart <<aggregate root>> {
   customerId : CustomerId
+  appliedOrders : Set<OrderId>
   version : long
   --
   add(sku, quantity, knownAvailable, priceNow)
   setQuantity(sku, quantity, knownAvailable)
   remove(sku)
-  removeOrdered(orderLines)
+  removeOrdered(orderId, orderLines)
   view(catalogSnapshot) : CartView
 }
 class CartLine <<value object>> {
@@ -49,4 +50,10 @@ CartView "1" *-- "0..50" PricedLine
 Favorites "1" o-- "0..100" "Sku"
 Cart ..> CartLimits
 Favorites ..> CartLimits
+
+note bottom of Cart
+  removeOrdered does nothing for an order
+  already in appliedOrders: an order is
+  taken out of the cart once.
+end note
 @enduml

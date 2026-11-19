@@ -5,6 +5,7 @@ participant "Order\n(saga)" as O
 participant "Inventory" as I
 participant "Payment" as P
 participant "Payment\nprovider" as PSP
+participant "Cart" as K
 participant "Notification" as N
 
 C -> O : PlaceOrder
@@ -21,6 +22,8 @@ note over O : CONFIRMING_STOCK
 O ->> I : ConfirmReservation
 I ->> O : ReservationConfirmed
 note over O #C8E6C9 : COMPLETED\norder CONFIRMED
+O ->> K : OrderConfirmed
+note over K : removes the ordered\nquantities, once
 O ->> N : OrderConfirmed
 N ->> C : confirmation e-mail
 @enduml

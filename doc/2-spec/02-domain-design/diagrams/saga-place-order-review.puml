@@ -1,16 +1,26 @@
 @startuml
-title PlaceOrderSaga: what an administrator can do with a suspended saga
+title PlaceOrderSaga: entering and leaving SUSPENDED
 
 hide empty description
 
 state SUSPENDED #FFF8E1
-state "the remembered step" as STEP
+state CANCELING_PAYMENT
 state CONFIRMING_STOCK
 state REFUNDING_PAYMENT
-state CANCELING_PAYMENT
 
-SUSPENDED --> STEP : retry
-SUSPENDED --> CONFIRMING_STOCK : confirm\n[payment captured]
-SUSPENDED --> REFUNDING_PAYMENT : reject\n[payment captured]
-SUSPENDED --> CANCELING_PAYMENT : reject\n[payment unknown]
+CANCELING_PAYMENT -down-> SUSPENDED : P16 review deadline\nP11 cancellation\nnot established
+CONFIRMING_STOCK -down-> SUSPENDED : P16 review deadline
+REFUNDING_PAYMENT -down-> SUSPENDED : P16 review deadline\nP15 PaymentRefundFailed
+
+SUSPENDED -up-> CANCELING_PAYMENT : P17 retry\nP19 reject\n[payment not captured]
+SUSPENDED -up-> CONFIRMING_STOCK : P17 retry\nP18 confirm\n[payment captured]
+SUSPENDED -up-> REFUNDING_PAYMENT : P17 retry\nP19 reject\n[payment captured]
+
+note bottom of SUSPENDED
+  Retry returns to the remembered step.
+  The answer that was missing is handled as in the
+  remembered step: the saga may complete, be compensated
+  or go one step further without any administrator.
+  Each exit to a working state sets a new review deadline.
+end note
 @enduml

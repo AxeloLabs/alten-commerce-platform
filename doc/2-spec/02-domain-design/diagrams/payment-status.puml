@@ -10,11 +10,13 @@ state REFUSED #FFCDD2
 state CANCELED #FFCDD2
 state REFUNDED
 
-[*] --> PENDING : charge requested
+[*] --> PENDING : charge requested in time
+[*] --> CANCELED : charge requested too late,\nor cancellation or refund\nrequested with no payment
 PENDING --> CAPTURED : provider accepts
 PENDING --> REFUSED : provider declines
 PENDING --> UNKNOWN : no answer after the retries
-UNKNOWN --> CAPTURED : provider reports a capture,\nor answers "already captured"\nto a cancellation
+PENDING --> CANCELED : cancellation accepted
+UNKNOWN --> CAPTURED : provider answers\n"already captured"\nto a cancellation
 UNKNOWN --> CANCELED : cancellation accepted
 CAPTURED --> REFUNDED : refund accepted
 CAPTURED --> CAPTURED : refund failed

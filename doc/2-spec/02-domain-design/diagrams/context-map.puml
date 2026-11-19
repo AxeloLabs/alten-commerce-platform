@@ -16,6 +16,7 @@ component "E-mail provider" as MAIL #ECEFF1
 CART --> CAT : reads prices and status\n<<synchronous>>
 ORD --> CAT : reads prices at checkout\n<<synchronous>>
 ORD --> CART : reads the cart at checkout\n<<synchronous>>
+INV --> CAT : checks a SKU it sees\nfor the first time\n<<synchronous>>
 CAT ..> INV : listens to availability\n<<events>>
 ORD <..> INV : reserve, confirm, release, return\n<<commands and events>>
 ORD <..> PAY : charge, cancel, refund\n<<commands and events>>

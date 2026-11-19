@@ -7,13 +7,14 @@ participant "Payment" as P
 participant "Payment\nprovider" as PSP
 participant "Notification" as N
 
-note over O #FFF8E1 : SUSPENDED\norder UNDER_REVIEW\npayment captured
-note over I : was down longer than\nthe reservation lifetime
+note over O #FFF8E1 : SUSPENDED, remembers CONFIRMING_STOCK\norder UNDER_REVIEW, payment captured
+note over I : the reservation expired\nand the units were sold
 A -> O : RetryOrderUnderReview, with a comment
+note over O : CONFIRMING_STOCK\nnew review deadline
 O ->> I : ConfirmReservation
-note over I : reservation expired;\ntries to reserve again:\nthe stock is gone
+note over I : reservation EXPIRED:\ntries to reserve again,\nthe stock is gone
 I ->> O : ReservationConfirmationFailed
-note over O : REFUNDING_PAYMENT
+note over O : REFUNDING_PAYMENT\nrejection decided: OUT_OF_STOCK
 O ->> P : RefundPayment
 P -> PSP : refund
 PSP --> P : refunded

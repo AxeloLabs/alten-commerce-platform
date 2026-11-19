@@ -168,6 +168,35 @@ Feature: Order
       And the payment is still "CAPTURED"
       And an alert is raised for the administrators
 
+    @BDD-ORD-038 @UC-ORD-001 @FR-ORD-007 @edge
+    Scenario: A paid order waits for a slow inventory and is confirmed
+      Given the customer placed an order for 1 unit of "KB-001" and its payment is captured
+      And the inventory answers the confirmation late, but before the review delay expires
+      When the inventory answers
+      Then the order is "CONFIRMED"
+      And the order was never "UNDER_REVIEW"
+
+    @BDD-ORD-034 @UC-ORD-001 @UC-ORD-007 @FR-ORD-016 @FR-ORD-007 @edge @critical-path
+    Scenario: An order under review settles by itself when the missing answer arrives
+      Given the order "ORD-1001" for 1 unit of "KB-001" is "UNDER_REVIEW" with a captured payment
+      And the inventory had stopped answering before the reservation was confirmed
+      When the inventory works again
+      Then the reservation is confirmed exactly once
+      And the order is "CONFIRMED"
+      And no decision of an administrator is recorded
+      And one confirmation e-mail is sent to the customer
+
+    @BDD-ORD-035 @UC-ORD-001 @FR-ORD-015 @FR-PAY-001 @edge @critical-path
+    Scenario: An order placed while the payment service is down is never charged late
+      Given a cart with 1 unit of "KB-001"
+      And the payment service is down
+      When the customer places the order with the payment token "tok_ok"
+      And the order deadline expires
+      And the payment service works again one hour later
+      Then the payment is "CANCELED" and nothing is captured
+      And the order is "REJECTED" with the reason "TIMED_OUT"
+      And 5 units of "KB-001" are available
+
     @BDD-ORD-011 @UC-ORD-001 @FR-ORD-009 @FR-PAY-001 @invariant @critical-path
     Scenario: Order placement survives a restart of the order service after the payment
       Given a cart with 1 unit of "KB-001"
@@ -277,6 +306,17 @@ Feature: Order
       Then the decision is refused
       And the order is still "UNDER_REVIEW"
 
+    @BDD-ORD-037 @UC-ORD-007 @FR-ORD-018 @FR-ORD-008 @FR-PAY-006 @edge
+    Scenario: Rejecting a paid order returns its stock even when the stock is confirmed meanwhile
+      Given a signed-in administrator
+      And the order "ORD-1001" for 1 unit of "KB-001" is "UNDER_REVIEW" with a captured payment
+      And the inventory has not answered the confirmation yet
+      When the administrator rejects the order with the comment "customer asked to stop"
+      And the inventory works again and confirms the reservation after the rejection
+      Then the payment is refunded in full exactly once
+      And the order is "REJECTED" with the reason "ADMIN_DECISION"
+      And 5 units of "KB-001" are available
+
   Rule: A confirmed order can be canceled until it ships
 
     @BDD-ORD-015 @UC-ORD-004 @FR-ORD-012 @FR-PAY-006 @nominal
@@ -309,6 +349,20 @@ Feature: Order
       Then the order is "UNDER_REVIEW", not "CANCELED"
       And the payment is still "CAPTURED"
       And the order can no longer ship
+
+    @BDD-ORD-036 @UC-ORD-004 @UC-ORD-007 @FR-ORD-012 @FR-ORD-016 @edge
+    Scenario: A cancellation that does not finish goes under review and returns the stock once
+      Given a signed-in administrator
+      And the customer's order "ORD-1001" is "CONFIRMED" with 2 units of "KB-001", paid 179.80
+      And the inventory does not answer
+      When the customer cancels the order "ORD-1001"
+      And the review delay expires
+      Then the order is "UNDER_REVIEW"
+      When the administrator retries the failed step with the comment "inventory is back"
+      And the inventory works again
+      Then the 2 units of "KB-001" are returned exactly once
+      And the payment of 179.80 is refunded in full
+      And the order is "CANCELED"
 
   Rule: Only an administrator takes a confirmed order to delivery, one step at a time
 

@@ -1,6 +1,6 @@
 = Domain Model: Aggregates, Value Objects and the Data They Persist
 :doc-id: 02-02
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Class diagrams of the domain of each bounded context and entity-relationship diagrams of each service database.
@@ -22,7 +22,7 @@ One aggregate per transaction:: A use case changes one aggregate and saves it. T
 Reference by identity:: An aggregate refers to another by its identifier, never by an object reference, and never across services by anything else.
 Value objects:: `Money`, `Sku`, `Quantity`, `OrderNumber` and the like are immutable, validated when created and compared by value. A price is never a bare number, a SKU never a bare string.
 Decisions, not side effects:: A domain object never sends a message or calls a service. It returns what it decided — a new state, the commands to send, the events to publish — and the application layer acts on it.
-Versions:: Every aggregate carries a version. Saving an aggregate that changed in the meantime fails; the use case is retried on the fresh state.
+Versions:: Every aggregate carries a version. Saving an aggregate that changed in the meantime fails; the use case is run again on the fresh state — a few times at once, then by a new delivery of the message (document 03-06).
 Amounts:: Decimal numbers with two decimals in EUR. Never floating-point.
 Time:: The current time is given to the domain, never read by it, so that deadlines and expiries are testable.
 
@@ -43,6 +43,10 @@ The context has two kinds of aggregate.
 A saga — `PlaceOrderSaga`, `CancelOrderSaga` — is the process: which step is in progress, which deadlines run, what failed.
 The saga decides; the order records.
 
+A saga holds more than a state.
+It keeps what the payment service and the inventory last told it, the step it was in when it was suspended, and a rejection that is decided but must wait for the money.
+These fields are what lets it give an answer to every event in every state; document 02-03 specifies them one by one.
+
 plantuml::diagrams/class-order.puml[format=svg, align=center]
 
 .Invariants of the order context
@@ -55,7 +59,9 @@ plantuml::diagrams/class-order.puml[format=svg, align=center]
 | A rejection carries exactly one reason | `Order.reject` | {FR-ORD-008}
 | Confirmation needs a captured payment and a confirmed reservation | `PlaceOrderSaga` reaches that decision only through those two events | {FR-ORD-007}
 | An order is rejected only once it holds no payment | `PlaceOrderSaga` rejects only from states where the payment is refused, canceled, refunded or never requested | {FR-ORD-008} {FR-PAY-005}
-| Deadlines lead to a decision | `PlaceOrderSaga.onOrderDeadline`, `onReviewDeadline` | {FR-ORD-015} {FR-ORD-016}
+| Deadlines lead to a decision | `onOrderDeadline`, `onReviewDeadline` of the sagas | {FR-ORD-015} {FR-ORD-016}
+| A late answer is never dropped: a suspended saga handles it as in the step it remembers | `on(event)` of the sagas | {FR-ORD-016} {NFR-REL-002}
+| An administrator's decision obeys the rules of the automatic flow | `retry`, `confirm`, `reject` of the sagas | {FR-ORD-018}
 |===
 
 A saga and its order are saved in the same transaction, together with the messages the decision produces.
@@ -69,6 +75,10 @@ Three constraints of the database back the domain:
 * at most one row per customer has the status `PENDING` ({FR-ORD-017});
 * `outbox` and `inbox` are written in the same transaction as the order, which is what makes messaging reliable (document 03-06).
 
+Two columns deserve a word.
+`customer_email` is copied from the customer's token when the order is placed: an e-mail about the order can then be sent whoever triggers it, an administrator shipping it for instance.
+`payment_token` holds the token of the payment provider between the checkout and the charge request, and is erased in the transaction that writes that request; document 03-06 gives the complete rule.
+
 == Inventory
 
 .Strategy question
@@ -77,7 +87,7 @@ What strategy guarantees "never oversell" when several orders reserve the same p
 ****
 
 `StockItem` holds the two numbers that matter for one SKU, on hand and reserved, and refuses any operation that would break their relation.
-`Reservation` records what is held for one order and until when.
+`Reservation` records what is held for one order, until when, and what became of it.
 
 plantuml::diagrams/class-inventory.puml[format=svg, align=center]
 
@@ -87,7 +97,8 @@ plantuml::diagrams/class-inventory.puml[format=svg, align=center]
 | Invariant | Guarded by | Rules
 | On hand and reserved are never negative, and reserved never exceeds on hand | Every method of `StockItem` | {FR-INV-001} {FR-INV-002}
 | A reservation covers all lines or none | `ReservationPolicy.reserveAllOrNothing` | {FR-INV-003}
-| A reservation is settled once: confirmed, released or expired | `Reservation` refuses a second settlement and answers the first outcome | {FR-INV-005}
+| A request about a reservation is answered from its status; the stock changes only when that status shows the request is not served yet | Every method of `Reservation` | {FR-INV-005} {NFR-REL-002}
+| The units of an order are returned at most once | `Reservation.giveBack`: `CONFIRMED` becomes `RETURNED` | {FR-ORD-012}
 | A reservation past its lifetime expires and frees its quantities | `Reservation.expire`, called by a scheduled task | {FR-INV-004}
 | An adjustment never brings on hand below reserved | `StockItem.adjust` | {FR-INV-006}
 | Every change of stock on hand leaves a movement | `StockItem` returns the movement with each change | {FR-INV-008}
@@ -95,12 +106,14 @@ plantuml::diagrams/class-inventory.puml[format=svg, align=center]
 
 Reserving an order touches one `StockItem` per line and creates one `Reservation`, in one transaction.
 This is the second exception to "one aggregate per transaction": all-or-nothing across lines is the business rule itself.
-Stock rows are locked in SKU order so that two orders reserving the same products can never block each other.
+Stock rows are locked in SKU order so that two orders reserving the same products can never deadlock.
 
 plantuml::diagrams/er-inventory.puml[format=svg, align=center]
 
 The three `check` constraints repeat the invariants of `StockItem` in the database: even a defect in the code cannot store an oversold stock.
-`order_id` is unique in `reservation`: a second request to reserve for the same order finds the first reservation and answers its outcome.
+`order_id` is unique in `reservation`: every request about the stock of an order finds the one reservation of that order and is answered from its status.
+A reservation that could not be made is recorded too, as `REJECTED`, so that a repeated request gets the same answer.
+`saga_id` says which saga asked for it.
 
 == Payment
 
@@ -118,11 +131,11 @@ plantuml::diagrams/class-payment.puml[format=svg, align=center]
 [cols="5,4,6", options="header"]
 |===
 | Invariant | Guarded by | Rules
-| One payment per order | Unique order identifier; a second charge request returns the recorded outcome | {FR-PAY-001}
+| One payment per order | Unique order identifier; a second charge request is answered from the status of that payment | {FR-PAY-001}
 | The amount is the order total, in EUR | `Payment` is created with the amount and never changes it | {FR-PAY-002}
 | A payment is refunded only if captured, and only once | `Payment.canBeRefunded`, `recordRefund` | {FR-PAY-006}
 | A canceled payment can no longer be captured | `Payment.recordCancellation`; the provider is called with the same reference | {FR-PAY-005}
-| No card data is held | `Payment` has no field for it; the token is used once and not stored | {FR-PAY-003}
+| No card data is held | `Payment` has no field for it; the token is passed to the provider and never written by the payment service | {FR-PAY-003}
 |===
 
 The payment provider is reached through the `PaymentProvider` port.
@@ -152,7 +165,12 @@ plantuml::diagrams/class-cart.puml[format=svg, align=center]
 Totals, the counter and the flags are computed each time the cart is read, from the current catalog data, into a `CartView` ({FR-CART-005}, {FR-CART-006}, {FR-CART-010}).
 That is why a price change needs no update of any cart.
 
-The notification context has no domain model worth a diagram: one record per event received, with the outcome of the sending, whose identifier makes a second sending impossible ({FR-NOT-002}).
+A cart also remembers the orders whose quantities it already gave up.
+Removing them subtracts, so doing it twice would be wrong: `removeOrdered` does nothing for an order it has already applied ({FR-CART-007}).
+This record lives inside the cart itself, which keeps it atomic in each of the three stores.
+
+The notification context has no domain model worth a diagram: one record per event received, with the outcome of the sending.
+The record is written before the e-mail provider is called and completed afterwards, and the identifier of the event is given to the provider as an idempotency key, so that an event produces at most one e-mail even when the service stops between the two ({FR-NOT-002}; document 03-06).
 
 plantuml::diagrams/er-catalog-cart-notification.puml[format=svg, align=center]
 
@@ -173,8 +191,10 @@ What they share is the *meaning* of a few types, fixed here and carried by the m
 |===
 | Type | Form | Rule
 | `Sku` | Text, 3 to 32 characters, upper-case letters, digits and hyphens | Assigned by the administrator, permanent, never reused
-| `Money` | Decimal amount with two decimals, and a currency | The currency is always EUR in this release
-| `Quantity` | Whole number, 1 or more | Zero is not a quantity: a line with nothing is removed
+| `Money` | An exact amount with two decimals, and a currency. A decimal number in the domain and in the REST interfaces; a whole number of cents in messages (document 03-04) | The currency is always EUR in this release. Never a floating-point number.
+| `Quantity` | Whole number, 1 or more | What a customer buys. Zero is not a quantity: a line with nothing is removed
+| `StockLevel` | Whole number, 0 or more | What the inventory counts: on hand, reserved, available. Zero is a level: out of stock
+| `PaymentToken` | Opaque text issued by the payment provider | Single use. Handled as a secret: never logged, kept only until the charge is requested
 | `OrderId`, `SagaId`, `PaymentId`, `ReservationId` | Universally unique identifier | Generated by the service that creates the object; time-ordered
 | `OrderNumber` | Text shown to the customer | Unique, readable, gives no hint of the number of orders
 | `CustomerId` | The subject of the identity token | Never an e-mail address

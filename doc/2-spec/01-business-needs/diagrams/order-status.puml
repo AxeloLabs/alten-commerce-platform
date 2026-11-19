@@ -16,14 +16,14 @@ state CANCELED
 PENDING --> CONFIRMED : paid and\nstock secured
 PENDING --> REJECTED : holds no payment:\nout of stock, payment refused,\ntimed out
 PENDING --> UNDER_REVIEW : a refund keeps failing,\nor review delay reached
-UNDER_REVIEW --> CONFIRMED : administrator,\nif paid and stock secured
-UNDER_REVIEW --> REJECTED : administrator,\nonce it holds no payment
+UNDER_REVIEW --> CONFIRMED : administrator, or the\nmissing answer arrives:\nif paid and stock secured
+UNDER_REVIEW --> REJECTED : administrator, or the\nmissing answer arrives:\nonce it holds no payment
 CONFIRMED --> SHIPPED : administrator
 SHIPPED --> DELIVERED : administrator
 CONFIRMED --> CANCELING : customer cancels
 CANCELING --> CANCELED : stock returned\nand payment refunded
-CANCELING --> UNDER_REVIEW : the refund\nkeeps failing
-UNDER_REVIEW --> CANCELED : administrator,\nonce refunded
+CANCELING --> UNDER_REVIEW : the refund keeps failing,\nor review delay reached
+UNDER_REVIEW --> CANCELED : administrator, or the\nmissing answer arrives:\nonce returned and refunded
 REJECTED --> [*]
 DELIVERED --> [*]
 CANCELED --> [*]

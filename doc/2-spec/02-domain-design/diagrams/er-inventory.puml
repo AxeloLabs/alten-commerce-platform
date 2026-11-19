@@ -14,6 +14,7 @@ entity reservation {
   * reservation_id : uuid <<PK>>
   --
   * order_id : uuid <<unique>>
+  * saga_id : uuid
   * status : text
   * expires_at : timestamptz
   * version : bigint
@@ -40,7 +41,8 @@ entity outbox {
   --
   destination, ordering_key, type,
   attributes, payload,
-  created_at, published_at
+  created_at, published_at,
+  parked_at, parked_reason
 }
 entity inbox {
   * message_id : uuid <<PK>>

@@ -8,6 +8,7 @@ entity orders {
   --
   * order_number : text <<unique>>
   * customer_id : text
+  * customer_email : text
   * checkout_id : uuid <<unique>>
   * status : text
   rejection_reason : text
@@ -41,6 +42,11 @@ entity order_saga {
   * order_id : uuid <<FK>>
   * kind : text
   * state : text
+  remembered_step : text
+  * known_payment : text
+  * known_stock : text
+  decided_rejection : text
+  payment_token : text
   order_deadline_at : timestamptz
   review_deadline_at : timestamptz
   last_failure : text
@@ -53,9 +59,11 @@ entity outbox {
   * ordering_key : text
   * type : text
   * attributes : jsonb
-  * payload : bytea
+  payload : bytea
   * created_at : timestamptz
   published_at : timestamptz
+  parked_at : timestamptz
+  parked_reason : text
 }
 entity inbox {
   * message_id : uuid <<PK>>
@@ -71,4 +79,6 @@ note bottom of orders
   unique (customer_id) where status = 'PENDING'
   one pending order per customer
 end note
+order_line -[hidden]down- outbox
+order_status_change -[hidden]down- inbox
 @enduml

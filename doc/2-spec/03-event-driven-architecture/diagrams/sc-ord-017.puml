@@ -1,0 +1,30 @@
+@startuml
+title SC-ORD-017 — An administrator rejects a paid order
+actor Administrator as A
+participant "Order\n(saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Payment\nprovider" as PSP
+participant "Notification" as N
+
+note over O #FFF8E1 : SUSPENDED, remembers CONFIRMING_STOCK\norder UNDER_REVIEW, payment captured
+note over I #ECEFF1 : still down: ConfirmReservation\nwaits in its subscription
+A -> O : RejectOrderUnderReview, with a comment
+note over O : REFUNDING_PAYMENT\nrejection decided: ADMIN_DECISION
+O ->> P : RefundPayment
+P -> PSP : refund
+PSP --> P : refunded
+P ->> O : PaymentRefunded
+O ->> I : ReleaseReservation
+note over O #FFCDD2 : COMPENSATED\norder REJECTED, ADMIN_DECISION
+O ->> N : OrderRejected (payment refunded)
+== the inventory is back ==
+note over I : ConfirmReservation first:\nthe units leave the stock
+I ->> O : ReservationConfirmed
+note over O : saga ended, but the fact is kept:\nstock taken for a rejected order
+O ->> I : ReturnStock
+note over I : ReleaseReservation: nothing held,\nthe stock was taken
+note over I : ReturnStock: units back on hand,\nreservation RETURNED
+I ->> O : StockReturned
+note right of O : recorded
+@enduml

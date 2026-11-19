@@ -1,6 +1,6 @@
 = Bounded Contexts and Context Map: How the Business Is Split into Services
 :doc-id: 02-01
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Subdomains, bounded contexts, what each one owns, how they relate, and why the boundaries are where they are.
@@ -66,7 +66,7 @@ No service reads another service's database; whatever it needs, it asks for thro
 | Inventory `inventory-service`
 | What can really be sold
 | Stock on hand, reservations, stock movements
-| Product descriptions and prices. It knows a product only by its SKU.
+| Product descriptions and prices. It knows a product only by its SKU, which it checks with the catalog the first time it sees it.
 
 | Cart `cart-service`
 | What a customer intends to buy, and what they like
@@ -75,7 +75,7 @@ No service reads another service's database; whatever it needs, it asks for thro
 
 | Order `order-service`
 | Turning a cart into a confirmed order, and following it to delivery
-| Orders with their frozen lines and prices, order status history, the order sagas
+| Orders with their frozen lines and prices, the customer's e-mail address as it was at placement, order status history, the order sagas
 | Stock and payments. It asks the inventory and the payment services, and records what they answer.
 
 | Payment `payment-service`
@@ -98,7 +98,7 @@ No service reads another service's database; whatever it needs, it asks for thro
 [cols="5,10", options="header"]
 |===
 | Question | Decision and reason
-| A user service? | *No.* The identity provider owns accounts and roles. A service of our own would only duplicate it. The customer's name and e-mail come from the token; the shipping address is typed at checkout and kept with the order.
+| A user service? | *No.* The identity provider owns accounts and roles. A service of our own would only duplicate it. The customer's name and e-mail address come from the token. The e-mail address and the shipping address typed at checkout are copied into the order when it is placed, so that an order can be notified and delivered whoever acts on it later.
 | Product service and catalog service? | *One context.* "Product" and "catalog" are the same thing seen by the same person.
 | Catalog and inventory together? | *Two contexts.* They fail all three tests together: different invariants, different rhythms, and the catalog must stay readable when the inventory is busy or down.
 | Where does the cart live? | *Its own context*, with favorites. A cart is not a draft order: it has no price, reserves nothing and changes constantly. Keeping it apart keeps that churn away from the order database.
@@ -125,6 +125,7 @@ plantuml::diagrams/context-map.puml[format=svg, align=center]
 | Cart → Catalog | Synchronous | Open host service | Current price, status and known available quantity of the products in a cart
 | Order → Catalog | Synchronous | Open host service | The same, once, when a checkout is submitted: these prices become the prices of the order
 | Order → Cart | Synchronous | Open host service | The lines of the customer's cart, when a checkout is submitted
+| Inventory → Catalog | Synchronous | Open host service | Whether a SKU exists, asked once: the first time stock is adjusted for it
 | Catalog ← Inventory | Events | Published language | The available quantity of a product, each time it changes
 | Order ⇄ Inventory | Commands and events | Customer and supplier | Reserve, confirm, release and return stock; what happened to each request
 | Order ⇄ Payment | Commands and events | Customer and supplier | Charge, cancel and refund a payment; what happened to each request
@@ -137,7 +138,7 @@ plantuml::diagrams/context-map.puml[format=svg, align=center]
 
 Three rules follow from the map and are enforced by architecture tests and by contract tests.
 
-. *A synchronous call never changes state in another context.* The three synchronous calls between our services are reads. Every change that crosses a boundary travels as a message, so that it survives the receiver being down.
+. *A synchronous call never changes state in another context.* The four synchronous calls between our services are reads. Every change that crosses a boundary travels as a message, so that it survives the receiver being down.
 . *Nobody depends on the order service synchronously.* The core is never on the critical path of another service's request.
 . *A context publishes an event only when another context needs it.* The catalog and the cart publish none in this release: nothing consumes what they would say.
 
@@ -145,11 +146,11 @@ Three rules follow from the map and are enforced by architecture tests and by co
 [%unbreakable, cols="3,12", options="header"]
 |===
 | Service down | Effect on the store
-| Catalog | The storefront cannot browse; carts show last known prices; checkout is refused. The store is effectively closed: the catalog runs with the most replicas.
-| Inventory | Browsing and carts work, with the availability last known. Orders wait, then are rejected or handed to an administrator.
+| Catalog | The storefront cannot browse; carts show last known prices; checkout is refused; stock cannot be entered for a product the inventory has never seen. The store is effectively closed: the catalog runs with the most replicas.
+| Inventory | Browsing and carts work, with the availability last known. An order whose stock is not reserved at the order deadline is rejected. An order already paid waits; past the review delay it is shown under review, and it is confirmed as soon as the inventory is back and answers.
 | Cart | Browsing works. No cart, no checkout.
 | Order | Browsing, carts and favorites work. No checkout, no order history.
-| Payment | Browsing, carts, order history work. New orders are rejected at the order deadline, uncharged.
+| Payment | Browsing, carts, order history work. A new order waits. If the service is not back at the order deadline the order will never be charged, whenever the service returns; it is rejected as soon as the service confirms that nothing was charged, and is shown under review meanwhile if the outage outlasts the review delay.
 | Notification | Everything works. E-mails are sent when it comes back.
 | Identity provider | Browsing works. Nobody can sign in; sessions already open keep working until their token expires.
 |===

@@ -1,0 +1,32 @@
+@startuml
+title SC-ORD-019 — A cancellation meets a silent inventory
+actor Customer as C
+actor Administrator as A
+participant "Order\n(cancel saga)" as O
+participant "Inventory" as I
+participant "Payment" as P
+participant "Notification" as N
+
+C -> O : CancelOrder
+note over O : order CANCELING\nsaga RETURNING_STOCK
+O ->> I : ReturnStock (first)
+note over I #ECEFF1 : down: the message waits
+... review deadline ...
+O -> O : review deadline reached
+note over O #FFF8E1 : SUSPENDED, remembers RETURNING_STOCK\norder UNDER_REVIEW
+O ->> N : OrderPutUnderReview
+A -> O : RetryOrderUnderReview, with a comment
+note over O : RETURNING_STOCK\nnew review deadline
+O ->> I : ReturnStock (second)
+== the inventory is back ==
+note over I : first ReturnStock: units back on hand,\nreservation RETURNED
+I ->> O : StockReturned
+note over O : REFUNDING_PAYMENT
+O ->> P : RefundPayment
+note over I : second ReturnStock: already RETURNED,\nthe stock does not change
+I ->> O : StockReturned
+note right of O : recorded, no effect
+P ->> O : PaymentRefunded
+note over O #C8E6C9 : COMPLETED\norder CANCELED
+O ->> N : OrderCanceled
+@enduml

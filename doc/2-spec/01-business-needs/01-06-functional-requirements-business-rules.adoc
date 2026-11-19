@@ -1,6 +1,6 @@
 = Functional Requirements and Business Rules: What the System Shall Always Do
 :doc-id: 01-06
-:revnumber: 0.3
+:revnumber: 0.4
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Verifiable functional requirements and business rules, by bounded context, with the amounts, limits and statuses they rely on.
@@ -84,7 +84,7 @@ It decides the level shown, and it is what a cart quantity is checked against; i
 | `PENDING` | Created; stock reservation and payment are in progress. | No
 | `CONFIRMED` | Paid, stock secured. | No
 | `REJECTED` | Could not be confirmed. Carries one reason. The order holds no payment: none was captured, or it was refunded. | Yes
-| `UNDER_REVIEW` | The system could not decide alone. Automatic processing has stopped; an administrator decides. | No
+| `UNDER_REVIEW` | The system could not decide alone. It has stopped asking by itself; an administrator decides, unless the answer that was missing arrives first. | No
 | `SHIPPED` | Handed to the carrier. | No
 | `DELIVERED` | Received by the customer. | Yes
 | `CANCELING` | Cancellation accepted; the refund is in progress. The order can no longer ship. | No
@@ -238,7 +238,7 @@ What strategy ensures an order is either fully honored or leaves no trace on the
 | [[FR-ORD-013]]FR-ORD-013 | Only an administrator shall move an order from `CONFIRMED` to `SHIPPED` and from `SHIPPED` to `DELIVERED`. | {should}
 | [[FR-ORD-014]]FR-ORD-014 | When a refund keeps failing, the system shall set the order to `UNDER_REVIEW` and alert an administrator; it shall never record as refunded a payment that was not. | {must}
 | [[FR-ORD-015]]FR-ORD-015 | When the order deadline expires on a `PENDING` order whose payment is not known to be captured, the system shall cancel the payment at the provider and reject the order with the reason `TIMED_OUT`; if the payment proves to be captured, the order shall be carried through instead. | {must}
-| [[FR-ORD-016]]FR-ORD-016 | An order that is still `PENDING` when the review delay expires shall become `UNDER_REVIEW`: its automatic processing stops and an administrator is alerted. | {must}
+| [[FR-ORD-016]]FR-ORD-016 | An order that is still `PENDING`, or still `CANCELING`, when the review delay expires shall become `UNDER_REVIEW`: the system stops asking by itself and an administrator is alerted. If the answer that was missing arrives afterwards, the system applies it as it would have at first, and the order may leave `UNDER_REVIEW` without a decision. | {must}
 | [[FR-ORD-017]]FR-ORD-017 | A customer shall have at most one `PENDING` order: while it is pending, another checkout shall be refused and shall point to that order. | {must}
 | [[FR-ORD-018]]FR-ORD-018 | An administrator's decision on an order under review shall obey the rules of the automatic flow: the order is confirmed only if its payment is captured and its stock secured; it is rejected, with the reason `ADMIN_DECISION`, only once it holds no payment. | {must}
 |===

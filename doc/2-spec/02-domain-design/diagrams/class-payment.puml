@@ -5,19 +5,20 @@ hide empty members
 class Payment <<aggregate root>> {
   paymentId : PaymentId
   orderId : OrderId
-  sagaId : SagaId
+  placementSagaId : SagaId
   amount : Money
   status : PaymentStatus
-  providerReference : String [0..1]
+  providerReference : String
   refusalReason : String [0..1]
   version : long
   --
-  recordCapture(reference)
+  recordCapture()
   recordRefusal(reason)
   recordUnknown()
   recordCancellation()
   recordRefund()
-  canBeRefunded() : boolean
+  mustCallProviderFor(request) : boolean
+  eventOfStatus() : Event
 }
 enum PaymentStatus {
   PENDING
@@ -29,8 +30,9 @@ enum PaymentStatus {
 }
 class ProviderAttempt <<entity>> {
   kind : CHARGE, CANCEL or REFUND
-  outcome : String
-  at : Instant
+  startedAt : Instant
+  outcome : String [0..1]
+  endedAt : Instant [0..1]
 }
 interface PaymentProvider <<port>> {
   charge(reference, amount, token) : ProviderAnswer
@@ -46,4 +48,11 @@ Payment "1" *-- "0..*" ProviderAttempt
 Payment --> PaymentStatus
 Payment --> Money
 Payment ..> PaymentProvider : through the application service
+
+note bottom of Payment
+  Every request is answered from the status
+  (document 02-03). The provider reference is
+  derived from the placement saga identifier
+  and is the same for charge, cancel and refund.
+end note
 @enduml

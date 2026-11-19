@@ -1,6 +1,6 @@
 = Use Cases and Authorization Matrix: Every Interaction, Every Flow, Every Refusal
 :doc-id: 01-05
-:revnumber: 0.3
+:revnumber: 0.4
 :revdate: 2026-11-19
 :revremark: Draft
 :description: Fully dressed use cases, UML use case diagrams and the authorization matrix.

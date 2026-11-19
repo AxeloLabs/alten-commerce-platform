@@ -8,19 +8,24 @@ state REFUNDING_PAYMENT
 state SUSPENDED #FFF8E1
 state COMPLETED #C8E6C9
 
-[*] --> RETURNING_STOCK : cancellation accepted\nsend ReturnStock
-RETURNING_STOCK --> REFUNDING_PAYMENT : StockReturned\nsend RefundPayment
-REFUNDING_PAYMENT --> COMPLETED : PaymentRefunded
-REFUNDING_PAYMENT --> SUSPENDED : PaymentRefundFailed
-RETURNING_STOCK --> SUSPENDED : review deadline
-REFUNDING_PAYMENT --> SUSPENDED : review deadline
-SUSPENDED --> REFUNDING_PAYMENT : administrator retries\nsend RefundPayment
-SUSPENDED --> RETURNING_STOCK : administrator retries\nsend ReturnStock
+[*] --> RETURNING_STOCK : C01 cancellation accepted\nsend ReturnStock
+RETURNING_STOCK --> REFUNDING_PAYMENT : C02 StockReturned\nsend RefundPayment
+REFUNDING_PAYMENT --> COMPLETED : C03 PaymentRefunded
+REFUNDING_PAYMENT --> SUSPENDED : C04 PaymentRefundFailed\nC05 review deadline
+RETURNING_STOCK --> SUSPENDED : C05 review deadline
+SUSPENDED --> REFUNDING_PAYMENT : C06 retry\nsend RefundPayment
+SUSPENDED --> RETURNING_STOCK : C06 retry\nsend ReturnStock
 COMPLETED --> [*]
+
+note bottom of SUSPENDED
+  The answer that was missing is handled
+  as in the remembered step.
+end note
 
 legend right
   Green: order CANCELED
   Yellow: order UNDER_REVIEW
-  Elsewhere: order CANCELING
+  Elsewhere: order CANCELING, or UNDER_REVIEW
+  once the saga has been suspended
 endlegend
 @enduml

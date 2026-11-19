@@ -1,6 +1,6 @@
 = Business Workflows to Commands and Events: From What Happens to What Is Exchanged
 :doc-id: 03-01
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: How each business workflow becomes commands, events and reactions between services, and where orchestration or choreography applies.
@@ -94,10 +94,11 @@ plantuml::diagrams/flow-order-placement.puml[format=svg, align=center]
 |===
 | On | The saga sends | The order ends
 | `StockReservationRejected` | Nothing | `REJECTED`, then `OrderRejected` is published
+| The order deadline, while the stock is awaited | `ReleaseReservation`, in case the reservation is made after all | `REJECTED`, then `OrderRejected`
 | `PaymentRefused` | `ReleaseReservation` | `REJECTED`, then `OrderRejected`
-| `PaymentOutcomeUnknown`, or the order deadline | `CancelPayment`, then `ReleaseReservation` on `PaymentCanceled` | `REJECTED`, then `OrderRejected`
+| `PaymentOutcomeUnknown`, or the order deadline while the payment is awaited | `CancelPayment`; then `ReleaseReservation` once the payment service says that nothing is held | `REJECTED`, then `OrderRejected`. `CONFIRMED` instead if the payment proves to be captured
 | `ReservationConfirmationFailed` | `RefundPayment` | `REJECTED` on `PaymentRefunded`, then `OrderRejected`
-| `PaymentRefundFailed`, or the review deadline | Nothing | `UNDER_REVIEW`, then `OrderPutUnderReview`
+| `PaymentRefundFailed`, or the review deadline | Nothing | `UNDER_REVIEW`, then `OrderPutUnderReview`. The saga still handles the answer that was missing, when it arrives
 |===
 
 == Order cancellation and fulfillment
@@ -131,10 +132,14 @@ What strategy handles what happens to an order after it is confirmed?
 [%unbreakable, cols="1,4,5,3,4", options="header"]
 |===
 | # | Who decides | Command | Handled by | What follows
-| 1 | Administrator | `RetryOrderUnderReview` (REST) | Order | The saga sends again the request of the suspended step
-| 2 | Administrator | `ConfirmOrderUnderReview` (REST) | Order | The saga sends `ConfirmReservation`, if the payment is captured
-| 3 | Administrator | `RejectOrderUnderReview` (REST) | Order | The saga sends `RefundPayment` or `CancelPayment`, and `ReleaseReservation`
+| 1 | Administrator | `RetryOrderUnderReview` (REST) | Order | The saga sends again the request of the step it remembers
+| 2 | Administrator | `ConfirmOrderUnderReview` (REST) | Order | The saga sends `ConfirmReservation`, if the payment is known as captured
+| 3 | Administrator | `RejectOrderUnderReview` (REST) | Order | The saga sends `RefundPayment` or `CancelPayment`; once no payment is held, it sends `ReleaseReservation` or `ReturnStock` and rejects the order
 |===
+
+A decision is not the only way out of a review.
+The request that got no answer is still waiting in the subscription of the service that was silent; when that service comes back it executes it, and the saga handles the answer as it would have at first.
+An order under review may therefore settle by itself, and an administrator who decides a moment later is refused: the order is no longer under review.
 
 == Reactions around the order
 

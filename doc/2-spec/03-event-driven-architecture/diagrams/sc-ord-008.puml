@@ -11,10 +11,10 @@ PSP --> P : captured
 P ->> O : PaymentCaptured
 note over O : one transaction: message recorded,\nsaga CONFIRMING_STOCK,\nConfirmReservation to send
 O ->> I : ConfirmReservation
-P ->> O : PaymentCaptured (duplicate)
+P ->> O : PaymentCaptured (same message again)
 note over O : message already recorded:\nacknowledged, nothing done
-O ->> P : ChargePayment (duplicate)
-note over P : a payment exists for this order:\nthe provider is not called
-P ->> O : PaymentCaptured (same answer)
-note over O : recorded as a new message,\nbut the saga no longer expects it: ignored
+O ->> P : ChargePayment (sent again, new identifier)
+note over P : the payment of this order is CAPTURED:\nanswered from its status,\nthe provider is not called
+P ->> O : PaymentCaptured
+note over O : a new message, but the saga\nno longer expects it:\nrecorded, no effect
 @enduml

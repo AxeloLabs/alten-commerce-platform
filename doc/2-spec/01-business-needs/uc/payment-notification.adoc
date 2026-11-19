@@ -36,7 +36,9 @@ Their primary actor is the customer on whose behalf they run.
 . The system records the payment as `CAPTURED` and answers the order placement.
 
 .Alternative flows
-1a. A payment already exists for the order:: The system answers with the recorded outcome. The provider is not called again.
+1a. A payment with a known outcome already exists for the order:: The system answers with that outcome. The provider is not called again.
+1b. A payment exists whose charge was interrupted before its outcome was recorded:: The provider is asked again with the same reference, and answers what it did the first time: nothing is charged twice.
+1c. The request arrives after the order deadline:: Nothing is charged. The payment is recorded as `CANCELED` and the order placement is told.
 3a. The provider is slow or fails transiently:: The system retries a limited number of times, with the same reference so that the provider itself cannot charge twice.
 
 .Exception flows
