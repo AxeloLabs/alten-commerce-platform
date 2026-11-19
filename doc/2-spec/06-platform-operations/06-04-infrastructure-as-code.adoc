@@ -1,0 +1,185 @@
+= Infrastructure as Code: Every Cloud Resource Described, Reviewed and Reproducible
+:doc-id: 06-04
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: What Terraform manages and what it does not, the layout of the code and of its state, the module applied once per environment, the workflow of a change, and what exists before Terraform.
+include::../_shared/attributes.adoc[]
+
+== Principles
+
+.Strategy question
+****
+What strategy makes the cloud side of the platform something that can be read, reviewed and rebuilt, like the code?
+****
+
+Every cloud resource of the platform is declared in the repository and created by Terraform {v-terraform}, with the Google provider {v-terraform-google-full}.
+The console is for looking, never for changing.
+
+.Four rules
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Rule | Meaning
+| Nothing by hand | A resource that Terraform does not know does not belong in the project. A change made in the console is reverted by the next run, on purpose.
+| Reviewed like code | A change is a pull request. What will change is computed and shown before anyone approves.
+| One description, three environments | The resources of an environment are one module, applied with the name of the environment (document 06-01).
+| No secret in the code or in the state | Terraform creates the place where a secret lives and the right to read it, never its value.
+|===
+
+.Which tool describes what
+[cols="4,4,7", options="header"]
+|===
+| Thing | Described with | Examples
+| Cloud resources | Terraform | Network, cluster, database instance, topics and subscriptions, identities and rights, secrets containers, registry, names, certificate, firewall policy, budget, delivery pipeline
+| What runs in the cluster | Helm charts (document 06-03) | Deployments, services, routes, network policies, dashboards and alert rules
+| The schema of a database | Migrations (document 04-04) | Tables, indexes, reference data
+| The configuration of the identity provider | A realm file in its chart | Realm, client, roles, policies (document 05-04)
+|===
+
+The border is simple: Terraform stops at the door of the cluster and at the door of each database.
+It creates the cluster and an empty database with its account; what is inside belongs to the release that is deployed.
+
+Owner: {role-cloud} {role-devops}
+
+== Layout
+
+.Strategy question
+****
+What strategy keeps a mistake in the test environment from ever being a mistake in production?
+****
+
+.Layout of the infrastructure code
+[source,text]
+----
+deploy/terraform/
+├── modules/
+│   ├── foundation/          enabled services, network, outgoing address, names, registry
+│   ├── cluster/             the Autopilot cluster and its settings
+│   ├── database/            the instance: size, availability, backups, flags
+│   ├── edge/                public address, certificate, firewall policy
+│   ├── delivery/            delivery pipeline and its targets; trust with GitHub
+│   ├── guardrails/          budget and its alerts, quotas
+│   └── environment/         everything that carries the name of an environment
+│       ├── messaging/       schemas, topics, subscriptions, dead letters, rights
+│       ├── identities/      one identity per workload, its bindings
+│       ├── databases/       one database and one account per workload
+│       └── secrets/         the secrets containers and who may read them
+└── live/
+    ├── shared/              what exists once
+    ├── test/                the environment module, with "test"
+    ├── integration/         the environment module, with "integration"
+    └── prod/                the environment module, with "prod"
+----
+
+.Roots and their state
+[cols="3,6,6", options="header"]
+|===
+| Root | Creates | Changes
+| `shared` | Network, cluster, database instance, entry point, registry, delivery pipeline, guardrails | Rarely. A change here can reach the three environments at once: it is reviewed accordingly, and applied outside business hours.
+| `test`, `integration`, `prod` | The resources of one environment | With releases. Applied in that order; `prod` after approval.
+|===
+
+Each root has its own state, kept in a storage bucket with versions, encryption and locking.
+Four states mean that a run on `test` cannot read, let alone change, what belongs to `prod`.
+
+.What the environment module creates, each time it is applied
+[cols="5,3,7", options="header"]
+|===
+| Resource | Count | Note
+| Message schemas, topics | 5 and 5 | From the contract files of the repository (document 03-05)
+| Subscriptions, with filter, ordering, retry and dead-letter policy | 7 | –
+| Dead-letter topics and their inspection subscriptions | 7 and 7 | –
+| Identities of workloads | 8 | Six services, the web gateway, the identity provider
+| Rights | About 40 | On individual topics, subscriptions and secrets; the three project-level rights of document 06-02
+| Databases and their accounts | 8 and 8 | Empty: migrations fill them
+| Secrets containers | 4 | Client secret and session key of the web gateway; administration credentials of the identity provider; credential of the e-mail provider
+| Routes of the entry point | 2 | The store and its identity provider, by host name
+|===
+
+== A change, from proposal to production
+
+.Strategy question
+****
+What strategy guarantees that what was approved is exactly what is applied?
+****
+
+plantuml::diagrams/iac-workflow.puml[format=svg, align=center]
+
+.Steps
+[cols="3,12", options="header"]
+|===
+| Step | Rule
+| Proposal | A pull request. Nobody changes infrastructure from a workstation: engineers have no right to write the state or the resources.
+| Checks | Formatting and validation; Checkov {v-checkov} refuses a resource that is public, unencrypted or over-privileged (document 05-04).
+| Plan | Computed by the pipeline for every root the change touches, and posted on the pull request: what is created, changed, destroyed. A plan that destroys a database, a topic or a secret is flagged in red.
+| Review | A person reads the plan, not only the code. The code says what was written; the plan says what will happen.
+| Apply | By the pipeline, with the plan that was reviewed, root by root: `shared`, `test`, then `integration` once the tests of `test` pass, then `prod` after approval (document 06-05).
+| Afterwards | Every night the pipeline computes a plan of each root. It must be empty; anything else means someone changed something by hand, and raises an alert.
+|===
+
+.Protections
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Protection | On
+| Deletion refused by the resource itself | The database instance, the cluster
+| Deletion refused by Terraform | Databases, topics of production, secrets containers, the names zone, the state buckets
+| Destroying a root | Not a pipeline job. Removing the platform is a documented procedure, started by the owner of the project (document 06-06).
+| Versions | Terraform, the provider and the modules are pinned; the lock file is committed. An upgrade is a pull request with its own plan.
+|===
+
+== Secrets and state
+
+.Strategy question
+****
+What strategy keeps secret values out of a tool that remembers everything it creates?
+****
+
+The state of Terraform records every attribute of every resource it manages.
+A secret value given to Terraform would be written there in clear.
+
+.Rules
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Passwords | Avoided: services reach the database, the bus and the secret manager with their identity (document 05-04).
+| The secrets that remain | Terraform creates the container and the rights. The value is added as a new version by a separate, recorded step: generated by the pipeline for what we choose ourselves, entered by the owner for what a provider gives us.
+| Outputs | No output is a secret. Outputs are addresses, names and identifiers that the charts need.
+| The state | Readable by the pipeline only. It holds no secret value, but it describes everything: it is not public information.
+|===
+
+== Before Terraform
+
+.Strategy question
+****
+What strategy bootstraps a tool that cannot create the things it needs to run?
+****
+
+A few things must exist before the first run.
+They are created once, by the owner of the project, following a procedure of document 06-07; they involve billing and project-level rights, which are not delegated to a pipeline or to an agent.
+
+.Created by hand, once
+[cols="4,11", options="header"]
+|===
+| Thing | Why by hand
+| The project, linked to a billing account | Spending authority belongs to a person
+| The bucket of the states | Terraform cannot store its state in a bucket it has not created yet
+| The trust between GitHub and the project, and the identity of the pipeline | The pipeline cannot grant itself the right to act
+| The budget of the project and who is alerted | The first guardrail must not depend on the tool it guards (document 06-06)
+| The domain name of the store | Bought from a registrar; only its zone is managed here
+|===
+
+Everything else — more than two hundred resources — is created by the first run of the four roots, in order.
+An empty project becomes a working platform by running the pipeline, which is also how the procedure is tested: the integration environment can be destroyed and rebuilt from the repository.
+
+.Labels
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Label | Value
+| `environment` | `shared`, `test`, `integration` or `prod`
+| `service` | The workload a resource belongs to, when it has one
+| `managed-by` | `terraform`: a resource without it was created by hand
+|===
+
+Labels are how the bill is broken down by environment and by service (document 06-06).
+
+Owner: {role-cloud} {role-devops}

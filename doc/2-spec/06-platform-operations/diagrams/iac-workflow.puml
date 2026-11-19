@@ -1,0 +1,27 @@
+@startuml
+title A change of infrastructure, from proposal to production
+
+skinparam componentStyle rectangle
+left to right direction
+
+component "Pull request\nthe change, as code" as PR
+component "Checks\nformat, validation,\nsecurity scan" as CHK #FFF8E1
+component "Plan\nwhat would change,\nposted on the request" as PLAN #FFF8E1
+component "Review\na person reads\nthe plan" as REV #FFE0B2
+component "Apply: shared\nthen test" as A1 #E3F2FD
+component "Apply:\nintegration" as A2 #FFF8E1
+component "Apply: prod\nafter approval" as A3 #C8E6C9
+
+PR --> CHK
+CHK --> PLAN
+PLAN --> REV
+REV --> A1 : merge
+A1 --> A2 : tests of test pass
+A2 --> A3 : approval
+
+note bottom of A3
+  Each apply uses the plan that was reviewed.
+  A nightly plan of every root must be empty:
+  anything else is a drift, and an alert.
+end note
+@enduml
