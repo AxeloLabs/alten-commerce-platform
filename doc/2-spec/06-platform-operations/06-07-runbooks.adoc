@@ -257,7 +257,7 @@ Done once, by the owner of the project (document 06-04).
 | 1 | Create the project and link it to a billing account | Spending authority
 | 2 | Apply the `owner` root of the infrastructure code: the budget, its thresholds and who is alerted | The first guardrail exists before anything can spend, and only the owner has rights on the billing account
 | 3 | Create the bucket of the infrastructure states, with versions | The tool needs it before it can create anything
-| 4 | Establish the trust between the repository and the project, and the identity of the pipeline with its rights | A pipeline cannot grant itself rights
+| 4 | Check that the rules of the repository and its environments are in place, then establish the trust between the repository and the project, and the identity of the pipeline with its rights | A pipeline cannot grant itself rights, and the trust is worth what the rules of the repository are worth ({ADR-PLT-035})
 | 5 | Full profile only: register the domain name of the store, and delegate its zone | A purchase
 | 6 | Run the pipeline: the four infrastructure roots, then a first release | From here on, everything is automatic
 | 7 | Give the secrets that come from outside their first value. None in this release: both providers are simulated | Only the owner would hold them
@@ -265,6 +265,7 @@ Done once, by the owner of the project (document 06-04).
 |===
 
 Steps 1 to 5 can be done from the command line; the exact commands are kept with the infrastructure code, next to the module they prepare, and are run by a person, not by an agent.
+The first command of the procedure reads the quotas of the new project in the region, before anything depends on them: a quota that is too low is raised by a request that can take days.
 In the proof of concept, step 6 is the run in which the owner gives the deadline of destruction (document 06-06).
 
 == After an incident

@@ -231,7 +231,7 @@ What strategy makes sure a deceived agent finds nothing worth stealing and nothi
 |===
 | System | Identity | Rights
 | Workstation | The session account | The repository and its tools. Nothing of the developer.
-| Source host | A token limited to this repository, held by the session account | Push work branches; open and comment pull requests. No right on pipeline definitions, no administration, no change to protections, no secret of the pipeline.
+| Source host | A token limited to this repository, held by the session account | Push work branches; open and comment pull requests. No right on pipeline definitions, no administration, no change to protections, no secret of the pipeline. A token cannot be limited to a branch: the rules of the main branch, which bind everyone, refuse its direct push (document 06-05).
 | Main branch | None | Changed only by a reviewed pull request (document 06-05). The agent cannot approve or merge.
 | Cloud, to read `test` | In the proof of concept: none; the agent reads the snapshot that the pipeline writes (document 08-03). In a company: a read-only identity of its own, short-lived. | List, describe, read logs and metrics of `test`. Nothing else.
 | Cloud, to change anything | None | The pipeline is the only identity that changes a resource, and only from the main branch (document 06-04)
@@ -265,7 +265,7 @@ The policy does not rely on the agent resisting; it makes sure that obeying a pl
 |===
 | Source | Limit
 | Web pages | Fetching is asked outside the allow list; a fetched page is summarized as data
-| Issues, pull requests and comments written by others | Read as data. An agent run by the pipeline on a pull request from outside the team receives no secret and no write right.
+| Issues, pull requests and comments written by others | Read as data. The repository is public ({ADR-PLT-035}), so anyone can write them. The expert workflow runs only for a pull request whose branch is in this repository, and an agent run by the pipeline on a pull request from outside the team receives no secret and no write right (document 06-05).
 | Dependencies: their code, their documentation, their install scripts | Added only after a question, and checked by a person; the dependency scan of the pipeline. Their code runs in the build, on the session account.
 | Results of tools and of commands | Data. A result that asks for an action is reported to the user, not acted upon.
 | The repository's own instructions | The instruction file, the rules, the skills and the settings are instructions to every future agent. A change to them is reviewed by their owners like a change to the pipeline.
@@ -352,6 +352,7 @@ A host that accepts uploads, as the source host does, can receive whatever a ses
 This policy does not claim otherwise.
 What it guarantees is narrower and firmer: a session can read nothing but this repository.
 A company for which the source code itself must not leave filters the outgoing traffic of the session account or machine.
+In this project the repository is public ({ADR-PLT-035}): the source code is not what a leak would cost. What a session can read, and what the guarantee above protects, is the repository and nothing of the developer.
 
 .Terms, by way of access
 [cols="4,6,5", options="header"]
@@ -416,10 +417,10 @@ What strategy turns this policy into the dozen answers a security officer will a
 |===
 | Question | Answer | Enforced by
 | Can the agent delete or change something in production? | No. It holds no identity with any right on `integration` or `prod`, and none that can change `test`. | Cloud rights; the session account
-| Can it merge its own code? | No. The main branch takes reviewed pull requests that pass every gate; a person merges. | Branch protection
+| Can it merge its own code? | No. The main branch takes reviewed pull requests that pass every gate; a person merges. | The rules of the main branch (document 06-05): a pull request and the checks are required, with no bypass
 | Can it change the pipeline? | It can propose a change. Its token cannot push a pipeline definition: a person does, after reading it. | Rights of the token
 | Can it read our secrets? | Real secrets are not on the workstation, and the developer's own credentials are not on the account the agent runs under. | Secret Manager; the session account
-| Where does our code go? | To the model provider, under the terms above. Nothing else is meant to leave. The source code is the one thing a deceived agent could send elsewhere; no secret and no data would travel with it. | Contract; the session account; the allow list, within its limits
+| Where does our code go? | To the model provider, under the terms above. The repository is public ({ADR-PLT-035}), so the code itself is not a secret; what must never leave, secrets and personal data, is not on the workstation. | Contract; the session account; the allow list, within its limits
 | Is our code used to train a model? | Not under a commercial contract or through the company's cloud; under a consumer subscription, only if the user allows it. | Contract; account setting
 | What if it reads a malicious instruction? | It may follow it. It will find no credential to send, and no right to change anything beyond a branch that a person reviews. | Layers 3, 7 and 8
 | Can a developer switch the protections off? | Not the company's: managed settings cannot be overridden, and the modes that skip permissions are disabled there. | Managed settings

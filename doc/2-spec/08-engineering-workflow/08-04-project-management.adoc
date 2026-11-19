@@ -38,6 +38,7 @@ Project management adds only what a specification cannot hold: the state of the 
 | The truth about "done" | The pipeline (document 06-05) | Does it work?
 |===
 
+The repository is public ({ADR-PLT-035}), and so are its issues: the backlog can be read by anyone, which suits a project meant to be shown. The board, a GitHub Project of the owner, can stay private.
 The brief suggested Jira.
 The repository, the reviews and the pipeline are on GitHub, and agents drive it from the command line: a second product would add an account, a connector and a place where the state can differ.
 Should an employer impose Jira, the mapping below applies unchanged; only the tool differs.
@@ -281,6 +282,9 @@ What strategy deals with what can go wrong before it does?
 | The agent product changes, or its quota is reached | A setting that no longer exists; a session refused | Prompts, experts and rules are plain files of the repository: another agent product, or a person, can read them. Work continues by hand. | {role-platform}
 | Model usage costs more than expected | The usage measured during M0 | Experts run only on the changes that concern them, with a limit per run; the pace is adjusted to the plan of the account | Product owner
 | An agent does something it should not | A refused command in the telemetry; a surprising change | The harness of document 08-02: the agent holds nothing with which to harm the cloud | {role-sec}
+| A stranger's pull request or issue carries a planted instruction, or runs up the bill of an agent | A run of the expert workflow that the owner did not expect; a surprising spending figure at the model provider | The repository is public ({ADR-PLT-035}): the expert workflow runs only for branches of this repository, forks run without a secret, workflows of outside contributors wait for approval, and the key carries a spending limit (documents 06-05, 06-06, 08-02) | {role-sec}
+| A secret or a personal datum is already in the history when the repository becomes public | The audit before the first publication | The audit reads the whole history and reports to the owner, who decides before any push. What is public stays public even if deleted: a leaked secret is rotated, never only removed. | {role-sec}
+| The address of the authors appears in every commit of a public history | The audit before the first publication | The owner chooses before the first push: keep it, or replace it by the address that the host keeps for that purpose. Rewriting a published history is not possible without harm, so the choice comes first. | Product owner
 |===
 
 The register is reviewed at each milestone: risks that passed are closed, and what the milestone revealed is added.

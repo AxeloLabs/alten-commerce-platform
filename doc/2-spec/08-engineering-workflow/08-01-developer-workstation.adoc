@@ -60,6 +60,7 @@ mise ls --current   # show what is active in this directory
 | Tool | Used for | Administrator rights
 | Git, GitHub CLI | Source control, pull requests, backlog | Usually preinstalled
 | Podman or Docker | Building images, running local dependencies, Testcontainers | To install; not to use
+| Compose provider: `podman-compose` | Reads the Compose file of the local platform. Podman's `compose` command only delegates to a provider; without one it stops with an error. | To install, from system packages
 | Google Cloud CLI | Authentication to Google Cloud, cluster credentials, emulators | To install from system packages
 | GKE authentication plugin | Lets `kubectl` authenticate to GKE | Yes, when the Google Cloud CLI came from system packages
 | pnpm | Package manager of the storefront and of the documentation tooling | No
@@ -157,6 +158,7 @@ What strategy runs a database, a message bus and an identity provider locally wi
 
 Images are built and run with Podman or Docker; both handle the same images and the same Compose files.
 On Fedora, Podman is preinstalled, runs without a daemon and without root, and is the default choice.
+Its `compose` command is not self-sufficient: it delegates to a provider that is not installed with Podman. On Fedora the provider is the package `podman-compose`, which needs administrator rights to install, once.
 
 .Making Testcontainers use rootless Podman
 [source,shell]
@@ -238,6 +240,8 @@ This section covers only what is installed.
 | `terraform` | Up-to-date provider documentation while writing infrastructure code | –
 |===
 
+Plugins and tool servers are installed in the account that the sessions of the assistant run under, through the shared settings of the project (`.claude/settings.json`, `.mcp.json`), not in the personal configuration of a developer: that is what makes the list the same for every developer and for the session account (document 08-02). The commands below show what the settings declare.
+
 [source,shell]
 ----
 /plugin install jdtls-lsp@claude-plugins-official
@@ -276,7 +280,7 @@ What strategy proves the setup described here actually works?
 ****
 
 The setup was applied to the reference workstation on {revdate}.
-Each line was checked by running the tool, not by reading its documentation.
+Each line was checked by running the tool, not by reading its documentation. The check found one tool missing that this document had not listed: the Compose provider.
 
 .State of the reference workstation
 [cols="4,4,7", options="header"]
@@ -293,6 +297,7 @@ Each line was checked by running the tool, not by reading its documentation.
 | Java language server (jdtls) | 1.63.0 | Archive in the home directory, checksum verified
 | TypeScript language server | 6.1.0 | pnpm, in the home directory
 | Podman | 5.8.9 | Preinstalled
+| Compose provider | Missing when checked (`podman compose` stopped with an error); package `podman-compose` available | System package: a remaining step below
 | Google Cloud CLI | 593.0.0 | Preinstalled, system package
 | GitHub CLI, Git, Python, Chrome | – | Preinstalled
 |===
@@ -301,10 +306,10 @@ Each line was checked by running the tool, not by reading its documentation.
 [cols="6,6,4", options="header"]
 |===
 | Step | Why it is not automated | Needed for
-| Install the GKE authentication plugin | Administrator rights | First connection to the cluster
+| Install the GKE authentication plugin and the Compose provider | Administrator rights | First connection to the cluster; the local platform
 | Enable the Podman socket | Changes a user service of the workstation | First Testcontainers run
 | `gcloud auth login` | Interactive sign-in | Any Google Cloud access
 | Create the account that the sessions of the AI assistant run under | Administrator rights (document 08-02) | Development phase
-| Install the Claude Code plugins | Changes the assistant's own configuration | Development phase
+| Install the Claude Code plugins and tool servers, in the session account | Changes the assistant's own configuration; done under the account of the previous line, through the shared settings of the project | Development phase
 | Choose the IntelliJ IDEA license | Personal or company account | Advanced Spring tooling only
 |===

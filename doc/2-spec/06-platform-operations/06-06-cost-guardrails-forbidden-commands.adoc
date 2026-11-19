@@ -97,8 +97,9 @@ That is the price of {NFR-AVAIL-004}; it is not paid by the proof of concept, wh
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Item | Cost
-| Pipeline minutes | Free for a public repository; inside the free allowance of a private one at our rhythm
+| Pipeline minutes | Free: the repository is public ({ADR-PLT-035}). A private one would stay inside the free allowance at our rhythm, but would lose the protections that document 06-05 relies on.
 | Code analysis | The hosted edition: free for a public repository, paid for a private one. Skipped in the proof of concept unless configured (document 06-05).
+| Key of the model provider, for the expert agents | Billed by the provider, by use. A spending limit is set at the provider when the key is created; the experts run only on the changes that concern them (document 08-03).
 | Domain name | A yearly purchase. None in the proof of concept, which uses a free name that resolves to its address.
 |===
 

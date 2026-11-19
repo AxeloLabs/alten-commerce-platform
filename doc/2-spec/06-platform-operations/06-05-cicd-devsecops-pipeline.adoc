@@ -33,7 +33,7 @@ Nothing else stands between a commit and a running pod: no pipeline server to ho
 [%unbreakable, cols="4,11", options="header"]
 |===
 | Subject | Rule
-| Main branch | Always deployable. Protected: no direct push, no merge without the gates and a review.
+| Main branch | Always deployable. Protected by the rules of the repository, for everyone including its owner: a pull request is required, the checks of the pull request stage are required, no forced push, no deletion, no bypass. No count of approvals is required: the repository has one owner, who cannot approve their own pull request. The review is that person's reading before the merge, and the gates are what blocks ({ADR-PLT-035}).
 | Work | Short-lived branches, one pull request per change, merged within days.
 | Release | Each merge that changes a deployable part creates a release: a version made of the date and a sequence number, tied to the commit, with the digests of its images and the versions of its charts.
 | Pipeline definitions | YAML files of the repository, reviewed like code; their owners are named, and a change to them needs their approval.
@@ -105,7 +105,7 @@ plantuml::diagrams/pipeline-release.puml[format=svg, align=center, pdfwidth=72%]
 | Deployment to `test` | One job, bound to the environment `test`. It applies the infrastructure of the environment if it changed, then each chart that changed. | A migration fails; a pod does not become ready
 | Tests of `test` | The tests that need real services, the authorization suite, the dynamic scan with ZAP {v-zap} | A failing test; a finding of high severity ({NFR-SEC-008})
 | Deployment to `integration`, and its tests | The same release, the same way. End-to-end tests of the critical paths with Playwright {v-playwright}; the saga scenarios that payment tokens alone can drive; the leak test | A failing test
-| Approval | The job bound to the environment `prod` waits until a person named for that environment approves, with the evidence of the previous steps in front of them | Not approved
+| Approval | The job bound to the environment `prod` waits until the person named as reviewer of that environment approves, with the evidence of the previous steps in front of them. That is the owner of the repository, and the environment accepts deployments from the main branch only ({ADR-PLT-035}). | Not approved
 | Deployment to `prod` | The same release, the same way, then a verification of the critical paths | A pod not ready, or a failed verification: automatic return to the previous release
 |===
 
@@ -143,6 +143,7 @@ They run on `integration` in an announced window, before a release that touches 
 | Environments | One. The pipeline of the main branch stops after recording the release.
 | Deployment | Started by the owner, who gives the deadline of destruction at the same time (document 06-06). The same job, the same charts, with the values of the profile.
 | Tests after deployment | The verification of the critical paths. The suites of `test` and `integration` run against the same single environment, on request.
+| Approval | The owner who starts the deployment is its approver: there is no second confirmation.
 | Destruction | A scheduled run of the pipeline destroys everything at the deadline (document 06-04).
 |===
 
@@ -193,13 +194,34 @@ What strategy gives a pipeline the power to deploy without leaving a key that co
 [cols="4,11", options="header"]
 |===
 | Subject | Rule
-| To Google Cloud | GitHub proves which repository, which branch and which environment a job belongs to; Google Cloud exchanges that proof for a credential that lives minutes. No key is stored anywhere.
+| To Google Cloud | GitHub proves which repository, which branch and which environment a job belongs to; Google Cloud exchanges that proof for a credential that lives minutes. No key is stored anywhere. The trust names the repository by its numeric identifier, not by its name, and the branch or the environment expected for each purpose: a repository recreated under the same name, or a fork, receives nothing.
 | One identity per purpose | A job of a pull request can read, build and compute a plan. A job of the main branch can push images. A job bound to an environment receives the deployment identity of that environment, and of no other.
 | Production | The deployment identity of `prod` is issued only to a job of the main branch, bound to the environment `prod`, after the approval. A run cannot obtain it by naming the environment: the approval is enforced by GitHub before the job starts.
 | Third-party steps | Pinned to an exact commit, and few. Each job declares the minimum rights it needs.
-| Code from outside | A pull request from a fork runs without any credential and without any secret.
+| Code from outside | A pull request from a fork runs without any credential and without any secret (next section).
 | The pipeline's own secrets | Two. The token of the code analysis, readable by runs of branches of the repository, never by runs of forks. The key of the model provider used by the expert agents, kept in an environment that only the main branch may use: their workflow runs as defined on the main branch (document 08-02).
 | Changes to pipeline definitions | Pushed by a person, and reviewed by the owners of those files. The tokens of AI agents have no right on them (document 08-02).
+|===
+
+== Contributions from outside
+
+.Strategy question
+****
+What strategy lets strangers propose changes to a public repository without giving them anything?
+****
+
+The repository is public ({ADR-PLT-035}): from the first minute, anyone can fork it, open a pull request or write an issue.
+
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Who runs what | The workflows of a pull request from a fork, or from a first-time contributor, wait for the owner's approval before they run. They receive no secret and a token with read rights only.
+| The default token | Read-only for every workflow. A job that needs more declares it, and the definition of that job is reviewed like code.
+| Expert agents | Their workflow runs only for a pull request whose branch is in this repository, as defined on the main branch (document 08-02). A pull request from a fork is read by the owner, not by an agent that holds a key.
+| Text from strangers | An issue, a comment or the description of a pull request is untrusted content (document 08-02). No stage of the pipeline executes it, and none passes it to a shell.
+| Secrets | The scan of the commits is a gate (above), and the host refuses a push that contains a known secret format. The history was audited before the first publication.
+| The bill | Runs on the hosted runners are free for a public repository. The key of the model provider carries a spending limit set at the provider (document 06-06).
+| Reports of weaknesses | Through the private reporting channel of the host, not through a public issue.
 |===
 
 == Measuring delivery

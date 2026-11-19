@@ -67,6 +67,7 @@ It is marked as replaced, and a new record says what replaced it and why: the hi
 | {ADR-PLT-032} | The backlog lives in GitHub Issues and Projects | {st-approved}
 | {ADR-PLT-033} | AI agents work under a harness that leaves them no right on the cloud | {st-proposed}
 | {ADR-PLT-034} | The software is built by catalogued prompts and verified by independent experts | {st-proposed}
+| {ADR-PLT-035} | The repository is public | {st-approved}
 |===
 
 Owner: {role-arch} {role-sol}
@@ -565,4 +566,17 @@ These decisions are argued in the documents of folder 08.
 | Alternatives | Building first and letting experts add quality afterwards, as the brief first imagined: error handling, transactions and security added to code written without them cost more than writing them first, and the experts would review code with no reference. One agent with one long prompt: no reviewable step. Experts as blocking gates: a model's judgment varies from one run to the next, and a gate that varies is ignored.
 | Consequences | The plan of construction is checked by the build of this specification: a use case that no prompt builds, or a test that no prompt delivers, fails it. The order of the prompts is constrained by the foundations. Expert reviews cost model usage on each pull request; they are run only on the changes that concern them.
 | Owner | {role-arch} {role-qa}
+|===
+
+[[ADR-PLT-035]]
+=== ADR-PLT-035 — The repository is public
+
+[cols="3,11"]
+|===
+| Status | {st-approved} · 2026-11-19 · decided by the product owner
+| Context | The specification relies on four features of the source host: a protected main branch, an environment `prod` that waits for a person, secrets held by an environment, and free pipeline and code-analysis minutes. On a private repository of a free personal account the host offers none of the first three: its programming interface refuses the rules, and environments need a paid plan. A paid plan adds environments and branch rules, but not the obligatory approval, which a private repository has only on the enterprise plan. A public repository on a free account has them all.
+| Decision | The repository is public, on a free account. The rules of the main branch, the environment `prod` with the owner as approver, and the restrictions of document 06-05 apply from the first pull request. Before the first publication the history is audited, and the owner chooses what it shows: the address of the authors, and the folders that stay out.
+| Alternatives | Private, with the paid plan (about 4 USD a month at the last price known): branch rules and environments, but no obligatory approval, so "approve before production" would become "the owner starts the deployment"; a subscription to pay for a proof of concept of two days. Private, on the free plan: no rule and no environment, so the refusals of the agents would rest on convention and on the scope of a token. The enterprise plan: obligatory approval in private, out of proportion to this project.
+| Consequences | Everything is readable: specification, code, pull requests, issues and the backlog ({ADR-PLT-032}). A stranger can open a pull request or an issue from the first minute: their text is untrusted content (document 08-02), a pull request from a fork runs without any secret, and the expert workflow runs only for branches of this repository. The key of the model provider carries a spending limit set at the provider. There is no licence until the owner chooses one: without it the code can be read and not reused. A secret or a personal datum that was committed once is public for ever, even if deleted: the secret scan with push protection, and the audit before publication, exist for that.
+| Owner | {role-sec} {role-devops}
 |===
