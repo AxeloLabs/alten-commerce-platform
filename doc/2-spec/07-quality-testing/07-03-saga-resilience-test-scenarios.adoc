@@ -42,7 +42,7 @@ What strategy gives a scenario the control it needs without building that contro
 ****
 
 .One place
-[cols="4,11", options="header"]
+[%unbreakable, cols="4,11", options="header"]
 |===
 | Subject | Rule
 | Place | A composition of containers: the six services, their database, the bus emulator, the identity provider, and the harness described below. The payment and e-mail providers need no container: in this release they are simulated by an adapter inside the payment and notification services (document 02-02), there as everywhere.
@@ -76,7 +76,7 @@ A restart takes longer than a shortened deadline could tolerate; this is why res
 What strategy gives a test the power to break exactly one thing at exactly one moment?
 ****
 
-plantuml::diagrams/scenario-harness.puml[format=svg, align=center]
+plantuml::diagrams/scenario-harness.puml[format=svg, align=center, pdfwidth=85%]
 
 Stopping a service "just after" something happened is a race that a test loses one time in ten.
 Every means below is therefore put in place *before* the order is placed, and takes effect at a point defined by a message, not by a clock.

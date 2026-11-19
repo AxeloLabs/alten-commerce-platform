@@ -2,46 +2,23 @@
 title What a saga scenario test controls and what it observes
 
 skinparam componentStyle rectangle
-
-component "Scenario test" as T #FFF8E1
-
-package "Under test" #F4F7F9 {
-  component "Order service" as O
-  component "Inventory service" as I
-  component "Payment service" as P
-  component "Cart, catalog,\nnotification" as R
+skinparam rectangle {
+  RoundCorner 8
 }
 
-queue "Bus" as BUS
-component "Gate\none per consumer:\nforwards, holds, releases,\nrepeats a message" as G #FFE0B2
-component "Simulated payment provider\nan adapter of the payment service:\nanswers by token, records every call" as PSP #E3F2FD
-component "Simulated e-mail provider\nan adapter of the notification service:\nrecords every e-mail" as MAIL #E3F2FD
-component "Observation subscriptions\none per topic" as OBS #C8E6C9
+rectangle "**Scenario test**" as T #FFF8E1
 
-T --> O : places an order,\ndecides as an administrator
-T ..> G : holds and releases\na type of message
-T ..> I : freezes, kills, starts
-T ..> P : freezes, kills, starts
-T ..> PSP : chooses the token,\nends a blackout
-O --> BUS
-I --> BUS
-P --> BUS
-BUS --> G
-G --> O
-G --> I
-G --> P
-G --> R
-P --> PSP
-R --> MAIL
-BUS --> OBS
-T <-- OBS : every message, in order
-T <-- PSP : how many charges,\ncancellations, refunds
-T <-- MAIL : which e-mails
-T <-- O : status of the order,\nwhat its saga knows
+rectangle "**Services under test**\nOrder · Inventory · Payment · Cart · Catalog · Notification\nThe simulated providers are adapters inside\nthe payment and notification services" as S #F4F7F9
 
-note bottom of G
-  The gate exists in the composition of containers only.
-  No service knows it is there: each one reads
-  a subscription whose name is configuration.
-end note
+rectangle "**Bus emulator**" as BUS #FFFFFF
+
+rectangle "**Gate**, one per consumer\nEvery message passes through it before reaching its consumer.\nIt forwards unchanged; told to, it holds, releases\nor repeats a type of message." as G #FFE0B2
+
+rectangle "**What the test observes**\nEvery message, by a subscription on each topic\nThe records of the simulated providers\nThe interfaces of the order and inventory services\nThe measures of each service" as O #C8E6C9
+
+T -down-> S : places orders, decides as an administrator;\nfreezes, kills and starts a service;\nchooses the token, ends a blackout
+S -down-> BUS : publishes
+BUS -down-> G : delivers through
+T -right-> O : reads
+T -down-> G : holds and releases
 @enduml
