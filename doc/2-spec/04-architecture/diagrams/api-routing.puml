@@ -1,0 +1,27 @@
+@startuml
+title Routes of the web gateway
+
+skinparam componentStyle rectangle
+
+actor "Browser" as B
+component "Load balancer" as LB #ECEFF1
+component "Identity provider" as KC #ECEFF1
+component "Web gateway\n\nanswers itself: /api/v1/me,\nsign-in, sign-out, storefront files" as GW #FFE0B2
+component "Catalog service" as CAT
+component "Cart service" as CART
+component "Order service" as ORD
+component "Inventory service" as INV
+
+B --> LB : HTTPS
+LB --> KC : /auth/**\nsign-in and\nregistration pages
+LB --> GW : everything else
+GW --> CAT : /api/v1/products/**\n/api/v1/categories/**\n/api/v1/admin/products/**
+GW --> CART : /api/v1/cart/**\n/api/v1/favorites/**
+GW --> ORD : /api/v1/orders/**\n/api/v1/admin/orders/**
+GW --> INV : /api/v1/admin/stock/**
+
+note bottom of ORD
+  The web gateway removes "/api"
+  and adds the access token.
+end note
+@enduml

@@ -1,0 +1,303 @@
+= API Guidelines and Catalog: How Interfaces Are Shaped, and the List of Them
+:doc-id: 04-05
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The rules every REST interface of the platform follows, the way contracts are written and checked, and the catalog of endpoints by service.
+include::../_shared/attributes.adoc[]
+
+== Principles
+
+.Strategy question
+****
+What strategy makes forty endpoints written by different people look as if one person had designed them?
+****
+
+The synchronous interfaces of the platform are REST over HTTP with JSON ({ADR-PLT-016}).
+They are few, and they follow the same rules, so that knowing one is knowing all.
+
+. *The contract comes first.* An interface exists as an OpenAPI document before it exists as code ({ADR-PLT-017}).
+. *A resource is a thing of the business*, named as the business names it: a product, a cart, an order. An address never names a technology, a table or a screen.
+. *The caller is always a person.* Every request carries the token of the visitor's session, of a customer or of an administrator, whether it comes from the web gateway or from another service ({ADR-PLT-021}).
+. *What is mine has no identifier of me.* A customer's cart is `/cart`, never `/customers/42/cart`: the owner is read from the token, so the cart of someone else cannot even be asked for ({FR-IAM-004}).
+. *A command that is not a plain change of a resource is a resource of its own*: a cancellation, a shipment, a publication.
+
+Asynchronous exchanges are not covered here: they are specified in the documents of folder 03.
+
+Owner: {role-sol} {role-arch}
+
+== Addresses and methods
+
+.Strategy question
+****
+What strategy lets a client guess an address and the meaning of a status code without reading the documentation?
+****
+
+.Addresses
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Form | Lower-case words separated by hyphens, plural for collections: `/products`, `+/orders/{orderNumber}+`. No verb, except as a noun: `+/orders/{orderNumber}/cancellation+`.
+| Version | The major version is the first segment: `/v1`. Additions never change it. A breaking change creates `/v2`, served side by side until every client has moved.
+| Identifiers | The identifier the business shows: a SKU, an order number. Technical identifiers do not appear in addresses.
+| Administration | Everything reserved to administrators is under `/v1/admin`. One prefix, one rule: denied unless the token carries the role ({FR-IAM-005}).
+| Through the web gateway | The browser calls `/api` followed by the address of the service; the web gateway removes `/api` and routes on the next segments.
+| Queries | Filters, sort and paging are query parameters. An unknown parameter is refused, so that a typing mistake does not silently return everything.
+|===
+
+.Methods and status codes
+[cols="2,6,7", options="header"]
+|===
+| Method | Used for | Answers
+| `GET` | Reading. Never changes anything. | `200` with the representation; `404` if absent or not visible to the caller
+| `POST` | Creating a resource whose address the server chooses, or recording a command | `201` with the resource and its address when created; `200` with the existing resource when the same request was already served
+| `PUT` | Setting a resource whose address the client knows, in full. Repeating it changes nothing more. | `200` with the result, or `204`
+| `DELETE` | Removing. Repeating it changes nothing more. | `204`, also when already absent
+|===
+
+.Refusals
+[cols="2,13", options="header"]
+|===
+| Code | Meaning
+| `400` | The request is malformed or a field is invalid. Every faulty field is listed, not only the first ({NFR-USAB-002}).
+| `401` | No valid token.
+| `403` | A valid token without the role required.
+| `404` | The resource does not exist — or belongs to someone else: the two are not distinguished ({FR-IAM-004}).
+| `409` | The request is valid but the state of the business refuses it: an order that can no longer be canceled, a checkout that no longer matches the cart, a customer who already has a pending order.
+| `412` | The version given by the client is outdated. The current representation is returned ({FR-CAT-009}).
+| `428` | A change that requires a version was sent without one.
+| `429` | Too many requests. The answer says when to try again.
+| `503` | A service that this request needs is unavailable. Nothing was changed; the answer says when to try again.
+|===
+
+A status code is never `200` with an error inside, and never `500` for something the caller could have avoided.
+
+== Representations
+
+.Strategy question
+****
+What strategy keeps a date, an amount and a page looking the same in every answer?
+****
+
+.Conventions of representation
+[cols="3,12", options="header"]
+|===
+| Subject | Rule
+| Format | JSON, in UTF-8. Field names in lower camel case, in English.
+| Instants | ISO 8601 in UTC, to the millisecond: `2026-11-19T10:15:30.123Z`.
+| Amounts | An object with `amount`, a decimal written as text with two decimals, and `currency`. Never a JSON number, which a client may read as a floating-point value.
+| Enumerations | The values of the business, in upper case: `PENDING`, `OUT_OF_STOCK`. A client treats a value it does not know as "other", and does not fail.
+| Absence | A field with no value is omitted, never `null`.
+| Identifiers | Text, even when they look like numbers.
+| Collections | Always paged, always the same envelope: `items` and `page`. Page number from zero, default size 20, maximum 100; a larger size is refused ({FR-CAT-007}).
+| Sorting | `sort=field,direction`. Only the sorts listed by the contract exist.
+| Personal data | A representation carries the personal data its screen needs, and no more. An administrator's list of orders shows the order number and the customer identifier, not the address.
+|===
+
+.A page of results (illustrative excerpt)
+[source,json]
+----
+{
+  "items": [
+    { "sku": "KB-001", "name": "Mechanical keyboard",
+      "price": { "amount": "89.90", "currency": "EUR" },
+      "availability": "IN_STOCK" }
+  ],
+  "page": { "number": 0, "size": 20, "totalItems": 57, "totalPages": 3 }
+}
+----
+
+Errors use the standard problem-details format, with the media type `application/problem+json`.
+Each carries a stable code from the error catalog of document 05-01, and the identifier of the trace so that support can find the request.
+
+.A refusal (illustrative excerpt)
+[source,json]
+----
+{
+  "type": "https://alten-commerce.example/problems/checkout-outdated",
+  "title": "The cart changed since it was reviewed",
+  "status": 409,
+  "code": "ERR-ORD-nnn",
+  "detail": "One price changed. Review the cart and submit again.",
+  "instance": "/v1/orders",
+  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "differences": [
+    { "sku": "KB-001", "field": "price",
+      "reviewed": "89.90", "current": "94.90" }
+  ]
+}
+----
+
+The code is a placeholder: the catalog of codes is defined in document 05-01.
+
+== Safe retries and concurrent changes
+
+.Strategy question
+****
+What strategy makes a double click, a retry after a time-out and two administrators on the same product harmless?
+****
+
+.Idempotence of requests
+[cols="4,11", options="header"]
+|===
+| Request | Rule
+| `GET`, `PUT`, `DELETE` | Idempotent by definition, and implemented so.
+| Creating an order | The storefront generates a checkout identifier when the review is shown, and sends it with the order. The same identifier always returns the same order ({FR-ORD-009}).
+| Every other `POST` that creates something | Carries an identifier chosen by the client for what it creates: an adjustment of stock, for instance. A repeated request returns the first result.
+| Commands on an order | A cancellation, a shipment, a decision asked twice returns the order in its current state; nothing is done twice.
+|===
+
+.Concurrent changes
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Version | Every representation that can be changed carries its version in the `ETag` header.
+| Changing | A `PUT` on a product must give the version it is based on, in `If-Match`. Without it: `428`. With an outdated one: `412` and the current representation, so that the administrator sees what the other changed ({FR-CAT-009}).
+| Carts | A cart has one writer, its customer. Its changes are single-line operations that do not conflict; no version is asked of the client.
+|===
+
+== Security of the interfaces
+
+.Strategy question
+****
+What strategy guarantees that no endpoint is ever left open by forgetting something?
+****
+
+.Rules
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Default | Every address is denied unless a rule opens it. An endpoint added without a rule is unreachable, not public ({NFR-SEC-002}).
+| Public reads | The published catalog, and nothing else ({FR-IAM-003}).
+| Token | Each service validates the token of each request itself ({ADR-PLT-020}). The web gateway is not trusted for that.
+| Ownership | The customer concerned is the subject of the token. It is never a parameter, a field or a header.
+| Roles | `CUSTOMER` and `ADMIN` do not include each other: an administrator cannot place an order, a customer cannot read `/v1/admin`.
+| Input | Validated against the contract at the edge of each service: types, sizes, formats, allowed values. Text is never interpreted.
+| Secrets | Never in an address or a query, which end up in logs. The payment token travels in the body of one request.
+| Limits | The number of requests is limited at the entry point, by address and by session; a body larger than the contract allows is refused before it is read.
+| Browser | One origin for the storefront and its interfaces, so no cross-origin access is opened. The web gateway requires an anti-forgery token on every request that changes something (document 05-04).
+|===
+
+== Contracts and their checks
+
+.Strategy question
+****
+What strategy catches a breaking change before the service that breaks is even built?
+****
+
+Each service with a REST interface has one OpenAPI {v-openapi} document in `contracts/openapi`.
+
+.From contract to code
+[cols="4,4,8", options="header"]
+|===
+| Step | Tool | Result
+| Style | Spectral {v-spectral} | The rules of this document, as lint rules: naming, paging envelope, problem details, mandatory examples
+| Compatibility | oasdiff {v-oasdiff} | A pull request that removes or changes something a client may use is refused ({NFR-MAINT-003})
+| Server side | OpenAPI Generator {v-openapi-generator} | The interfaces that controllers implement, and the request and response classes, in the inbound adapter ({AR-PLT-009})
+| Clients | OpenAPI Generator {v-openapi-generator} | The TypeScript client of the storefront; the HTTP service clients of the services that call another ({ADR-PLT-025})
+| Conformance | Microcks {v-microcks} | Each service is tested against its contract, and its callers against a simulation of it
+| Reading | springdoc {v-springdoc} | The contract served with a browsable page, in the environments that are not production
+|===
+
+.Evolution
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Change | Rule
+| Adding a field to an answer, an optional parameter, an endpoint | Allowed within `/v1`. Clients ignore what they do not know.
+| Adding a value to an enumeration | Allowed; this is why clients must tolerate unknown values.
+| Removing or renaming anything, changing a type, making a field mandatory | Breaking: a new major version.
+| Retiring a version | Announced in the answers themselves, with a date, for at least one release before removal.
+|===
+
+== Catalog of endpoints
+
+.Strategy question
+****
+What strategy maps every action of an actor to exactly one endpoint of one service?
+****
+
+Addresses are those of the services; the browser adds `/api` in front.
+
+plantuml::diagrams/api-routing.puml[format=svg, align=center]
+
+.Catalog service
+[%unbreakable, cols="2,9,3,5", options="header"]
+|===
+| Method | Address | Who | Use case and command
+| `GET` | `/v1/products` | Anyone | {UC-CAT-001}. Published products only; filters, sort and paging. With a list of SKUs: the current price, status and availability of those products, retired ones included, for carts and orders.
+| `GET` | `+/v1/products/{sku}+` | Anyone | {UC-CAT-002}. Published or retired; never a draft.
+| `GET` | `/v1/categories` | Anyone | {UC-CAT-001}
+| `GET` | `/v1/admin/products` | Administrator | {UC-CAT-001}. Every status, with a filter on it.
+| `GET` | `+/v1/admin/products/{sku}+` | Administrator | {UC-CAT-002}. With the price history.
+| `POST` | `/v1/admin/products` | Administrator | {UC-CAT-003} · {CMD-CAT-001}
+| `PUT` | `+/v1/admin/products/{sku}+` | Administrator | {UC-CAT-004} · {CMD-CAT-002}. Requires the version.
+| `PUT` | `+/v1/admin/products/{sku}/price+` | Administrator | {UC-CAT-005} · {CMD-CAT-003}
+| `POST` | `+/v1/admin/products/{sku}/publication+` | Administrator | {UC-CAT-006} · {CMD-CAT-004}
+| `POST` | `+/v1/admin/products/{sku}/retirement+` | Administrator | {UC-CAT-006} · {CMD-CAT-005}
+|===
+
+.Cart service
+[%unbreakable, cols="2,9,3,5", options="header"]
+|===
+| Method | Address | Who | Use case and command
+| `GET` | `/v1/cart` | Customer | {UC-CART-002}. Lines with current prices, totals, flags.
+| `POST` | `/v1/cart/lines` | Customer | {UC-CART-001} · {CMD-CART-001}
+| `PUT` | `+/v1/cart/lines/{sku}+` | Customer | {UC-CART-003} · {CMD-CART-002}. Sets the quantity; zero removes the line.
+| `DELETE` | `+/v1/cart/lines/{sku}+` | Customer | {UC-CART-003} · {CMD-CART-003}
+| `GET` | `/v1/favorites` | Customer | {UC-CART-004}
+| `PUT` | `+/v1/favorites/{sku}+` | Customer | {UC-CART-004} · {CMD-CART-004}
+| `DELETE` | `+/v1/favorites/{sku}+` | Customer | {UC-CART-004} · {CMD-CART-005}
+|===
+
+.Order service
+[%unbreakable, cols="2,9,3,5", options="header"]
+|===
+| Method | Address | Who | Use case and command
+| `POST` | `/v1/orders` | Customer | {UC-ORD-001} · {CMD-ORD-001}. Answers `201` with the order `PENDING`.
+| `GET` | `/v1/orders` | Customer | {UC-ORD-002}. The caller's orders, newest first.
+| `GET` | `+/v1/orders/{orderNumber}+` | Customer | {UC-ORD-003}. Also what the storefront polls ({ADR-PLT-022}).
+| `POST` | `+/v1/orders/{orderNumber}/cancellation+` | Customer | {UC-ORD-004} · {CMD-ORD-002}
+| `GET` | `/v1/admin/orders` | Administrator | {UC-ORD-005}. Search by number, customer, status, date.
+| `GET` | `+/v1/admin/orders/{orderNumber}+` | Administrator | {UC-ORD-003}, {UC-ORD-007}. With the steps of the saga and what is known of payment and stock.
+| `POST` | `+/v1/admin/orders/{orderNumber}/shipment+` | Administrator | {UC-ORD-006} · {CMD-ORD-003}
+| `POST` | `+/v1/admin/orders/{orderNumber}/delivery+` | Administrator | {UC-ORD-006} · {CMD-ORD-004}
+| `POST` | `+/v1/admin/orders/{orderNumber}/review/retry+` | Administrator | {UC-ORD-007} · {CMD-ORD-005}. A comment is mandatory.
+| `POST` | `+/v1/admin/orders/{orderNumber}/review/confirmation+` | Administrator | {UC-ORD-007} · {CMD-ORD-006}
+| `POST` | `+/v1/admin/orders/{orderNumber}/review/rejection+` | Administrator | {UC-ORD-007} · {CMD-ORD-007}
+|===
+
+.Inventory service
+[%unbreakable, cols="2,9,3,5", options="header"]
+|===
+| Method | Address | Who | Use case and command
+| `GET` | `/v1/admin/stock` | Administrator | {UC-INV-002}. On hand, reserved, available; filter on low and out of stock.
+| `GET` | `+/v1/admin/stock/{sku}+` | Administrator | {UC-INV-002}. With the movements.
+| `POST` | `+/v1/admin/stock/{sku}/adjustments+` | Administrator | {UC-INV-001} · {CMD-INV-001}
+|===
+
+.Web gateway
+[%unbreakable, cols="2,9,3,5", options="header"]
+|===
+| Method | Address | Who | Purpose
+| `GET` | `/api/v1/me` | Anyone | Who is signed in, and with which roles: what the storefront needs to show the right screens ({UC-IAM-002})
+| `GET` | The sign-in address | Anyone | Sends the browser to the identity provider, and back with a session ({UC-IAM-002})
+| `POST` | The sign-out address | Signed-in user | Ends the session here and at the identity provider
+| `GET` | Everything that is not `/api` | Anyone | The files of the storefront
+|===
+
+Registration ({UC-IAM-001}) is not an endpoint of ours: the storefront links to the registration page of the identity provider, which is the only place a password is ever typed ({FR-IAM-006}).
+
+The payment and notification services have no business endpoint.
+Every service also exposes health and metrics on a separate port that the web gateway does not route and that only the platform can reach (documents 05-03 and 06-03).
+
+.Calls between services
+[%unbreakable, cols="3,6,6", options="header"]
+|===
+| Caller | Calls | When
+| Cart | `GET /v1/products` of the catalog, with the SKUs of the cart | Each time a cart is shown or changed
+| Order | `GET /v1/cart` of the cart service; `GET /v1/products` of the catalog | Once, when a checkout is submitted
+| Inventory | `+GET /v1/admin/products/{sku}+` of the catalog | The first time stock is entered for a SKU
+|===
+
+These are the same endpoints the storefront uses, called with the token of the person being served.
+No endpoint exists for services only.
