@@ -18,8 +18,8 @@ GW -> O : POST /v1/orders, access token
 note over O : validates the token,\nchecks the role
 O -> K : GET /v1/cart, same token
 K --> O : the lines of this customer
-O -> CAT : GET /v1/products?sku=…
-CAT --> O : current prices, status, availability
+O -> CAT : GET /v1/product-references?sku=…
+CAT --> O : current prices, status,\navailable quantities
 note over O : nothing changed since\nthe review: the order is created
 O -> DB : one transaction: order PENDING,\nsaga, ReserveStock in the outbox
 O --> GW : 201 Created, order PENDING

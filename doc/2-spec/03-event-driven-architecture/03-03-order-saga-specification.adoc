@@ -228,7 +228,7 @@ plantuml::diagrams/sc-ord-002.puml[format=svg, align=center]
 |===
 | Trigger | One line cannot be reserved in full, typically because another customer bought the last units a moment before.
 | Ends | Saga `COMPENSATED`, order `REJECTED` with `OUT_OF_STOCK`.
-| Guarantee | The reservation is all-or-nothing in one transaction of the inventory, with the stock rows locked: two orders can never both obtain the last unit. The payment service is never called, so there is nothing to refund.
+| Guarantee | The reservation is all-or-nothing in one transaction of the inventory, each stock row being written only if nobody changed it since it was read, under the constraints of the database: two orders can never both obtain the last unit. The payment service is never called, so there is nothing to refund.
 | Transitions | P01, P03
 | Acceptance | {BDD-ORD-003} {BDD-ORD-004}
 |===

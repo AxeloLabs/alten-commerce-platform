@@ -1,6 +1,6 @@
 = Architecture Decision Records: What Was Decided, Against What, and at What Price
 :doc-id: 04-07
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The register of architecture decisions of the platform, each with its context, its alternatives and its consequences.
@@ -50,10 +50,10 @@ It is marked as replaced, and a new record says what replaced it and why: the hi
 | {ADR-PLT-015} | H2 for fast persistence tests, PostgreSQL in a container for the truth | {st-approved}
 | {ADR-PLT-016} | REST and JSON for synchronous interfaces | {st-approved}
 | {ADR-PLT-017} | Contracts are written first, by hand | {st-proposed}
-| {ADR-PLT-018} | A back end for the front end at the edge | {st-proposed}
+| {ADR-PLT-018} | A back end for the front end at the edge | {st-approved}
 | {ADR-PLT-019} | Gateway API and a Google load balancer; no service mesh | {st-proposed}
 | {ADR-PLT-020} | Identity delegated to Keycloak; every service validates the token | {st-approved}
-| {ADR-PLT-021} | The actor's token is relayed between services | {st-proposed}
+| {ADR-PLT-021} | The actor's token is relayed between services | {st-approved}
 | {ADR-PLT-022} | The outcome of an order is polled, not pushed | {st-proposed}
 | {ADR-PLT-023} | One repository, one build, one shared technical starter, no shared domain code | {st-proposed}
 | {ADR-PLT-024} | Java {v-java} and the Spring Boot {v-spring-boot} line | {st-proposed}
@@ -94,7 +94,7 @@ What strategy decides how many services there are and how each one is built insi
 | Status | {st-approved} · 2026-11-18 · asked by the brief
 | Context | The brief requires a domain that is fully unit-tested, a persistence that can be swapped, and business code free of framework concerns.
 | Decision | Every service has three rings: a domain in plain Java, an application ring of use cases and ports, and adapters at the edge. Dependencies point inwards only. The structure and the rules that enforce it are in document 04-03.
-| Alternatives | A layered architecture with the persistence model at the bottom: the domain ends up shaped by the database. A domain annotated for persistence: fewer classes, but the swap of store demanded by {NFR-MAINT-004} becomes impossible.
+| Alternatives | A layered architecture with the persistence model at the bottom: the domain ends up shaped by the database. A domain annotated for persistence: fewer classes, but the swap of store demanded by {NFR-MAINT-004} becomes impossible. Vertical slices, with the code of each feature grouped end to end: well suited to features that share little, whereas here placing, canceling and reviewing an order share one domain that must be testable alone. Features stay visible all the same: one use case per goal of an actor.
 | Consequences | The domain is tested without a framework or a database ({NFR-MAINT-001}). Adapters can be replaced one by one. The price is mapping code between the domain and each adapter, and a discipline that only automated rules keep over time ({NFR-MAINT-002}). The three smallest services pay that price for little logic; it is accepted for the sake of one way of working.
 | Owner | {role-arch}
 |===
@@ -249,8 +249,8 @@ What strategy gives each service its own data without multiplying what must be o
 [cols="3,11"]
 |===
 | Status | {st-approved} · 2026-11-18 · validated by the product owner
-| Context | The brief wants the persistence to be swappable between PostgreSQL, a document database and a file. The services of a saga need transactions over an aggregate, an inbox and an outbox, which only PostgreSQL offers among the three.
-| Decision | The order, inventory, payment and notification services use PostgreSQL only. The catalog and the cart have three adapters behind the same port — PostgreSQL, Firestore, a JSON file — proven equivalent by one shared suite of contract tests ({NFR-MAINT-004}).
+| Context | The brief wants the persistence to be swappable between PostgreSQL, a document database and a file. The services of a saga need an aggregate, an inbox and an outbox saved together, constraints on business keys, and rows that one worker claims while the others skip them. PostgreSQL gives all of it. Firestore has transactions over several documents, but neither such constraints nor such claims; a file has none of the three.
+| Decision | The order, inventory, payment and notification services use PostgreSQL only: the first three by necessity, the last by choice, since a third service with three stores would prove nothing more. The catalog and the cart have three adapters behind the same port — PostgreSQL, Firestore, a JSON file — proven equivalent by one shared suite of contract tests ({NFR-MAINT-004}).
 | Alternatives | Three adapters everywhere: the saga guarantees could not be kept on a file or without multi-document transactions of the right kind. One adapter everywhere: the requirement of the brief would be unmet.
 | Consequences | The swap is demonstrated where it is safe. Mixing two stores inside one service, and the file store in production or with more than one replica, are stated as unsupported. Queries of the catalog must stay within what the three stores can all do (document 04-04).
 | Owner | {role-arch} {role-data}
@@ -264,7 +264,7 @@ What strategy gives each service its own data without multiplying what must be o
 | Status | {st-proposed} · 2026-11-19
 | Context | Each service must create and evolve its own schema, in every environment, in a way that is versioned and repeatable.
 | Decision | Flyway {v-flyway}, with plain SQL migrations kept in each service and applied by a dedicated step of the deployment, before the new version starts.
-| Alternatives | Liquibase: its license changed to a source-available one in 2025. Schema generation by the persistence framework: convenient in a demonstration, unpredictable in production.
+| Alternatives | Liquibase: its license changed to a source-available one in 2025. Schema generation by the persistence framework: convenient in a demonstration, unpredictable in production. It is kept for one use only: giving H2 a schema in fast tests ({ADR-PLT-015}).
 | Consequences | The schema of each environment is known and reproducible. Migrations must be compatible with the version that is still running while the new one starts ({NFR-REL-004}): a column is added in one release and made mandatory in the next.
 | Owner | {role-data} {role-devops}
 |===
@@ -278,7 +278,7 @@ What strategy gives each service its own data without multiplying what must be o
 | Context | The brief imposes H2 to run tests quickly. H2 is not PostgreSQL: it lacks, or implements differently, features the platform relies on — partial unique indexes, row locks that other transactions skip, binary JSON.
 | Decision | Domain tests use no database at all. H2 {v-h2}, in PostgreSQL compatibility mode, runs the fast tests of mappings and simple queries. Everything that depends on PostgreSQL behavior — the outbox relay, locking, constraints, migrations — is tested against PostgreSQL {v-postgresql} in a container.
 | Alternatives | H2 for all persistence tests: tests that pass and a production that fails. PostgreSQL containers only: accurate, but slower than the brief wants for the inner loop.
-| Consequences | The inner loop stays fast and the guarantees are proven on the real engine. Two persistence test setups coexist; document 07-01 says which test goes where, and a rule forbids testing outbox or locking code on H2.
+| Consequences | The inner loop stays fast and the guarantees are proven on the real engine. Two persistence test setups coexist; document 07-01 says which test goes where, and a rule forbids testing outbox or locking code on H2. H2 takes its schema from the entities, so one test per service validates the entities against the migrated PostgreSQL schema: the two cannot drift apart.
 | Owner | {role-qa} {role-data}
 |===
 
@@ -320,7 +320,7 @@ What strategy exposes the platform to a browser safely, and keeps what services 
 
 [cols="3,11"]
 |===
-| Status | {st-proposed} · 2026-11-19
+| Status | {st-approved} · 2026-11-19 · validated by the product owner
 | Context | The brief opposes "load balancer" and "API gateway". They are two different things: a load balancer brings traffic into the cluster, which {ADR-PLT-019} settles; an application gateway is a service of ours standing between the browser and the services. The question that remains is where the tokens of a signed-in customer live. In a browser application they can be stolen by any script that runs in the page.
 | Decision | A small edge service, the web gateway, stands between the browser and the services. It signs the customer in with the identity provider as a confidential client, keeps the tokens on the server side, gives the browser only a session cookie that scripts cannot read, serves the storefront files, and forwards each request to the right service with the access token. It is built with Spring Cloud Gateway from Spring Cloud {v-spring-cloud}. It holds no business logic and aggregates nothing.
 | Alternatives | The browser application as a public client holding its tokens: one service less, but tokens within reach of a script, which current security guidance for browser applications advises against. A general API management product: features we do not need, for a cost and an operating burden we do not want.
@@ -349,8 +349,8 @@ What strategy exposes the platform to a browser safely, and keeps what services 
 | Status | {st-approved} · 2026-11-18 · Keycloak and tokens are asked by the brief
 | Context | Accounts, credentials and roles are a solved problem and a dangerous one to solve again ({FR-IAM-006}).
 | Decision | Keycloak {v-keycloak} is the identity provider. Sign-in follows OpenID Connect with the authorization code flow. Every service is a resource server: it validates the signature, the issuer, the audience and the expiry of the token of each request, and decides on roles itself, denying by default ({NFR-SEC-001}, {NFR-SEC-002}).
-| Alternatives | Authentication written in a service of ours: passwords in our databases. Trusting the web gateway and passing identity in plain headers: any pod that can reach a service could impersonate anyone.
-| Consequences | No service ever sees a password. The identity provider must be available to sign in, not to validate a token, since signing keys are cached. Keycloak is one more component to operate, back up and upgrade.
+| Alternatives | Authentication written in a service of ours: passwords in our databases. A managed identity service of a cloud provider or of a vendor: nothing to operate, but accounts tied to that vendor and a price per user; the brief names Keycloak, and the standard protocol keeps the door open. Trusting the web gateway and passing identity in plain headers: any pod that can reach a service could impersonate anyone.
+| Consequences | No service ever sees a password. The identity provider must be available to sign in. To validate a token a service needs the provider's signing keys, which it fetches and keeps: a running replica goes on validating through a short outage of the provider, but a replica that starts during the outage, or whose keys have expired, cannot. Keycloak is one more component to operate, back up and upgrade.
 | Owner | {role-sec}
 |===
 
@@ -359,11 +359,11 @@ What strategy exposes the platform to a browser safely, and keeps what services 
 
 [cols="3,11"]
 |===
-| Status | {st-proposed} · 2026-11-19
+| Status | {st-approved} · 2026-11-19 · validated by the product owner
 | Context | Four synchronous calls exist between services. Each happens while serving the request of a person: a customer checking out, a customer viewing a cart, an administrator entering stock.
 | Decision | A service that calls another passes on the access token of the actor it is serving. The called service applies its ordinary rules to that actor. No service has an identity of its own for calling another over REST. Messages on the bus are authorized differently, by the rights on topics and subscriptions (document 03-05).
-| Alternatives | A technical identity per service with wide read rights: internal interfaces that answer for any customer, and a second set of authorization rules to keep correct.
-| Consequences | There is no internal interface to protect: the order service reads the cart of a customer exactly as that customer would. A synchronous call cannot be made outside a request, which is consistent with the rule that everything else travels as messages. The token must still be valid when relayed; calls happen within the same second.
+| Alternatives | A technical identity per service with wide read rights: internal interfaces that answer for any customer, and a second set of authorization rules to keep correct. Token exchange, where the caller obtains for each call a new token narrowed to the called service: the most precise answer, at the price of a call to the identity provider per hop; it is the evolution path if the number of services grows.
+| Consequences | No interface answers a service in its own name: the order service reads the cart of a customer exactly as that customer would. One read that only services need, the product references of document 04-05, is kept off the routes of the web gateway and still requires the token of the person served. Every service accepts the same audience in tokens, since one token crosses several of them. A synchronous call cannot be made outside a request, which is consistent with the rule that everything else travels as messages. The token must still be valid when relayed; calls happen within the same second.
 | Owner | {role-sec} {role-arch}
 |===
 
@@ -421,7 +421,7 @@ What strategy lets six services look alike without being tied together?
 | Status | {st-proposed} · 2026-11-19
 | Context | The brief mentions OpenFeign for calls between services, and asks for circuit breakers, retries and time limits.
 | Decision | Synchronous calls use the declarative HTTP service clients of Spring Framework {v-spring-framework}, generated from the OpenAPI contract of the called service. Time limits, retries, circuit breakers and bulkheads come from Resilience4j {v-resilience4j} and from the framework's own retry support (document 05-02).
-| Alternatives | OpenFeign: declared feature-complete by its maintainers, who point to the framework's clients. A service mesh for resilience: not installed ({ADR-PLT-019}).
+| Alternatives | OpenFeign: declared feature-complete by its maintainers, who point to the framework's clients. Spring Cloud Circuit Breaker, also named by the brief: one interface over several implementations, where we use a single implementation and want its full configuration. A service mesh for resilience: not installed ({ADR-PLT-019}).
 | Consequences | One client style, generated from contracts, with no extra dependency. Resilience settings live in each calling service and must be tested there. Few outgoing calls exist — four between services, and one to each of the two providers — so the configuration stays small.
 | Owner | {role-arch} {role-sre}
 |===

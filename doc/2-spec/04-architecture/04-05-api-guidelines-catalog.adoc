@@ -1,6 +1,6 @@
 = API Guidelines and Catalog: How Interfaces Are Shaped, and the List of Them
 :doc-id: 04-05
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The rules every REST interface of the platform follows, the way contracts are written and checked, and the catalog of endpoints by service.
@@ -89,7 +89,7 @@ What strategy keeps a date, an amount and a page looking the same in every answe
 | Enumerations | The values of the business, in upper case: `PENDING`, `OUT_OF_STOCK`. A client treats a value it does not know as "other", and does not fail.
 | Absence | A field with no value is omitted, never `null`.
 | Identifiers | Text, even when they look like numbers.
-| Collections | Always paged, always the same envelope: `items` and `page`. Page number from zero, default size 20, maximum 100; a larger size is refused ({FR-CAT-007}).
+| Collections | Always paged, always the same envelope: `items` and `page`. Page number from zero, default size 20, maximum 100; a larger size asked for is brought back to the maximum, and the answer says the size it used ({FR-CAT-007}).
 | Sorting | `sort=field,direction`. Only the sorts listed by the contract exist.
 | Personal data | A representation carries the personal data its screen needs, and no more. An administrator's list of orders shows the order number and the customer identifier, not the address.
 |===
@@ -224,9 +224,10 @@ plantuml::diagrams/api-routing.puml[format=svg, align=center]
 [%unbreakable, cols="2,9,3,5", options="header"]
 |===
 | Method | Address | Who | Use case and command
-| `GET` | `/v1/products` | Anyone | {UC-CAT-001}. Published products only; filters, sort and paging. With a list of SKUs: the current price, status and availability of those products, retired ones included, for carts and orders.
-| `GET` | `+/v1/products/{sku}+` | Anyone | {UC-CAT-002}. Published or retired; never a draft.
+| `GET` | `/v1/products` | Anyone | {UC-CAT-001}. Published products only; filters, sort and paging.
+| `GET` | `+/v1/products/{sku}+` | Anyone | {UC-CAT-002}. Published only: a draft or a retired product is "not found" ({FR-CAT-003}).
 | `GET` | `/v1/categories` | Anyone | {UC-CAT-001}
+| `GET` | `/v1/product-references` | Signed-in actor; not routed from outside | For the SKUs given: name, status, current price and exact available quantity, retired products included ({FR-CAT-005}). What a cart, a list of favorites and a checkout need.
 | `GET` | `/v1/admin/products` | Administrator | {UC-CAT-001}. Every status, with a filter on it.
 | `GET` | `+/v1/admin/products/{sku}+` | Administrator | {UC-CAT-002}. With the price history.
 | `POST` | `/v1/admin/products` | Administrator | {UC-CAT-003} · {CMD-CAT-001}
@@ -240,7 +241,7 @@ plantuml::diagrams/api-routing.puml[format=svg, align=center]
 [%unbreakable, cols="2,9,3,5", options="header"]
 |===
 | Method | Address | Who | Use case and command
-| `GET` | `/v1/cart` | Customer | {UC-CART-002}. Lines with current prices, totals, flags.
+| `GET` | `/v1/cart` | Customer | {UC-CART-002}. Lines with current prices, totals, flags. When the catalog cannot be reached: the last known prices, marked as possibly outdated, and no checkout.
 | `POST` | `/v1/cart/lines` | Customer | {UC-CART-001} · {CMD-CART-001}
 | `PUT` | `+/v1/cart/lines/{sku}+` | Customer | {UC-CART-003} · {CMD-CART-002}. Sets the quantity; zero removes the line.
 | `DELETE` | `+/v1/cart/lines/{sku}+` | Customer | {UC-CART-003} · {CMD-CART-003}
@@ -294,10 +295,13 @@ Every service also exposes health and metrics on a separate port that the web ga
 [%unbreakable, cols="3,6,6", options="header"]
 |===
 | Caller | Calls | When
-| Cart | `GET /v1/products` of the catalog, with the SKUs of the cart | Each time a cart is shown or changed
-| Order | `GET /v1/cart` of the cart service; `GET /v1/products` of the catalog | Once, when a checkout is submitted
+| Cart | `GET /v1/product-references` of the catalog, with the SKUs of the cart or of the favorites | Each time a cart or the favorites are shown or changed
+| Order | `GET /v1/cart` of the cart service; `GET /v1/product-references` of the catalog | Once, when a checkout is submitted
 | Inventory | `+GET /v1/admin/products/{sku}+` of the catalog | The first time stock is entered for a SKU
 |===
 
-These are the same endpoints the storefront uses, called with the token of the person being served.
-No endpoint exists for services only.
+These calls carry the token of the person being served, and the called service applies its ordinary rules to that person.
+
+One of these endpoints, the product references, is not routed by the web gateway.
+It gives the exact available quantity, which the storefront never shows, and the name and status of retired products, which a visitor must not find; it can be reached only from inside the cluster.
+It still requires the token of a signed-in actor: no endpoint answers a service in its own name ({ADR-PLT-021}).

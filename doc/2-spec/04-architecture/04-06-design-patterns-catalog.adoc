@@ -1,6 +1,6 @@
 = Design Patterns Catalog: The Recurring Solutions, Where They Are Used and What They Cost
 :doc-id: 04-06
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The design patterns the platform relies on, each with the problem it solves here and its price, and the well-known patterns that were considered and not used.
@@ -61,7 +61,7 @@ What strategy lets a service show data it does not own, without reading another 
 | Read model fed by events | The catalog must show availability, which the inventory owns | The inventory announces each change; the catalog keeps the last quantity per product ({FR-CAT-008}) | The copy is late by a moment; it is an indication, the reservation is the guarantee
 | Event carrying its data | A listener should not have to call back the publisher | Every order event carries the order summary (document 03-02) | Larger events; personal data travels
 | Sequence number | Events about one product can arrive out of order | An availability older than the one applied is ignored ({FR-INV-007}) | A counter to maintain per product
-| Composition at read time | A cart needs current prices, which the catalog owns | The cart service reads the catalog each time a cart is shown, and stores no price as the truth ({FR-CART-005}) | A cart cannot be priced while the catalog is down
+| Composition at read time | A cart needs current prices, which the catalog owns | The cart service reads the catalog each time a cart is shown, and stores no price as the truth ({FR-CART-005}) | While the catalog is down a cart shows the prices it last knew, marked as possibly outdated, and cannot be checked out
 | Snapshot | An order must not change when the catalog does | Names and prices are copied into the order when it is placed ({FR-ORD-002}) | Duplicated data, on purpose
 |===
 
@@ -75,7 +75,9 @@ What strategy keeps several services consistent with messages that can be lost, 
 [cols="3,5,6,4", options="header"]
 |===
 | Pattern | Problem here | How it is used | Price
-| Saga, orchestrated | Three services must all succeed or be undone | The order service conducts; compensations undo completed steps (document 03-03, {ADR-PLT-006}) | Intermediate states are visible and must each be designed
+| Event-driven architecture | Services must cooperate without calling each other | Commands and events on Google Cloud Pub/Sub; a service publishes facts and does not know who listens (document 03-01, {ADR-PLT-005}) | Consistency is eventual, and a flow is harder to follow: hence the saga identifier and the traces
+| Orchestration: the saga | Three services must all succeed or be undone, and somebody waits for the outcome | The order service conducts; compensations undo completed steps (document 03-03, {ADR-PLT-006}) | Intermediate states are visible and must each be designed
+| Choreography | A listener must react without the publisher depending on it | The catalog follows the stock, the cart and the notification follow the orders, each by reacting to events (document 03-01) | Nobody owns the whole; acceptable because nobody waits for these reactions
 | Pivot step | Some steps must not be undone lightly | The payment: before it, refusals are cheap; after it, the saga goes forward | The order of steps is a business decision
 | Compensation | A committed step cannot be rolled back | Release a reservation, cancel or refund a payment, return stock | A compensation can fail too, and needs a person as last resort
 | Transactional outbox | Saving and publishing are not atomic | Messages are saved with the change and published by a relay ({ADR-PLT-007}) | Publication is slightly late and sometimes double
@@ -103,7 +105,7 @@ What strategy keeps two simultaneous changes from corrupting what they both touc
 |===
 | Pattern | Problem here | How it is used | Price
 | Optimistic lock | Two handlers load the same aggregate | A version checked at each save; the loser runs again on the fresh state (document 03-06) | Work redone under contention
-| Pessimistic lock in a fixed order | Two orders reserve the same products | Stock rows locked in SKU order (document 04-04) | Waiting under contention; never a deadlock
+| Writes in a fixed order | Two orders reserving the same products could block each other for ever | Stock rows are written in SKU order, inside one transaction (document 04-04) | The loser of a race is decided again; never a deadlock
 | Constraint as a guard | A rule must hold even if the code is wrong | Unique checkout, one pending order per customer, stock never negative, declared in the database (document 02-02) | The same rule in two places, deliberately
 |===
 
@@ -114,20 +116,23 @@ What strategy keeps two simultaneous changes from corrupting what they both touc
 What strategy stops the failure of one dependency from becoming the failure of everything?
 ****
 
-These patterns apply to the few synchronous calls of the platform.
-Their settings are in document 05-02.
+For each pattern the table gives the technology that implements it, the case it handles here and what the system then does.
+Thresholds and durations are in document 05-02.
 
-[cols="3,5,6,4", options="header"]
+[cols="3,4,5,6", options="header"]
 |===
-| Pattern | Problem here | How it is used | Price
-| Time limit | A call that never answers holds its caller | Every outgoing call has one, shorter than its caller's | A slow success is treated as a failure
-| Retry with growing, randomized delays | A failure may be momentary | On calls that are safe to repeat: reads, and provider calls that carry a reference | Retries add load to a service that is struggling; they are few and bounded
-| Circuit breaker | Calling a dependency that is down wastes time and delays its recovery | Around the catalog, the cart and the two providers ({ADR-PLT-025}) | A threshold to tune; a failing dependency is declared down for a moment
-| Bulkhead | One slow dependency must not exhaust what the others need | A bounded number of concurrent calls per dependency; a bounded pool of database connections ({ADR-PLT-003}) | Requests refused at the limit
-| Rate limit | A burst, or an abuse, must not reach the services | At the entry point, by address and session (document 04-05) | Legitimate bursts may be slowed
-| Degraded mode | A missing part should cost a function, not the store | Browsing and carts work without orders, payments or e-mails ({NFR-AVAIL-003}) | Each degraded behavior must be designed and tested
-| Asynchrony as isolation | The slowest participant sets the pace of a synchronous chain | Stock and payment are asked by messages: their outage delays an order, it does not fail the request | The customer waits for an outcome instead of getting it at once
+| Pattern | Technology | Case handled here | What the system does
+| Time limit | Time-outs of the HTTP clients; time limiter of Resilience4j {v-resilience4j} | The catalog, the cart or a provider answers too slowly | The call is abandoned. A checkout is refused cleanly, nothing being created; a charge is recorded as unknown, then settled by a cancellation ({SC-ORD-005})
+| Retry with growing, randomized delays | Retry support of Spring Framework {v-spring-framework} and of Resilience4j for calls; redelivery by Pub/Sub for messages | A momentary failure of a read or of a provider; a consumer that fails on a message | A few attempts, only for calls that are safe to repeat: reads, and provider calls that carry a reference. A message comes back with growing delays, then goes to its dead-letter topic
+| Circuit breaker | Resilience4j | A dependency keeps failing: the payment provider is down | Calls stop for a while instead of piling up; requests received meanwhile are answered "unknown" at once ({UC-PAY-001}). A trial call closes the circuit when the dependency is back
+| Bulkhead | Bulkhead of Resilience4j; the pool of database connections; the flow control of subscribers | One slow dependency, or a burst of messages, would use everything a service has ({ADR-PLT-003}) | Calls beyond the limit are refused at once; messages beyond the limit wait in their subscription
+| Rate limit | Cloud Armor, at the entry point | A burst or an abuse from outside | Requests beyond the limit are answered "too many requests" before they reach a service (document 04-05)
+| Degraded mode | The design of each service | The order, payment or notification service is down | Browsing, carts and favorites keep working ({NFR-AVAIL-003}); with the catalog down, a cart shows the prices it last knew
+| Asynchrony as isolation | Google Cloud Pub/Sub | The inventory or the payment service is slow or down | The order waits, then is decided by a deadline or by the answer when it comes ({SC-ORD-004}, {SC-ORD-016}); the customer's own request never fails for that reason
 |===
+
+The brief also names Spring Cloud Circuit Breaker.
+It is an interface over several implementations; the platform uses one implementation, Resilience4j, and configures it directly ({ADR-PLT-025}).
 
 == Edge and security
 
@@ -157,7 +162,7 @@ What strategy explains the absence of patterns a reader may expect to find here?
 |===
 | Pattern | What it offers | Why not here
 | Two-phase commit | One transaction over several databases | It stops every order when one participant is slow, and the bus and the provider cannot take part ({ADR-PLT-011}). Explained below.
-| Choreographed saga | No conductor: each service reacts to the others | Nobody would know where an order stands, and deadlines would have no owner ({ADR-PLT-006})
+| Choreography for placing an order | No conductor: each service reacts to the others | Nobody would know where an order stands, and deadlines would have no owner ({ADR-PLT-006}). Choreography is used where nobody waits: see above.
 | Event sourcing | The state is the list of everything that happened | A full history is not required; it would change how every aggregate is stored and read. The status history of an order and the stock movements give the audit needed.
 | Separate read stores | Reads served by a database built for them | Our reads are simple and fit the store of each service. One read model exists, where a service needs another's data.
 | Change data capture | Messages produced from the database log | A streaming service to operate for a few messages per order ({ADR-PLT-007})

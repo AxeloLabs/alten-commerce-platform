@@ -13,7 +13,7 @@ Deployment_Node(gcp, "Google Cloud project", "One region, three zones") {
   Deployment_Node(gke, "GKE Autopilot cluster", "Kubernetes") {
     Deployment_Node(ns, "Namespace prod", "test and integration are two more namespaces") {
       Container(gw, "Web gateway", "2 replicas or more")
-      Container(svc, "Six services", "2 replicas or more each on the order path")
+      Container(svc, "Six services", "2 replicas or more each")
       Container(kc, "Identity provider", "Keycloak, 2 replicas")
     }
   }

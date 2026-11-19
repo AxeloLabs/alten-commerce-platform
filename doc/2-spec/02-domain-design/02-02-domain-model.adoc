@@ -107,7 +107,7 @@ plantuml::diagrams/class-inventory.puml[format=svg, align=center]
 
 Reserving an order touches one `StockItem` per line and creates one `Reservation`, in one transaction.
 This is the second exception to "one aggregate per transaction": all-or-nothing across lines is the business rule itself.
-Stock rows are locked in SKU order so that two orders reserving the same products can never deadlock.
+Stock rows are written in SKU order, in the transaction that saves the reservation, so that two orders reserving the same products can never deadlock.
 
 plantuml::diagrams/er-inventory.puml[format=svg, align=center]
 

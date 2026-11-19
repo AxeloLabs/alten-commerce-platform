@@ -1,6 +1,6 @@
 = Code Architecture and ArchUnit Rules: One Structure for Every Service, Checked at Every Build
 :doc-id: 04-03
-:revnumber: 0.1
+:revnumber: 0.2
 :revdate: 2026-11-19
 :revremark: Draft
 :description: The layout of the repository, the inner structure common to every service, the coding conventions, and the catalog of architecture rules enforced automatically.
@@ -76,7 +76,8 @@ com.altencommerce.inventory
 ├── domain                   aggregates, value objects, domain services
 ├── application
 │   ├── port.in              use cases offered: one interface per use case
-│   ├── port.out             needs: unit of work, clock, other services
+│   ├── port.out             needs: stores, unit of work, message encoder, clock, other services
+│   ├── model                what ports take and return: requests, results, read models
 │   └── usecase              implementations of the inbound ports
 ├── adapter
 │   ├── in.rest              controllers and mapping of requests and responses
@@ -92,11 +93,15 @@ com.altencommerce.inventory
 [cols="3,6,5,6", options="header"]
 |===
 | Ring | Contains | May use | Must not use
-| Domain | Aggregates, value objects, domain services, the decisions they return | The Java platform; nullness annotations | Any framework, any other ring, the clock, random identifiers, logging
-| Application | Ports and use cases | The domain; the Java platform | Any framework, any adapter. Use cases are plain classes, declared as beans by the configuration.
-| Adapters | Everything that touches a technology | The ports of the application; domain types, to map them; frameworks and generated contract classes | Another adapter. An inbound adapter never reaches an outbound one except through a use case.
+| Domain | Aggregates, value objects, domain services, the decisions they return | The Java platform; nullness annotations; the marker annotations of the platform | Any framework, any other ring, the clock, random identifiers, logging
+| Application | Ports, the models they exchange, and use cases | The domain; the Java platform; the same annotations; the logging facade | Any framework, any adapter. Use cases are plain classes, declared as beans by the configuration.
+| Adapters | Everything that touches a technology | The ports of the application; domain types, to map them; frameworks and generated contract classes | Another adapter package. An inbound adapter reaches an outbound one only through a use case. An outbound adapter that needs another — the unit of work stores messages already encoded — asks for it through an outbound port.
 | Configuration | Wiring | Everything | Business logic
 |===
+
+Three annotations of the platform mark the building blocks of a domain: aggregate root, value object, domain service.
+They carry no behavior and come from a module of the starter that depends on nothing, so that a domain can use them and stay plain Java.
+The rules below rely on them to recognize what they check.
 
 .The shape of every use case
 [%unbreakable, cols="1,14", options="header"]
@@ -109,6 +114,9 @@ com.altencommerce.inventory
 | 5 | It returns a result. It never opens a transaction, never publishes, never calls a provider inside a transaction.
 |===
 
+Loading and saving are two separate moments, and nothing stays locked in between.
+What protects an aggregate is its version, checked when it is saved; a use case that loses that race is run again on the fresh state (document 03-06).
+
 A use case holds no business rule.
 If a condition appears in a use case that is not about loading or saving, it belongs to the domain.
 
@@ -120,7 +128,9 @@ What strategy stops two concepts living in one service from growing into each ot
 ****
 
 Two services hold two concepts each.
-Their top-level packages are modules, each with its own three rings, and Spring Modulith verifies at build time that a module uses another only through its published interface ({ADR-PLT-004}).
+Their top-level packages are modules, each with its own three rings and its own configuration package, and Spring Modulith verifies at build time that a module uses another only through what it publishes ({ADR-PLT-004}).
+By default everything inside a module is private to it; what another module may use is declared explicitly, package by package.
+The root package of these two services holds the application class and nothing else.
 
 .Modules
 [%unbreakable, cols="3,3,9", options="header"]
@@ -130,6 +140,18 @@ Their top-level packages are modules, each with its own three rings, and Spring 
 | Cart | `cart`, `favorites` | None in either direction.
 | The other four | One module | –
 |===
+
+.What a module publishes
+[%unbreakable, cols="3,8,4", options="header"]
+|===
+| Module | Published | Used by
+| `orders` | Its domain: the `Order` aggregate and its value objects. One port that loads an order and saves it inside the transaction of the caller. | `sagas`
+| `sagas` | Nothing | –
+| `cart`, `favorites` | Nothing | –
+|===
+
+The unit of work that saves a saga together with its order belongs to `sagas`.
+Its adapter opens the transaction and saves the order through the port that `orders` publishes; the tables and entities of each module stay inside that module ({AR-PLT-010}).
 
 Modules never talk to each other, or to another service, through Spring application events.
 Between services the only asynchronous channel is the outbox; inside a service a module calls the interface of the other.
@@ -183,7 +205,7 @@ What strategy makes code written by six people, or six agents, read as if it had
 | Money | `Money`, never a bare number, never a floating-point type.
 | Names | A use case is named after what the actor wants: `PlaceOrder`, `AdjustStock`. A port says what is needed, not how: `OrderStore`, not `OrderJpaRepository`. An adapter names its technology.
 | Logging | In adapters and use cases, structured, with the identifiers of the trace, the saga and the order. Never a token, a password, an e-mail address or a payment datum ({NFR-SEC-007}).
-| Tests | Next to the code they test, named after the behavior. A domain test uses nothing but the domain.
+| Tests | One test class per class under test, named after it with the suffix `Test`; its methods are named after the behavior they check. A domain test uses nothing but the domain.
 |===
 
 == Architecture rules
@@ -202,10 +224,10 @@ There is no list of tolerated violations: the code is new, and it starts clean.
 [cols="3,9,6", options="header"]
 |===
 | ID | Rule | Reason
-| [[AR-PLT-001]]AR-PLT-001 | Classes of `domain` depend only on `domain` and on the Java platform. | The domain is testable alone and survives any change of framework.
-| [[AR-PLT-002]]AR-PLT-002 | Classes of `application` depend only on `application`, `domain` and the Java platform. | Use cases are plain code; the technology is behind ports.
+| [[AR-PLT-001]]AR-PLT-001 | Classes of `domain` depend only on `domain`, on the Java platform, and on the nullness and marker annotations. | The domain is testable alone and survives any change of framework.
+| [[AR-PLT-002]]AR-PLT-002 | Classes of `application` depend only on `application`, `domain`, the Java platform, the same annotations and the logging facade. | Use cases are plain code; the technology is behind ports.
 | [[AR-PLT-003]]AR-PLT-003 | No class of `domain` or `application` depends on `adapter` or `config`. | Dependencies point inwards.
-| [[AR-PLT-004]]AR-PLT-004 | No class of `adapter.in` depends on `adapter.out`, nor the reverse. | Adapters meet only through a use case.
+| [[AR-PLT-004]]AR-PLT-004 | No adapter package depends on another adapter package: the three inbound and the three outbound ones are independent of each other. | Adapters meet only through a use case or a port.
 | [[AR-PLT-005]]AR-PLT-005 | Packages are free of cycles. | A cycle is two things that can no longer change apart.
 | [[AR-PLT-006]]AR-PLT-006 | No class of a service depends on a class of another service. | Services share contracts, not code.
 | [[AR-PLT-007]]AR-PLT-007 | The starter depends on no service and contains no class of a business package. | The shared library holds mechanisms only.
@@ -229,9 +251,9 @@ There is no list of tolerated violations: the code is new, and it starts clean.
 [cols="3,9,6", options="header"]
 |===
 | ID | Rule | Reason
-| [[AR-PLT-016]]AR-PLT-016 | Types of `application.port` are interfaces. | A port is a promise, not an implementation.
+| [[AR-PLT-016]]AR-PLT-016 | Types of `application.port.in` and `application.port.out` are interfaces; what they take and return lives in `application.model` or in `domain`. | A port is a promise, not an implementation.
 | [[AR-PLT-017]]AR-PLT-017 | Inbound ports are implemented in `application.usecase` only; outbound ports in `adapter.out` only. | Each side of the hexagon implements its own ports.
-| [[AR-PLT-018]]AR-PLT-018 | Inbound adapters call inbound ports only: never an outbound port, a repository or an aggregate method. | Every entry goes through a use case.
+| [[AR-PLT-018]]AR-PLT-018 | Inbound adapters call inbound ports only: never an outbound port, a repository, or a class marked as aggregate root or domain service. | Every entry goes through a use case.
 | [[AR-PLT-019]]AR-PLT-019 | In the order service, `orders` does not depend on `sagas`; in the cart service, `cart` and `favorites` do not depend on each other. | The module boundaries of this document, also verified by Spring Modulith.
 |===
 
@@ -251,7 +273,7 @@ There is no list of tolerated violations: the code is new, and it starts clean.
 |===
 | ID | Rule | Reason
 | [[AR-PLT-025]]AR-PLT-025 | Tests of `domain` classes use no Spring test support, no container and no mocking library. | A domain test needs the domain and nothing else ({NFR-MAINT-001}).
-| [[AR-PLT-026]]AR-PLT-026 | Every aggregate and every domain service has a test class. | No part of the domain is left untested by omission; coverage is measured separately.
+| [[AR-PLT-026]]AR-PLT-026 | Every class marked as aggregate root or domain service has a test class of the same name with the suffix `Test`. | No part of the domain is left untested by omission; coverage is measured separately.
 |===
 
 .Rules that other tools enforce

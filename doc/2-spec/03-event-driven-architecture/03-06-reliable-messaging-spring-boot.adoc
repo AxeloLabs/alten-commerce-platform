@@ -212,7 +212,7 @@ A scheduled task in the order service turns a passed deadline into a call to the
 |===
 | Subject | Rule
 | Frequency | Every few seconds. A deadline is honored within that margin, which is negligible against delays counted in minutes.
-| Several replicas | Each run claims the sagas it handles, so that two replicas do not handle the same one. A saga handled twice would ignore the second call anyway.
+| Several replicas | Each run takes a short lease on the sagas it picks, so that two replicas do not handle the same one at the same moment; a lease left by a replica that died expires (document 04-04). A saga handled twice would ignore the second call anyway.
 | Two deadlines due at once | The order deadline is handled before the review deadline.
 | After a restart | Deadlines are in the database: a deadline that passed while the service was down is handled when it comes back.
 | Reservations | The inventory expires reservations the same way: an instant saved with the reservation, and a scheduled task.
@@ -264,7 +264,7 @@ A use case receives a message that is already decoded, calls the domain, and han
 |===
 | Piece | Layer | Built with | Responsibility
 | Subscriber | Inbound adapter | Spring Cloud GCP {v-spring-cloud-gcp}, Pub/Sub support: streaming pull with manual acknowledgement and bounded flow control | Receives from Pub/Sub, calls the use case, acknowledges or not according to the outcome
-| Envelope and payload | Adapters | CloudEvents SDK {v-cloudevents-sdk} for the attributes; classes generated from the Protobuf schemas for the payload | Encodes and decodes messages; checks that the envelope type and the payload case agree; restores the trace context
+| Envelope and payload | Adapters | CloudEvents SDK {v-cloudevents-sdk} for the attributes; classes generated from the Protobuf schemas for the payload | Encodes and decodes messages; checks that the envelope type and the payload case agree; restores the trace context. The encoder is offered as a port, so that the persistence adapter stores messages already encoded without depending on the messaging adapter
 | Use case | Application | Plain Java | Loads the aggregate, calls its method with the message, passes the decision to the unit of work
 | Unit of work | Port | A plain Java interface | "Record this incoming message, save this aggregate at this version, add these outgoing messages" — all or nothing
 | Unit of work for PostgreSQL | Outbound adapter | Spring transaction management over Spring Data JPA and Hibernate {v-hibernate}; a version column for the check | One database transaction over the inbox, the aggregate tables and the outbox

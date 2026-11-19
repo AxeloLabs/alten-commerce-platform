@@ -17,6 +17,7 @@ entity reservation {
   * saga_id : uuid
   * status : text
   * expires_at : timestamptz
+  claimed_until : timestamptz
   * version : bigint
 }
 entity reservation_line {

@@ -49,6 +49,7 @@ entity order_saga {
   payment_token : text
   order_deadline_at : timestamptz
   review_deadline_at : timestamptz
+  claimed_until : timestamptz
   last_failure : text
   * version : bigint
 }
