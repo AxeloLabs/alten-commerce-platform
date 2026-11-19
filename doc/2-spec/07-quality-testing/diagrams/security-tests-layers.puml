@@ -1,0 +1,27 @@
+@startuml
+title Security tests, layer by layer
+
+skinparam componentStyle rectangle
+left to right direction
+
+rectangle "Code and dependencies\nin the pipeline" as L1 #FFF8E1 {
+  component "Secrets scan\ncode analysis\ndependency and image scan\ninfrastructure scan" as T1
+}
+rectangle "One service\nin containers" as L2 #E3F2FD {
+  component "Authorization suite\ntoken tests\nerror answers leak nothing" as T2
+}
+rectangle "The web gateway\nin containers" as L3 #E3F2FD {
+  component "Session and cookie tests\nanti-forgery\nresponse headers" as T3
+}
+rectangle "The deployed platform\nin test" as L4 #C8E6C9 {
+  component "Dynamic scan\nisolation of pods and identities\nabuse and input tests" as T4
+}
+rectangle "After the end-to-end tests\nin integration" as L5 #C8E6C9 {
+  component "Leak test on logs\nand on e-mails" as T5
+}
+
+L1 --> L2
+L2 --> L3
+L3 --> L4
+L4 --> L5
+@enduml

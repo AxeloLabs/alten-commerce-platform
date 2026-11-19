@@ -1,0 +1,269 @@
+= Security and Performance Test Plans: Proving the Platform Resists and Holds the Load
+:doc-id: 07-04
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: The security tests, from the authorization suite to the dynamic scan and the leak test, and the performance tests, from the load model to the pass criteria, with where and when each one runs.
+include::../_shared/attributes.adoc[]
+
+== Security: what must be proven
+
+.Strategy question
+****
+What strategy tests security as a property of every release, instead of an audit once a year?
+****
+
+Document 05-04 states what is protected and how.
+Each control it describes has a test here that fails if the control disappears: a rule forgotten, a header removed, a policy loosened.
+
+plantuml::diagrams/security-tests-layers.puml[format=svg, align=center]
+
+.Controls and their tests
+[cols="5,6,4", options="header"]
+|===
+| Control of document 05-04 | Test | Runs
+| Deny by default; roles; ownership | The authorization suite | Every build; `test`
+| Token validation by every service | Token tests | Every build
+| Session, cookie, anti-forgery, headers | Session tests of the web gateway | Every build
+| No secret in the code; no known vulnerability | The gates of the pipeline (document 06-05) | Every pull request
+| Common web attacks are mitigated | The dynamic scan; abuse and input tests | `test`, after each deployment
+| A pod reaches only what is its own | Isolation tests | `test`
+| Nothing sensitive in logs, e-mails or error answers | Leak tests | `integration`; every build for error answers
+| Administration actions are audited | Audit tests | Every build
+|===
+
+Owner: {role-sec} {role-qa}
+
+== Authorization and tokens
+
+.Strategy question
+****
+What strategy guarantees that no cell of the authorization matrix is ever left untested?
+****
+
+.The authorization suite ({TC-PLT-003})
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Source | The authorization matrix of document 01-05, kept as a data file next to the contracts: one line per use case, actor and endpoint, with the expected result. The suite is generated from that file; a cell cannot exist without its test.
+| Allowed cells | The call succeeds, or fails for a business reason: never for lack of right
+| Denied cells | The call is refused — forbidden, or "not found" where existence must not be revealed — and nothing was changed
+| Ownership | Two customers exist in every run. Each cell that concerns "one's own" is tried by the other one: the answer is "not found" ({FR-IAM-004})
+| Endpoints not in the file | An endpoint of a contract that the file does not list fails the suite: nothing is exposed without a decision
+| Deployed check | A subset is run again in `test` through the web gateway, to prove that routing opens nothing the services close
+|===
+
+.Token tests, on every service
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Token | Expected
+| None | Refused, {ERR-PLT-002}
+| Expired; not yet valid | Refused
+| Signed by another key; altered after signature | Refused
+| From another issuer; from the realm of another environment | Refused
+| For another audience | Refused
+| Valid, without the role required | Refused, {ERR-PLT-003}; the refusal is recorded
+| Valid, relayed by another service | Accepted with the rights of the person, and no more: the order service reading a cart obtains the cart of its customer only ({ADR-PLT-021})
+|===
+
+.Session tests of the web gateway ({TC-PLT-005})
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Subject | Checked
+| Cookie | Unreadable by scripts; sent over HTTPS only; bound to the host; not sent by requests from other sites
+| Tokens | Never present in any answer to the browser, in any header, in the page, in the storage of the browser
+| Anti-forgery | A request that changes something without the token, or with another session's token, is refused with {ERR-PLT-010}
+| Session identifier | Changes at sign-in; an identifier obtained before sign-in gives nothing after
+| Expiry and sign-out | An expired or ended session is refused; ended at the identity provider, it is ended at the gateway
+| Renewal | Twenty parallel requests at the moment of renewal: one renewal, no session lost
+| Headers | Transport security, content policy, no framing, no content sniffing, on every answer
+|===
+
+== Scans, abuse and isolation
+
+.Strategy question
+****
+What strategy looks at the running platform the way an attacker would?
+****
+
+.Dynamic scan with ZAP {v-zap}
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Where | The `test` environment only. Never production: an active scan sends hostile requests on purpose.
+| Passive pass | After every deployment: the storefront is crawled and every answer inspected, without attacking
+| Active pass | On the interfaces, driven by the OpenAPI documents, signed in once as a customer and once as an administrator
+| Threshold | No finding of high severity ({NFR-SEC-008}). A medium finding is fixed, or recorded with a reason and an expiry date like any other exception (document 06-05).
+| Known limits | A scanner does not understand business rules: it will not find that a customer can read another's order. The authorization suite does.
+|===
+
+.Abuse and input tests
+[cols="5,10", options="header"]
+|===
+| Attempt | Expected
+| A body larger than the contract allows; an unknown field; a wrong type | Refused before any use case runs, {ERR-PLT-001}
+| Text that looks like a query, a script or a path, in every text field and every search | Stored and shown as text; never executed; never part of a query
+| A field the caller must not set: a price in a cart line, a status in an order, a role | Ignored or refused; never applied
+| A checkout replayed with the same identifier; with another customer's identifier | The same order; "not found"
+| More requests than the limit allows | In the full profile: refused at the entry with "too many requests". Not tested in the proof of concept, which has no managed firewall.
+| A product description containing markup | Displayed as text by the storefront; the content policy blocks any script anyway
+|===
+
+.Isolation tests, in `test` ({TI-PLT-006})
+[%unbreakable, cols="5,10", options="header"]
+|===
+| From a pod of one service, try to | Expected
+| Call a pod of another namespace | No route
+| Call a service it is not allowed to call | No route
+| Open a connection to an address on the internet | No route
+| Connect to the database of another service | Refused: no account
+| Publish to a topic of another service; read another's subscription | Refused: no right
+| Read a secret of another service | Refused: no right
+|===
+
+.Leak tests
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Method
+| Marked values | End-to-end tests use values made to be recognized: an e-mail address, a street, a payment token and a password that contain a marker
+| Logs | After the end-to-end tests of `integration`, the logs of every service for the period are searched for the marker and for the shape of a token: no occurrence is accepted ({NFR-SEC-007})
+| E-mails | The e-mails recorded by the simulated provider contain no payment data, and say the truth about what was charged
+| Error answers | A provoked unexpected error returns the generic code and a reference, and nothing else ({TC-PLT-004})
+| Traces | The attributes of the spans of the same period are searched the same way
+|===
+
+.Audit tests
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Action | Checked ({NFR-SEC-006})
+| A change of price, a stock adjustment, a decision on an order | Who, when and what are recorded, and cannot be changed afterwards through any interface
+| A refused administration request | Recorded with the account and the address
+|===
+
+.What these tests do not replace
+****
+An independent penetration test, by people who did not build the platform, is to be done before the store takes real payments.
+Automated tests prove that the controls we thought of are in place; they do not find the one we did not think of.
+****
+
+== Performance: targets and load
+
+.Strategy question
+****
+What strategy turns "it should be fast" into numbers measured the same way at every release?
+****
+
+.Targets
+[cols="3,6,4,4", options="header"]
+|===
+| Requirement | Measured | Target | Under
+| {NFR-PERF-001} | Catalog and order reads | 95 % below 300 ms | Nominal load
+| {NFR-PERF-004} | Cart and favorites operations | 95 % below 200 ms | Nominal load
+| {NFR-PERF-002} | Acknowledgement of a checkout | 95 % below 500 ms | Peak of orders
+| {NFR-PERF-003} | From placement to outcome | 95 % below 5 s; 99 % below 15 s | Peak of orders
+| {NFR-PERF-005} | From a stock change to the catalog | 95 % below 5 s | Peak of orders
+| {NFR-REL-005} | From saving a message to its publication | 99 % below 5 s | Peak of orders
+| {NFR-SCAL-001} | All of the above | Still held | Twice the nominal load, with autoscaling
+|===
+
+.The nominal load
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Element | Value
+| Customers browsing at the same time | 100
+| Catalog requests | 50 per second: four fifths lists and searches, one fifth product pages
+| Cart operations | 5 per second
+| Orders | 2 per second at peak; nine in ten succeed, one in ten is declined or out of stock
+| Administration | A stock adjustment or a price change every few seconds, to keep availability moving
+| Behavior of a simulated customer | Browses, pauses for a few seconds between pages, adds to the cart, sometimes checks out, polls its order until it is settled
+|===
+
+.Data in place before a run
+[%unbreakable, cols="5,10", options="header"]
+|===
+| Data | Volume
+| Products | 5,000, in 20 categories
+| Customers | 10,000, each with a cart; one in ten with favorites
+| Past orders | 200,000, so that history and search are measured on tables that are not empty
+| Stock | Enough for the run, except a few products kept scarce on purpose
+| Provider | The simulated provider answers a charge in 300 ms, to stand for a real one
+|===
+
+== Performance: the runs
+
+.Strategy question
+****
+What strategy finds the limit of the platform before customers do?
+****
+
+Runs are written with Gatling {v-gatling}, kept in the repository, and driven from outside the cluster through the public entry point, so that the load balancer and the web gateway are measured with the rest.
+
+.Runs
+[cols="3,5,3,6", options="header"]
+|===
+| Run | Load | Duration | Passes when
+| Smoke | A tenth of the nominal load | 2 minutes | No error. Run after every deployment that touches a service.
+| Nominal | The nominal load | 30 minutes | Every target of the table above is met; no error beyond business refusals
+| Twice nominal | Ramp from nominal to twice nominal | 30 minutes | Targets still met; replicas were added, and removed afterwards ({NFR-SCAL-001})
+| Stress | Ramp until a target is missed | Until it breaks | Not a pass or fail: it tells what gives way first and at what load. The platform must refuse the excess cleanly, and recover by itself when the load drops.
+| Spike | Five times nominal, at once | 1 minute, then nominal | Excess requests are refused, not queued; no order is lost; targets are met again within a minute of the end
+| Soak | The nominal load | 4 hours | Nothing drifts: memory, connections in use, outbox backlog, response times at the end as at the start
+| Deployment under load | The nominal load, while every service is rolled out | The time of the rollouts | Not one order fails because of a rollout ({NFR-REL-004})
+|===
+
+.What is measured, and where
+[cols="4,11", options="header"]
+|===
+| Side | Measures
+| The injector | Response times as percentiles, per kind of request; errors by code; requests sent and answered per second. Measured from the instant a request was due, so that a slow platform is not flattered by an injector that waited for it.
+| The services | The histograms of each endpoint; the duration of sagas; the delay of publication; connections in use and waiting; the state of circuits
+| The bus and the database | The age of the oldest message of each subscription; the load and the slow statements of the instance
+| The cluster | Replicas over time; processor and memory against the requests
+|===
+
+A run passes or fails by a computation on these numbers, published with the run.
+Nobody reads a chart to decide.
+
+.What a run changes afterwards
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Finding | Goes to
+| Processor or memory far from the requests | The sizing of document 06-03
+| Connections waiting | The pools and the connection budget of document 06-03
+| A time limit reached, or far too generous | The budgets of document 05-02
+| A slow statement | An index of document 04-04, or the query
+| The load at which the platform gives way | The maximum of replicas, and the rate limits at the entry
+|===
+
+== Where and when
+
+.Strategy question
+****
+What strategy runs heavy tests without making production pay for them?
+****
+
+[cols="4,5,6", options="header"]
+|===
+| Test | Where | When
+| Security gates of the pipeline; authorization, token and session tests | The build | Every pull request
+| Dynamic scan, isolation, abuse tests | `test` | After every deployment
+| Leak tests | `integration` | After the end-to-end tests
+| Smoke load | Every environment | After a deployment that touches a service
+| Nominal, twice nominal, spike, deployment under load | `integration` | In an announced window, before a release that touches performance or the platform
+| Stress, soak | `integration` | In an announced window, before the opening and after a change of sizing
+|===
+
+The three environments share one database instance: a load on `integration` is a load on that instance, hence on production.
+Load runs are therefore announced, bounded in time, held outside the busy hours of the store, and watched on the objectives of production while they last (document 06-05).
+
+.In the proof of concept ({ADR-PLT-030})
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | What runs
+| Security | Everything of the build. On the deployed environment: the passive scan, the isolation tests, the leak test. The active scan runs once, before the demonstration.
+| Performance | The smoke load, and one nominal run of 5 minutes to check the targets on one replica. Its cost is a few cents.
+| Not run | Twice nominal, stress, soak and deployment under load: they need autoscaling and a second replica, and hours of resources. They are specified here for the full profile.
+| What the numbers mean | With one replica and small requests, a target may be missed at nominal load. That is a measure of the profile, not a defect of the design: the figures are published with the profile they were taken on.
+|===
+
+Owner: {role-qa} {role-sre}
