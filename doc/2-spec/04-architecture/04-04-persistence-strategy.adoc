@@ -1,0 +1,307 @@
+= Persistence Strategy: One Port, Three Stores, and Where the Swap Stops
+:doc-id: 04-04
+:revnumber: 0.1
+:revdate: 2026-11-19
+:revremark: Draft
+:description: What persistence must guarantee, the ports that hide it, the PostgreSQL, Firestore and file adapters, schema migrations, the place of H2 in tests, and the life of data.
+include::../_shared/attributes.adoc[]
+
+== What persistence must guarantee
+
+.Strategy question
+****
+What strategy states what the business needs from storage before any database is named?
+****
+
+The domain does not know where it is stored.
+What it needs from storage is a short list of guarantees, and a store qualifies for a service only if it can give all of those the service relies on.
+
+.Guarantees asked of a store
+[cols="5,6,4", options="header"]
+|===
+| Guarantee | Why | Needed by
+| An aggregate is saved whole or not at all | An order without its lines, a reservation without its stock change, must not exist | Every service
+| A save fails if the aggregate changed since it was read | Two requests about one thing never overwrite each other ({FR-CAT-009}, document 03-06) | Every service
+| A business key is unique | One order per checkout, one pending order per customer, one payment and one reservation per order, one SKU per product | Every service, each for its keys
+| An aggregate, the record of the message handled and the messages to send are saved together | The outbox and the inbox ({NFR-REL-001}, {NFR-REL-002}) | Order, inventory, payment
+| Several aggregates are changed together | Reserving every line of an order or none ({FR-INV-003}); a saga with its order | Inventory, order
+| Rows can be claimed by one worker and skipped by the others | The relay, the deadline task, the expiry task on several replicas | Order, inventory, payment
+| Lists are filtered, sorted and paged | Catalog browsing, order history, stock review | Catalog, order, inventory
+|===
+
+The last four rows are what separates the stores.
+A relational database gives all seven.
+A document database gives the first three, and the others only within limits; a file gives the first three on a single replica.
+This is the reason, and the only reason, why the swap of store is offered on two services and not on six ({ADR-PLT-013}).
+
+Owner: {role-arch} {role-data}
+
+== The ports
+
+.Strategy question
+****
+What strategy hides the store without hiding what the application needs from it?
+****
+
+A port of persistence is named after a need of the application, never after a technology.
+There are three kinds.
+
+.Kinds of persistence port
+[%unbreakable, cols="3,7,6", options="header"]
+|===
+| Kind | Contract | Examples
+| Store of an aggregate | Load by identifier or business key; nothing else. Returns the aggregate with its version. | `OrderStore`, `ReservationStore`, `ProductStore`, `CartStore`
+| Unit of work | "Save these aggregates at these versions, record this incoming message, add these outgoing messages" — all or nothing. The one port whose contract includes atomicity. | One per service of a saga
+| Queries | Read-only lists and views, returned as read models, never as aggregates. Filters, sort and paging are parameters of the port. | `CatalogQueries`, `OrderHistory`, `StockLevels`
+|===
+
+Reads and writes go through different ports on purpose.
+A list of two hundred products does not need two hundred aggregates with their invariants; and a store is free to answer a query its own way — a join, an index, a scan — without the domain noticing.
+
+The catalog and the cart publish nothing, so they need no unit of work: saving one aggregate is one atomic write in each of the three stores.
+The record of the messages they consume lives inside what they save (document 03-06).
+
+== Which store for which service
+
+.Strategy question
+****
+What strategy decides where the freedom to swap is worth its price?
+****
+
+.Stores by service
+[%unbreakable, cols="4,3,3,3", options="header"]
+|===
+| Service | PostgreSQL | Firestore | File
+| Catalog | Yes: the default | Yes | Yes
+| Cart | Yes: the default | Yes | Yes
+| Order | Yes: the only one | – | –
+| Inventory | Yes: the only one | – | –
+| Payment | Yes: the only one | – | –
+| Notification | Yes: the only one | – | –
+| Web gateway, identity provider | Yes: sessions, accounts | – | –
+|===
+
+plantuml::diagrams/persistence-ports.puml[format=svg, align=center, pdfwidth=75%]
+
+.Rules of the swap
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Selection | One configuration property names the store of a service. Exactly one adapter is active; the others are not even instantiated.
+| No mixing | A service uses one store for everything it persists. Two stores in one service would need a transaction across them, which nothing provides.
+| Proof | One suite of contract tests states the behavior of each port once and runs against the three adapters ({NFR-MAINT-004}). An adapter that passes it can replace another; nothing else is promised.
+| File store | For a workstation, a demonstration and tests. One replica only. The service refuses to start with it in the production environment.
+| Migration between stores | Not provided. Changing the store of a running environment is a data migration to plan, not a setting to flip.
+|===
+
+.What the contract tests assert, for each adapter
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Port | Assertions
+| Stores | What is saved is read back equal. A save on an outdated version fails and changes nothing. A second aggregate with the same key is refused. An unknown key gives "absent", not an error.
+| `CatalogQueries` | Each filter alone and combined: keyword, category, price range, availability, status. Each sort, with a stable order between equal values. Paging: sizes, last page, page beyond the end ({FR-CAT-007}, {FR-CAT-010}, {FR-CAT-011}).
+| `AvailabilityStore` | A quantity with an older sequence number never replaces a newer one ({FR-CAT-008}).
+| `CartStore` | Removing the quantities of an order already applied changes nothing ({FR-CART-007}). Limits of the cart hold after a reload.
+| Concurrency | Two writers on one aggregate: exactly one succeeds.
+|===
+
+== PostgreSQL adapter
+
+.Strategy question
+****
+What strategy uses a relational database fully without letting it shape the domain?
+****
+
+PostgreSQL {v-postgresql} is the store of every service by default, and the only one for four of them ({ADR-PLT-012}).
+Its tables are drawn in document 02-02.
+
+.Choices of the PostgreSQL adapter
+[cols="4,11", options="header"]
+|===
+| Subject | Choice
+| Access | Spring Data JPA on Hibernate {v-hibernate}. Entities are classes of the adapter, mapped to and from the domain by a mapper; the domain is never annotated ({AR-PLT-010}).
+| Transactions | Declared in the adapter only ({AR-PLT-012}), one per unit of work. Read-only queries run outside a write transaction.
+| Versions | A version column on every aggregate table, checked at each update. A conflict is reported to the application as "changed since read", not as a database error.
+| Unique keys | Declared as constraints, including the partial one that allows a single pending order per customer ({FR-ORD-017}). A violation is reported as "already exists".
+| Stock rows | Locked for update in SKU order before a reservation changes them, so that two orders on the same products cannot deadlock.
+| Claiming rows | The relay and the scheduled tasks select rows with a lock that other transactions skip, in plain SQL: this is PostgreSQL behavior, not something the persistence framework abstracts.
+| Lazy loading | An aggregate is loaded whole, in one query or a fixed number of them. No query is triggered outside the adapter: the session does not stay open during the rendering of a response.
+| Free-form data | The shipping address and message attributes are stored as binary JSON columns; they are never searched.
+| Keyword search | The full-text search of PostgreSQL in its simplest configuration, on the product name, matching the start of a word and ignoring case and accents.
+|===
+
+.Connections
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Choice
+| Path | Private address of the Cloud SQL instance, through the Cloud SQL connector for Java. No database port is open to the outside.
+| Identity | Each service signs in to its own database with its own Google identity. No database password exists for a service ({NFR-SEC-004}).
+| Rights | The identity that runs a service can read and write rows, not change the schema. Migrations run under a separate identity.
+| Pool | One pool per replica, small and fixed. With virtual threads the pool is what bounds the concurrency of a service on its database ({ADR-PLT-003}).
+| Budget | The pools of all replicas of all services that share an instance, plus those of the identity provider and of the migrations, must stay under 80 % of the connections the instance accepts. The figures are set with the sizing, in document 06-03.
+|===
+
+.Indexes the design relies on
+[cols="4,6,5", options="header"]
+|===
+| Table | Index | Serves
+| `outbox` | Unpublished rows by destination, ordering key and creation time | The relay and its eligibility rule (document 03-06)
+| `inbox` | Reception time | The cleaning task
+| `order_saga` | Sagas with an order deadline; sagas with a review deadline | The deadline task
+| `orders` | Customer and placement time; status and placement time | Order history; search by administrators; orders under review
+| `orders` | Unique, on the customer, for pending orders only | {FR-ORD-017}
+| `reservation` | Expiry time, for held reservations only | The expiry task
+| `product` | Status and category; price; the search vector of the name | Catalog browsing
+| `stock_movement` | SKU and time | Stock history
+|===
+
+== Firestore adapter
+
+.Strategy question
+****
+What strategy fits aggregates into a document database, and says honestly what does not fit?
+****
+
+Firestore is used in its native mode, through the client library of Google Cloud and its blocking interface ({ADR-PLT-003}).
+The Spring Data module for Firestore is reactive only and is not used.
+
+.Document model
+[cols="4,5,7", options="header"]
+|===
+| Collection | Document | Content
+| `products` | One per SKU | The product, its version, the price history as an array, and the availability: quantity and sequence number
+| `carts` | One per customer | The lines, the version, the orders already applied
+| `favorites` | One per customer | The SKUs marked, with their dates
+|===
+
+One aggregate is one document, so that saving it is one atomic write.
+The availability is kept inside the product document, which lets a list be filtered on it; it is updated field by field, without touching the version that protects the edits of an administrator.
+
+.Choices of the Firestore adapter
+[cols="4,11", options="header"]
+|===
+| Subject | Choice
+| Concurrency | A write is conditional on the version read; a Firestore transaction reads, checks and writes. The availability update is conditional on its sequence number.
+| Unique keys | The key is the document identifier: a SKU, a customer. Creating an existing document fails.
+| Keyword search | Firestore has no full-text search. Each product stores the prefixes of the words of its name, normalized; a keyword matches when it is one of them. The cost is a larger document, bounded by the maximum length of a name.
+| Queries | Every supported combination of filter and sort has a composite index, declared with the infrastructure. A combination that is not in the contract tests is not supported.
+| Counting | The total of a filtered list is obtained by a count query; it is read after the page and may differ by one when the catalog changes in between. The contract tests allow for it.
+|===
+
+== File adapter
+
+.Strategy question
+****
+What strategy makes the simplest possible store honest about its limits?
+****
+
+The file adapter keeps one JSON file per aggregate, in one directory per kind: a product, a cart, a list of favorites.
+
+.Choices of the file adapter
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Subject | Choice
+| Atomic write | The new content is written to a temporary file, flushed, and renamed over the old one. A crash leaves the old version or the new one, never a mixture.
+| Concurrency | One lock per file inside the process, and the version stored in the file. Nothing protects two processes: hence one replica.
+| Queries | Files are read into memory at startup and kept in step with writes. Filters and sorts are applied in memory.
+| Format | The same field names as the REST interface, readable and editable by hand. That is its value on a workstation.
+| Limits | No second replica, no production, no large catalog. Stated at startup in the log, and enforced for production.
+|===
+
+.The three stores side by side
+[cols="4,4,4,4", options="header"]
+|===
+| Aspect | PostgreSQL | Firestore | File
+| Atomic save of one aggregate | Transaction | Single document write | Rename of a file
+| Several aggregates together | Yes | Within transaction limits; not used | No
+| Outbox and inbox with the aggregate | Yes | Not offered | No
+| Unique keys | Constraints | Document identifiers | File names
+| Keyword search | Full-text search | Stored prefixes | Scan in memory
+| Replicas of the service | Any number | Any number | One
+| Backup | Managed, with recovery to a point in time | Managed exports | Copy of a directory
+|===
+
+== Schema migrations
+
+.Strategy question
+****
+What strategy changes a schema while the previous version of the service is still running?
+****
+
+Each service owns its schema and its migrations ({ADR-PLT-014}).
+
+.Rules for migrations
+[cols="4,11", options="header"]
+|===
+| Subject | Rule
+| Tool and form | Flyway {v-flyway}, plain SQL files in the module of the service, numbered and never edited once merged.
+| When | A dedicated step of the deployment applies them before the new version starts, under an identity that may change the schema. A service never migrates at startup: several replicas would race.
+| Compatibility | A migration must suit both the version that is running and the one that arrives ({NFR-REL-004}). A change that breaks the old version is split: add in one release, use in the next, remove in a third.
+| Forbidden in one step | Renaming or dropping a column in use; adding a mandatory column without a default; rewriting a large table under a lock.
+| Data | Reference data that the code relies on — the list of categories — is a migration. Test and demonstration data is not: it is loaded by a separate, repeatable script.
+| Firestore and files | No schema to migrate. A document carries the version of its format, and the adapter upgrades an old format when it reads it.
+| Verification | The pipeline applies every migration to an empty PostgreSQL and to a copy of the previous schema, then runs the persistence tests.
+|===
+
+== H2 and the tests of persistence
+
+.Strategy question
+****
+What strategy keeps tests fast, as the brief requires, without trusting a database that is not the one in production?
+****
+
+H2 {v-h2} is imposed for speed, and it is not PostgreSQL ({ADR-PLT-015}).
+Each kind of test therefore has one database, chosen by what the test proves.
+
+.Which database for which test
+[cols="5,4,7", options="header"]
+|===
+| Test | Database | Reason
+| Domain rules, state machines, sagas | None | The domain does not know storage; these are the fastest and the most numerous tests
+| Mapping between entities and domain; simple queries of a store | H2 in PostgreSQL mode, in memory | Milliseconds to start; no PostgreSQL-specific behavior involved
+| Unique constraints, partial index, version conflicts | PostgreSQL in a container | Constraint behavior differs between engines
+| Outbox relay, claiming rows, stock locking, deadline task | PostgreSQL in a container | Depends on PostgreSQL locking; H2 would pass and production would fail
+| Migrations | PostgreSQL in a container | They are PostgreSQL SQL
+| Keyword search | PostgreSQL in a container | Uses PostgreSQL full-text search
+| Contract tests of the three adapters | PostgreSQL in a container, Firestore emulator, temporary directory | The point is to compare real stores
+|===
+
+One container of PostgreSQL is started once per build of a module and shared by its tests, each in its own schema.
+The detail of test categories and their execution is in document 07-01.
+
+== The life of data
+
+.Strategy question
+****
+What strategy says how long each piece of data lives, and who may see it?
+****
+
+.Retention
+[cols="4,4,8", options="header"]
+|===
+| Data | Kept | Note
+| Orders, their lines and history | Not deleted in this release | A legal retention period is a decision of the business, to take before a real opening
+| Payments and provider attempts | As long as their order | No card data, by construction ({FR-PAY-003})
+| Stock movements | Not deleted | The audit trail of the stock ({FR-INV-008})
+| Outbox rows | 7 days after publication | Payload erased at publication when it carries a secret (document 03-06)
+| Inbox rows | 30 days | Longer than any replay window
+| Sessions of the web gateway | Until sign-out or expiry | Detail in document 05-04
+| Carts and favorites | Until the customer changes them | –
+|===
+
+.Personal data
+[%unbreakable, cols="4,11", options="header"]
+|===
+| Where | What
+| Identity provider | The account: e-mail address, name, credentials. The only place credentials exist ({FR-IAM-006}).
+| Order database | The customer identifier, the e-mail address and the shipping address, as they were when the order was placed.
+| Notification database | The recipient of each e-mail sent.
+| Everywhere else | The customer identifier only, which is not an e-mail address.
+|===
+
+Personal data is encrypted at rest with the rest of each database, never written to a log ({NFR-SEC-007}), and never copied from production to another environment.
+Erasing or anonymizing the data of a customer who asks for it is not part of this release; the table above is the list of places such a procedure would have to cover.
+
+Backups, recovery to a point in time and the recovery objectives of {NFR-AVAIL-004} are specified with the platform, in document 06-02.
+
+Owner: {role-data} {role-sec}

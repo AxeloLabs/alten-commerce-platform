@@ -1,0 +1,21 @@
+@startuml
+title Catalog and cart: one set of ports, three stores, one suite of contract tests
+
+skinparam componentStyle rectangle
+
+rectangle "Application ports\n\nProductStore\nAvailabilityStore\nCatalogQueries\nCartStore\nFavoritesStore" as PORTS #FFF8E1
+
+component "PostgreSQL adapter\ntables, SQL transactions" as PG #E3F2FD
+component "Firestore adapter\ndocuments, Firestore transactions" as FSA #E3F2FD
+component "File adapter\none JSON file per aggregate" as FILE #E3F2FD
+
+component "Contract tests\nthe same assertions,\nrun against each adapter" as CT #C8E6C9
+
+PG -up-|> PORTS : implements
+FSA -up-|> PORTS : implements
+FILE -up-|> PORTS : implements
+
+CT .up.> PG : PostgreSQL\nin a container
+CT .up.> FSA : Firestore\nemulator
+CT .up.> FILE : temporary\ndirectory
+@enduml
