@@ -28,7 +28,7 @@ Owner: {role-platform} {role-swe}
 
 .Strategy question
 ****
-What strategy installs seven tools at pinned versions with one command and no administrator rights?
+What strategy installs eight tools at pinned versions with one command and no administrator rights?
 ****
 
 The toolchain is installed by https://mise.jdx.dev[mise], a version manager that reads `mise.toml` at the root of the repository.
@@ -44,6 +44,7 @@ The toolchain is installed by https://mise.jdx.dev[mise], a version manager that
 | Helm | {v-helm} | Rendering and installing the deployment charts.
 | Terraform | {v-terraform} | Planning and applying the infrastructure.
 | buf | {v-buf} | Linting the Protobuf schemas and detecting breaking changes.
+| gitleaks | {v-gitleaks} | Scanning what is staged for secrets, in the commit hook of the sessions of the AI assistant: the same tool as the pipeline.
 |===
 
 .Commands
@@ -293,6 +294,7 @@ Each line was checked by running the tool, not by reading its documentation. The
 | Helm | 4.3.2 | mise
 | Terraform | 1.17.2 | mise
 | buf | 1.75.0 | mise
+| gitleaks | 8.30.1 | mise
 | IntelliJ IDEA | 2026.3, build 263.7307.200 | Archive in the home directory, checksum verified
 | Java language server (jdtls) | 1.63.0 | Archive in the home directory, checksum verified
 | TypeScript language server | 6.1.0 | pnpm, in the home directory
