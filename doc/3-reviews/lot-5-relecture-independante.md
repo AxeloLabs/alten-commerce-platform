@@ -12,7 +12,22 @@ Rapport rendu le 2026-11-19 par un relecteur indépendant, qui a lu les quatre d
 
 ## 2. État des corrections
 
-À faire au moment où ce fichier est créé. Décisions d'ax du 2026-11-19 à inscrire en même temps : les trois risques (une région, un cluster, une instance de base partagée) sont acceptés ; aucun second facteur à la connexion, pour personne.
+Toutes les remarques sont corrigées par le commit « spec LOT 5 : corrections de la relecture indépendante », qui suit celui de ce rapport. Ces corrections n'ont pas été relues par un tiers.
+
+| N° | Gravité | Sujet | Où c'est corrigé |
+|---|---|---|---|
+| 1 | bloquante | Jeton de renouvellement à usage unique présenté deux fois par des requêtes parallèles | `05-04` : renouvellement une fois par session, sous verrou de la session |
+| 2 | majeure | « Rien n'a été changé » faux quand la réponse n'arrive pas à temps | `05-01` : code `ERR-PLT-011` (504, issue inconnue) ; `04-05` ; le checkout est renvoyé avec le même identifiant |
+| 3 | majeure | Annulation de paiement jamais rejouée ; limite de 3 s incompatible avec un paiement lent mais valide | `02-03`, `03-02`, `03-03`, `05-02` : l'annulation reste non acquittée et revient jusqu'au retour du fournisseur ; limite d'appel à 10 s |
+| 4 | majeure | Limites de temps non emboîtées | `05-02` : budget décroissant par saut, requêtes SQL sous la limite de la lecture |
+| 5 | majeure | Fournisseur d'identité en panne : comportement de la passerelle non spécifié | `05-02`, `05-04`, `05-01` : session conservée, `ERR-IAM-001`, réglages de l'appel |
+| 6 | majeure | Keycloak sur le même hôte que la boutique | `05-04`, `06-01`, `06-02`, `api-routing.puml` : nom d'hôte propre, seules les adresses de connexion routées, clients par défaut désactivés |
+| 7 | majeure | Un pod compromis voit les jetons relayés ; sortie possible par les API Google | `05-04` : risques résiduels nommés ; `06-02` : périmètre de service en évolution |
+| 8 | majeure | Réponses sans corps du pare-feu et du load balancer ; statuts 405, 413, 415 | `05-01` : règle de la boutique pour les réponses sans code ; `ERR-PLT-001` étendu ; `05-02` : un pod ne devient pas indisponible quand la base tombe |
+| 9 | majeure | Erreurs de la couche conteneur absentes | `05-01` : tableau des erreurs du conteneur et de la plateforme |
+| 10 à 18 | mineures | Liste des flux réseau autorisés ; une trace par commande ; mesure de la disponibilité et fenêtres de consommation du budget ; alertes alignées ; métriques manquantes ; compteur d'envois d'e-mail ; vérification d'adresse e-mail retirée ; décision répétée ; états du disjoncteur | `05-04`, `05-03`, `05-02`, `05-01`, `04-05`, `03-03` |
+
+Décisions d'ax du 2026-11-19, inscrites avec ces corrections : les trois risques (une région, un cluster, une instance de base partagée) sont acceptés (`05-02`) ; aucun second facteur à la connexion, pour personne (`05-04`).
 
 ## 3. Rapport du relecteur
 
